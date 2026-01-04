@@ -38,27 +38,27 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const url = createApiUrl("/auth/login");
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+      // const url = createApiUrl("/auth/login");
+      // const res = await fetch(url, {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify({ email, password }),
+      // });
 
-      const contentType = res.headers.get("content-type") || "";
-      const payload: unknown = contentType.includes("application/json")
-        ? await res.json().catch(() => null)
-        : await res.text().catch(() => "");
+      // const contentType = res.headers.get("content-type") || "";
+      // const payload: unknown = contentType.includes("application/json")
+      //   ? await res.json().catch(() => null)
+      //   : await res.text().catch(() => "");
 
-      if (!res.ok) {
-        throw new Error(parseErrorMessage(payload, res.status));
-      }
+      // if (!res.ok) {
+      //   throw new Error(parseErrorMessage(payload, res.status));
+      // }
 
-      const token = extractToken(payload);
-      if (!token) throw new Error("Missing token");
+      // const token = extractToken(payload);
+      // if (!token) throw new Error("Missing token");
 
-      localStorage.setItem("token", token);
-      router.push("/suggestion");
+      // localStorage.setItem("token", token);
+      router.push("/StudentNominationForm");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -166,7 +166,7 @@ export default function LoginPage() {
                         type="button"
                         className="w-full bg-[#00c535] hover:bg-[#00a82d] text-white font-medium py-3 rounded-md transition-colors shadow-lg shadow-green-100"
                     >
-                        KU ALL-Login
+                        Google
                     </button>
                 </div>
             </form>

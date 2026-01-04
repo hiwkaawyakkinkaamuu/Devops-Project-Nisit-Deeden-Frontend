@@ -157,7 +157,7 @@ export default function RegisterPage() {
                         type="button"
                         className="w-full bg-[#00c535] hover:bg-[#00a82d] text-white font-medium py-3 rounded-md transition-colors shadow-lg shadow-green-100"
                     >
-                        KU ALL-Login
+                        Google
                     </button>
                 </div>
             </form>
