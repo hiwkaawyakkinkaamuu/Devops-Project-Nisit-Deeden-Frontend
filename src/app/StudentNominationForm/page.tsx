@@ -47,8 +47,8 @@ export default function StudentNominationForm() {
     setSelectedFiles(prev => prev.filter((_, index) => index !== indexToRemove));
   };
 
-  // --- Validation Logic (ตรวจสอบความถูกต้อง) ---
-  const handleSubmit = (e: React.FormEvent) => {
+  // --- Validation Logic & API Call ---
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // 1. ตรวจสอบเกรดเฉลี่ย
@@ -60,72 +60,95 @@ export default function StudentNominationForm() {
         return;
     }
 
-    // 2. ตรวจสอบอายุ (ต้อง > 16)
+    // 2. ตรวจสอบอายุ
     const ageInput = document.getElementById("age-input") as HTMLInputElement;
     const ageValue = parseInt(ageInput?.value);
-    if (isNaN(ageValue)) {
-        alert("กรุณาระบุวันเกิดเพื่อคำนวณอายุ");
-        return;
-    }
-    if (ageValue <= 16) {
-        alert(`อายุของคุณคือ ${ageValue} ปี \nคุณสมบัติไม่ผ่านเกณฑ์ (ต้องมีอายุ 17 ปีขึ้นไป)`);
+    if (isNaN(ageValue) || ageValue <= 16) {
+        alert(`อายุไม่ผ่านเกณฑ์ (ต้อง 17 ปีขึ้นไป)`);
         return;
     }
 
-    // 3. ตรวจสอบเบอร์โทรศัพท์ (ใหม่!)
+    // 3. ตรวจสอบเบอร์โทร
     const phoneInput = document.getElementById("phone-input") as HTMLInputElement;
-    const phoneValue = phoneInput?.value;
-    // Regex: ขึ้นต้นด้วย 0 และตามด้วยตัวเลขอีก 9 ตัว (รวมเป็น 10 ตัว)
     const phoneRegex = /^0[0-9]{9}$/;
-
-    if (!phoneRegex.test(phoneValue)) {
-        alert("เบอร์โทรศัพท์ไม่ถูกต้อง \n- ต้องขึ้นต้นด้วย 0 \n- ต้องมีตัวเลขครบ 10 หลัก");
+    if (!phoneRegex.test(phoneInput?.value)) {
+        alert("เบอร์โทรศัพท์ไม่ถูกต้อง (ต้องขึ้นต้นด้วย 0 และมี 10 หลัก)");
         phoneInput.focus();
         return;
     }
 
-    // 4. ตรวจสอบวันที่ได้รับรางวัล (ห้ามเป็นอนาคต)
-    if (awardType === "activity" || awardType === "innovation") {
-        const awardDateInput = document.getElementById("award-date") as HTMLInputElement;
-        if (awardDateInput && awardDateInput.value) {
-            const selectedDate = new Date(awardDateInput.value);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); 
-            if (selectedDate > today) {
-                alert("วันที่ได้รับรางวัล/ทำกิจกรรม ต้องไม่ใช่วันในอนาคต");
-                awardDateInput.focus();
-                return;
-            }
-        }
-    }
-
-    // 5. ตรวจสอบ Checkbox กิจกรรม
+    // 4. ตรวจสอบ Checkbox กิจกรรม
     if (awardType === "activity") {
         const c1 = (document.getElementById("act-1") as HTMLInputElement)?.checked;
         const c2 = (document.getElementById("act-2") as HTMLInputElement)?.checked;
         const c3 = (document.getElementById("act-3") as HTMLInputElement)?.checked;
         if (!c1 && !c2 && !c3) {
-            alert("กรุณาเลือกคุณสมบัติข้อใดข้อหนึ่ง (ด้านกิจกรรมนอกหลักสูตร)");
+            alert("กรุณาเลือกคุณสมบัติข้อใดข้อหนึ่ง");
             return;
         }
     }
 
-    // 6. ตรวจสอบ Checkbox นวัตกรรม
+    // 5. ตรวจสอบ Checkbox นวัตกรรม
     if (awardType === "innovation") {
         const qual = (document.getElementById("inn-qual") as HTMLInputElement)?.checked;
         if (!qual) {
-            alert("กรุณาติ๊กยืนยันคุณสมบัติที่ต้องมี (ด้านนวัตกรรม)");
+            alert("กรุณาติ๊กยืนยันคุณสมบัติ");
             return;
         }
     }
 
-    // 7. ตรวจสอบไฟล์
+    // 6. ตรวจสอบไฟล์
     if (awardType !== "behavior" && selectedFiles.length === 0) {
         alert("กรุณาอัปโหลดเอกสารประกอบอย่างน้อย 1 ไฟล์");
         return;
     }
 
-    alert(`บันทึกข้อมูลสำเร็จ!\nอายุ: ${ageValue} ปี\nเบอร์โทร: ${phoneValue}`);
+    // ส่วนที่เพิ่มใหม่: เตรียมข้อมูลและยิง API
+    try {
+        const formData = new FormData();
+        
+        // ดึงค่าจากช่องต่างๆ ใส่ลงกล่อง (ใช้ placeholder เพราะบางช่องไม่ได้ตั้ง id)
+        formData.append("awardType", awardType);
+        formData.append("firstName", (document.querySelector('input[placeholder="ชื่อ"]') as HTMLInputElement)?.value || "");
+        formData.append("lastName", (document.querySelector('input[placeholder="นามสกุล"]') as HTMLInputElement)?.value || "");
+        formData.append("studentId", (document.querySelector('input[placeholder="รหัสนิสิต"]') as HTMLInputElement)?.value || "");
+        formData.append("faculty", (document.querySelector('input[placeholder="คณะ"]') as HTMLInputElement)?.value || "");
+        formData.append("major", (document.querySelector('input[placeholder="สาขาวิชา"]') as HTMLInputElement)?.value || "");
+        formData.append("advisor", (document.querySelector('input[placeholder="อาจารย์ที่ปรึกษา"]') as HTMLInputElement)?.value || "");
+        formData.append("gpa", gpaInput.value);
+        formData.append("dob", (document.querySelector('input[type="date"]') as HTMLInputElement)?.value || "");
+        formData.append("age", ageInput.value);
+        formData.append("phone", phoneInput.value);
+        formData.append("email", (document.querySelector('input[type="email"]') as HTMLInputElement)?.value || "");
+        formData.append("address", (document.querySelector('textarea') as HTMLTextAreaElement)?.value || "");
+
+        // ใส่ไฟล์ทั้งหมด
+        selectedFiles.forEach((file) => {
+            formData.append("files", file);
+        });
+
+        // ยิงไปที่ Backend Go (Port 8080)
+        // อย่าลืมเปลี่ยน URL ให้ตรงกับ route ใน Go ของคุณ
+        const response = await fetch("http://localhost:8080/api/nomination/submit", {
+            method: "POST",
+            body: formData, 
+            // ไม่ต้องใส่ headers Content-Type นะครับ เดี๋ยว Browser ใส่ให้เอง
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            alert("บันทึกข้อมูลสำเร็จเรียบร้อย!");
+            console.log("Server Response:", result);
+            // อาจจะสั่งให้รีเฟรชหน้า หรือเคลียร์ค่าตรงนี้ได้
+        } else {
+            alert("เกิดข้อผิดพลาดจากเซิร์ฟเวอร์");
+            console.error("Server Error:", response.statusText);
+        }
+
+    } catch (error) {
+        alert("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ (กรุณาเช็คว่าเปิด Go หรือยัง)");
+        console.error("Connection Error:", error);
+    }
   };
 
   return (
