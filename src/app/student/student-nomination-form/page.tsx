@@ -5,6 +5,10 @@ import { useState, useRef } from "react";
 export default function StudentNominationForm() {
   const [awardType, setAwardType] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  
+  // เพิ่ม state สำหรับเก็บค่า Radio ของกิจกรรม
+  const [activityCriteria, setActivityCriteria] = useState(""); 
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- ฟังก์ชันคำนวณอายุอัตโนมัติ ---
@@ -27,19 +31,33 @@ export default function StudentNominationForm() {
     }
   };
 
-  // --- File Upload Logic ---
+  // --- File Upload Logic (ปรับปรุงใหม่) ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
-      const validFiles = newFiles.filter(file => {
-          if (file.size > 10 * 1024 * 1024) {
-              alert(`ไฟล์ ${file.name} มีขนาดใหญ่เกิน 10MB (ถูกข้าม)`);
-              return false;
-          }
-          return true;
-      });
-      setSelectedFiles(prev => [...prev, ...validFiles]);
+
+      // 1. กรองเฉพาะ PDF (กันเหนียวฝั่ง JS อีกรอบ)
+      const nonPdfFiles = newFiles.filter(file => file.type !== "application/pdf");
+      if (nonPdfFiles.length > 0) {
+          alert("กรุณาอัปโหลดเฉพาะไฟล์ PDF เท่านั้น");
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          return;
+      }
+
+      // 2. คำนวณขนาดไฟล์รวม (ไฟล์เดิม + ไฟล์ใหม่)
+      const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+      const currentTotalSize = selectedFiles.reduce((acc, file) => acc + file.size, 0);
+      const newFilesSize = newFiles.reduce((acc, file) => acc + file.size, 0);
+
+      if (currentTotalSize + newFilesSize > MAX_SIZE) {
+          alert(`ขนาดไฟล์รวมทั้งหมดต้องไม่เกิน 10MB \n(ตอนนี้คุณใช้ไป ${(currentTotalSize / 1024 / 1024).toFixed(2)} MB + ไฟล์ใหม่ ${(newFilesSize / 1024 / 1024).toFixed(2)} MB)`);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          return;
+      }
+
+      setSelectedFiles(prev => [...prev, ...newFiles]);
     }
+    // Reset input เพื่อให้เลือกไฟล์เดิมซ้ำได้ถ้าต้องการ (กรณีลบแล้วเลือกใหม่)
     if (fileInputRef.current) fileInputRef.current.value = ""; 
   };
 
@@ -77,18 +95,15 @@ export default function StudentNominationForm() {
         return;
     }
 
-    // 4. ตรวจสอบ Checkbox กิจกรรม
+    // 4. ตรวจสอบ Radio กิจกรรม (เปลี่ยน Logic)
     if (awardType === "activity") {
-        const c1 = (document.getElementById("act-1") as HTMLInputElement)?.checked;
-        const c2 = (document.getElementById("act-2") as HTMLInputElement)?.checked;
-        const c3 = (document.getElementById("act-3") as HTMLInputElement)?.checked;
-        if (!c1 && !c2 && !c3) {
-            alert("กรุณาเลือกคุณสมบัติข้อใดข้อหนึ่ง");
+        if (!activityCriteria) {
+            alert("กรุณาเลือกคุณสมบัติข้อใดข้อหนึ่ง (ด้านกิจกรรมเสริมหลักสูตร)");
             return;
         }
     }
 
-    // 5. ตรวจสอบ Checkbox นวัตกรรม
+    // 5. ตรวจสอบ Checkbox นวัตกรรม (อันนี้เป็นภาคบังคับข้อเดียว ใช้ Checkbox เหมือนเดิมเหมาะสมแล้วครับ)
     if (awardType === "innovation") {
         const qual = (document.getElementById("inn-qual") as HTMLInputElement)?.checked;
         if (!qual) {
@@ -103,12 +118,18 @@ export default function StudentNominationForm() {
         return;
     }
 
-    // ส่วนที่เพิ่มใหม่: เตรียมข้อมูลและยิง API
     try {
         const formData = new FormData();
         
-        // ดึงค่าจากช่องต่างๆ ใส่ลงกล่อง (ใช้ placeholder เพราะบางช่องไม่ได้ตั้ง id)
+        // ดึงค่าจากช่องต่างๆ ใส่ลงกล่อง
         formData.append("awardType", awardType);
+        
+        // ส่งค่า Criteria ที่เลือกไปด้วย
+        if (awardType === "activity") {
+            formData.append("activityCriteria", activityCriteria);
+        }
+
+        // ดึงค่าจาก Input
         formData.append("firstName", (document.querySelector('input[placeholder="ชื่อ"]') as HTMLInputElement)?.value || "");
         formData.append("lastName", (document.querySelector('input[placeholder="นามสกุล"]') as HTMLInputElement)?.value || "");
         formData.append("studentId", (document.querySelector('input[placeholder="รหัสนิสิต"]') as HTMLInputElement)?.value || "");
@@ -127,26 +148,36 @@ export default function StudentNominationForm() {
             formData.append("files", file);
         });
 
-        // ยิงไปที่ Backend Go (Port 8080)
-        // อย่าลืมเปลี่ยน URL ให้ตรงกับ route ใน Go ของคุณ
-        const response = await fetch("http://localhost:8080/api/nomination/submit", {
+        // 1. ดึง Token จาก LocalStorage
+        const token = localStorage.getItem("token");
+
+        // 2. ยิงไปที่ /api/... (ผ่าน Proxy) แทน localhost:8080
+        const response = await fetch("/api/nomination/submit", { 
             method: "POST",
+            headers: {
+                // 3. สำคัญ: อย่าใส่ Content-Type เอง! ให้ fetch จัดการ Boundary ให้
+                "Authorization": `Bearer ${token}` 
+            },
             body: formData, 
-            // ไม่ต้องใส่ headers Content-Type นะครับ เดี๋ยว Browser ใส่ให้เอง
         });
 
         if (response.ok) {
             const result = await response.json();
             alert("บันทึกข้อมูลสำเร็จเรียบร้อย!");
             console.log("Server Response:", result);
-            // อาจจะสั่งให้รีเฟรชหน้า หรือเคลียร์ค่าตรงนี้ได้
+            
+            // รีเซ็ตค่า (Optional)
+            setSelectedFiles([]);
+            setAwardType("");
         } else {
-            alert("เกิดข้อผิดพลาดจากเซิร์ฟเวอร์");
-            console.error("Server Error:", response.statusText);
+            // ลองอ่าน Error message จาก backend ถ้ามี
+            const errorData = await response.text(); 
+            console.error("Server Error:", errorData);
+            alert("เกิดข้อผิดพลาด: " + (errorData || response.statusText));
         }
 
     } catch (error) {
-        alert("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ (กรุณาเช็คว่าเปิด Go หรือยัง)");
+        alert("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้");
         console.error("Connection Error:", error);
     }
   };
@@ -168,13 +199,16 @@ export default function StudentNominationForm() {
                 <div className="relative">
                     <select 
                         value={awardType}
-                        onChange={(e) => setAwardType(e.target.value)}
+                        onChange={(e) => {
+                            setAwardType(e.target.value);
+                            setActivityCriteria(""); // Reset radio เมื่อเปลี่ยนประเภท
+                        }}
                         className="w-[320px] bg-[#F3F4F6] border-none rounded-lg px-4 py-3.5 text-sm text-gray-700 font-medium focus:ring-1 focus:ring-green-500 cursor-pointer appearance-none"
                     >
                         <option value="" disabled>-- กรุณาเลือกประเภทรางวัล --</option>
                         <option value="behavior">ด้านความประพฤติดีเด่น</option>
-                        <option value="innovation">ด้านนวัตกรรม</option>
-                        <option value="activity">ด้านกิจกรรมนอกหลักสูตร</option>
+                        <option value="innovation">ด้านความคิดสร้างสรรค์และนวัตกรรม</option>
+                        <option value="activity">ด้านกิจกรรมเสริมหลักสูตร</option>
                     </select>
                     <div className="absolute top-1/2 left-[290px] -translate-y-1/2 pointer-events-none text-gray-500">
                         <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
@@ -253,18 +287,16 @@ export default function StudentNominationForm() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* ช่องโทรศัพท์ปรับปรุงใหม่ */}
                         <div className="space-y-2">
                             <label className="text-sm font-bold text-gray-800">โทรศัพท์</label>
                             <input 
                                 id="phone-input"
                                 required 
-                                type="tel" // เปลี่ยนเป็น tel เพื่อให้มือถือขึ้นแป้นตัวเลข
-                                maxLength={10} // จำกัด 10 ตัวอักษร
+                                type="tel" 
+                                maxLength={10} 
                                 placeholder="0xxxxxxxxx" 
                                 className="w-full bg-[#F3F4F6] border-none rounded-lg px-4 py-3.5 text-sm" 
                                 onInput={(e) => {
-                                    // อนุญาตให้พิมพ์แค่ตัวเลขเท่านั้น
                                     e.currentTarget.value = e.currentTarget.value.replace(/[^0-9]/g, '');
                                 }}
                             />
@@ -280,13 +312,64 @@ export default function StudentNominationForm() {
                         <textarea required rows={3} placeholder="ที่อยู่ปัจจุบัน" className="w-full bg-[#F3F4F6] border-none rounded-lg px-4 py-3.5 text-sm resize-none"></textarea>
                     </div>
 
-                    {/* === Activity Logic === */}
+                    {/* === Activity Logic (Changed to Radio) === */}
                     {awardType === "activity" && (
                         <div className="space-y-6 pt-4 border-t border-gray-100 animate-fade-in">
                             <h3 className="text-sm font-bold text-gray-800">เลือกคุณสมบัติข้อใดข้อหนึ่ง <span className="text-red-500">*</span></h3>
-                            <div className="flex items-start gap-3"><div className="flex items-center h-5 mt-1"><input id="act-1" type="checkbox" className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer" /></div><label htmlFor="act-1" className="text-sm text-gray-700 cursor-pointer select-none leading-relaxed">เป็นนิสิตที่ดำรงตำแหน่งคณะกรรมการนิสิตสโมสรนิสิตคณะวิทยาศาสตร์ หรือ คณะกรรมการบริหาร สโมสรนิสิตจุฬาลงกรณ์มหาวิทยาลัย โดยมีระยะเวลาการดำรงตำแหน่งไม่น้อยกว่า 1 ปีการศึกษา</label></div>
-                            <div className="flex items-start gap-3"><div className="flex items-center h-5 mt-1"><input id="act-2" type="checkbox" className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer" /></div><label htmlFor="act-2" className="text-sm text-gray-700 cursor-pointer select-none leading-relaxed">เป็นนิสิตที่ได้รับรางวัลจากการประกวดหรือการแข่งขันทางวิชาการ หรือ วิทยาศาสตร์ หรือ นวัตกรรม ระดับชาติ หรือ ระดับนานาชาติ และได้รับรางวัลชนะเลิศหรือรางวัลรองชนะเลิศ</label></div>
-                            <div className="flex items-start gap-3"><div className="flex items-center h-5 mt-1"><input id="act-3" type="checkbox" className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer" /></div><label htmlFor="act-3" className="text-sm text-gray-700 cursor-pointer select-none leading-relaxed">เป็นนิสิตผู้สร้างชื่อเสียงให้กับคณะวิทยาศาสตร์ หรือ มหาวิทยาลัย โดยได้รับการคัดเลือกให้เป็นตัวแทนของมหาวิทยาลัยเข้าร่วมกิจกรรมสำคัญต่างๆ</label></div>
+                            
+                            {/* ตัวเลือกที่ 1 */}
+                            <div className="flex items-start gap-3">
+                                <div className="flex items-center h-5 mt-1">
+                                    <input 
+                                        id="act-1" 
+                                        type="radio" 
+                                        name="activity_criteria" 
+                                        value="committee"
+                                        checked={activityCriteria === "committee"}
+                                        onChange={(e) => setActivityCriteria(e.target.value)}
+                                        className="w-5 h-5 text-green-600 border-gray-300 focus:ring-green-500 cursor-pointer" 
+                                    />
+                                </div>
+                                <label htmlFor="act-1" className="text-sm text-gray-700 cursor-pointer select-none leading-relaxed">
+                                    เป็นนิสิตที่ดำรงตำแหน่งคณะกรรมการนิสิตสโมสรนิสิตคณะวิทยาศาสตร์ หรือ คณะกรรมการบริหาร สโมสรนิสิตจุฬาลงกรณ์มหาวิทยาลัย โดยมีระยะเวลาการดำรงตำแหน่งไม่น้อยกว่า 1 ปีการศึกษา
+                                </label>
+                            </div>
+
+                            {/* ตัวเลือกที่ 2 */}
+                            <div className="flex items-start gap-3">
+                                <div className="flex items-center h-5 mt-1">
+                                    <input 
+                                        id="act-2" 
+                                        type="radio" 
+                                        name="activity_criteria" 
+                                        value="competition"
+                                        checked={activityCriteria === "competition"}
+                                        onChange={(e) => setActivityCriteria(e.target.value)}
+                                        className="w-5 h-5 text-green-600 border-gray-300 focus:ring-green-500 cursor-pointer" 
+                                    />
+                                </div>
+                                <label htmlFor="act-2" className="text-sm text-gray-700 cursor-pointer select-none leading-relaxed">
+                                    
+                                </label>
+                            </div>
+
+                            {/* ตัวเลือกที่ 3 */}เป็นนิสิตที่ได้รับรางวัลจากการประกวดหรือการแข่งขันทางวิชาการ หรือ วิทยาศาสตร์ หรือ นวัตกรรม ระดับชาติ หรือ ระดับนานาชาติ และได้รับรางวัลชนะเลิศหรือรางวัลรองชนะเลิศ
+                            <div className="flex items-start gap-3">
+                                <div className="flex items-center h-5 mt-1">
+                                    <input 
+                                        id="act-3" 
+                                        type="radio" 
+                                        name="activity_criteria" 
+                                        value="reputation"
+                                        checked={activityCriteria === "reputation"}
+                                        onChange={(e) => setActivityCriteria(e.target.value)}
+                                        className="w-5 h-5 text-green-600 border-gray-300 focus:ring-green-500 cursor-pointer" 
+                                    />
+                                </div>
+                                <label htmlFor="act-3" className="text-sm text-gray-700 cursor-pointer select-none leading-relaxed">
+                                    เป็นนิสิตผู้สร้างชื่อเสียงให้กับคณะวิทยาศาสตร์ หรือ มหาวิทยาลัย โดยได้รับการคัดเลือกให้เป็นตัวแทนของมหาวิทยาลัยเข้าร่วมกิจกรรมสำคัญต่างๆ
+                                </label>
+                            </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
                                 <div className="space-y-2"><label className="text-sm font-bold text-gray-800">วันที่ได้รับรางวัล/ทำกิจกรรม</label><input required id="award-date" type="date" className="w-full bg-[#F3F4F6] border-none rounded-lg px-4 py-3.5 text-sm text-gray-600 cursor-pointer" /></div>
@@ -303,7 +386,7 @@ export default function StudentNominationForm() {
                         </div>
                     )}
 
-                    {/* === Innovation Logic === */}
+                    {/* === Innovation Logic (คงไว้เหมือนเดิมเพราะเป็นเงื่อนไขเดียว) === */}
                     {awardType === "innovation" && (
                         <div className="space-y-6 pt-4 border-t border-gray-100 animate-fade-in">
                             <h3 className="text-sm font-bold text-gray-800">คุณสมบัติที่ต้องมี <span className="text-red-500">*</span></h3>
@@ -324,23 +407,33 @@ export default function StudentNominationForm() {
                         </div>
                     )}
 
-                    {/* --- File Upload --- */}
+                    {/* --- File Upload (Updated) --- */}
                     {awardType !== "behavior" && (
                         <div className="space-y-2 pt-4 border-t border-gray-100 mt-4 animate-fade-in">
                             <label className="text-sm font-bold text-gray-800">เอกสารประกอบ <span className="text-red-500">*</span></label>
-                            <span className="text-xs text-gray-400 ml-2">(สามารถเลือกได้หลายไฟล์)</span>
-                            <input type="file" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf,.jpg,.jpeg,.png" />
+                            <span className="text-xs text-gray-400 ml-2">(เฉพาะไฟล์ PDF, ขนาดรวมไม่เกิน 10 MB)</span>
+                            <input 
+                                type="file" 
+                                multiple 
+                                ref={fileInputRef} 
+                                onChange={handleFileChange} 
+                                className="hidden" 
+                                accept=".pdf" 
+                            />
                             <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors cursor-pointer group bg-white">
                                 <div className="mb-3 text-gray-400 group-hover:text-gray-600"><svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg></div>
-                                <p className="text-sm text-gray-500 font-medium">คลิกเพื่อเพิ่มไฟล์</p>
-                                <p className="text-xs text-gray-400 mt-1">PDF, JPG, PNG (สูงสุด 10 MB)</p>
+                                <p className="text-sm text-gray-500 font-medium">คลิกเพื่อเพิ่มไฟล์ PDF</p>
+                                <p className="text-xs text-gray-400 mt-1">สูงสุด 10 MB (รวมทุกไฟล์)</p>
                             </div>
                             {selectedFiles.length > 0 && (
                                 <div className="mt-4 space-y-2">
                                     {selectedFiles.map((file, index) => (
                                         <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
                                             <div className="flex items-center gap-3 overflow-hidden">
-                                                <div className="w-8 h-8 bg-green-100 rounded-lg flex-shrink-0 flex items-center justify-center text-green-600"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+                                                <div className="w-8 h-8 bg-red-100 rounded-lg flex-shrink-0 flex items-center justify-center text-red-600">
+                                                    {/* ไอคอน PDF */}
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                                                </div>
                                                 <div className="min-w-0"><p className="text-sm font-medium text-gray-700 truncate">{file.name}</p><p className="text-xs text-gray-400">{(file.size / 1024 / 1024).toFixed(2)} MB</p></div>
                                             </div>
                                             <button type="button" onClick={() => handleRemoveFile(index)} className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-white transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>

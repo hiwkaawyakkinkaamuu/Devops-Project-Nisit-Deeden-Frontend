@@ -1,9 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createApiUrl } from "../../api/createApiUrl";
-import Link from "next/link";
+import { createApiUrl } from "../../api/createApiUrl"; // ตรวจสอบ Path ให้ถูกนะครับ
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -11,7 +11,6 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   
-  // State สำหรับปุ่มลูกตา (แยกกันระหว่างรหัสผ่านกับยืนยันรหัสผ่าน)
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
@@ -22,7 +21,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
 
-    // 1. เช็คว่ารหัสผ่านตรงกันไหม
+    // เช็คว่ารหัสผ่านตรงกันไหม
     if (password !== confirmPassword) {
         setError("รหัสผ่านไม่ตรงกัน กรุณาตรวจสอบอีกครั้ง");
         return;
@@ -30,8 +29,10 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      // 2. ยิง API สมัครสมาชิก
-      const url = createApiUrl("/auth/register"); // <-- แก้ path API ตามหลังบ้านของคุณ
+      // ยิง API สมัครสมาชิกแบบ Email/Password
+      // ใช้ createApiUrl เพื่อให้ผ่าน Proxy (/api/...)
+      const url = createApiUrl("/auth/register"); 
+      
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -39,13 +40,14 @@ export default function RegisterPage() {
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Registration failed");
+        // ดึง Error Message มาแสดง
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "สมัครสมาชิกไม่สำเร็จ");
       }
 
-      // 3. ถ้าสำเร็จ ให้เด้งไปหน้า Login หรือหน้าแจ้งเตือน
+      // 3. ถ้าสำเร็จ
       alert("สมัครสมาชิกสำเร็จ! กรุณาเข้าสู่ระบบ");
-      router.push("/"); 
+      router.push("/"); // กลับไปหน้า Login
       
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด");
@@ -53,6 +55,12 @@ export default function RegisterPage() {
       setLoading(false);
     }
   }
+
+  // Google Login (ใช้ Logic เดียวกับหน้า Login)
+  const handleGoogleLogin = () => {
+    // Backend จะเช็คเองว่าถ้า User ยังไม่มี -> สร้างใหม่, ถ้ามีแล้ว -> Login ให้
+    window.location.href = "/api/auth/google/login"; 
+  };
 
   return (
     <div className="min-h-screen flex w-full font-sans">
@@ -153,11 +161,17 @@ export default function RegisterPage() {
                         {loading ? "กำลังสร้างบัญชี..." : "สร้างบัญชีผู้ใช้"}
                     </button>
                     
+                    {/* ปุ่ม Google Login */}
                     <button 
                         type="button"
-                        className="w-full bg-[#00c535] hover:bg-[#00a82d] text-white font-medium py-3 rounded-md transition-colors shadow-lg shadow-green-100"
+                        onClick={handleGoogleLogin}
+                        className="w-full bg-[#00c535] hover:bg-[#00a82d] text-white font-medium py-3 rounded-md transition-colors shadow-lg shadow-green-100 flex justify-center items-center gap-2"
                     >
-                        Google
+                        {/* ไอคอน Google */}
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81Z" />
+                        </svg>
+                        สมัครด้วย Google
                     </button>
                 </div>
             </form>

@@ -33,12 +33,14 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Logic Login ปกติ (Email/Pass)
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const url = createApiUrl("/auth/login");
+      const url = createApiUrl("/auth/login"); 
+      
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -46,7 +48,7 @@ export default function LoginPage() {
       });
 
       const contentType = res.headers.get("content-type") || "";
-      const payload: unknown = contentType.includes("application/json")
+      const payload: any = contentType.includes("application/json")
         ? await res.json().catch(() => null)
         : await res.text().catch(() => "");
 
@@ -55,16 +57,44 @@ export default function LoginPage() {
       }
 
       const token = extractToken(payload);
-      if (!token) throw new Error("Missing token");
+      const role = payload.role;
+
+      if (!token) throw new Error("Missing token from server");
 
       localStorage.setItem("token", token);
-      router.push("/StudentNominationForm");
+      if (role) localStorage.setItem("role", role);
+
+      // Redirect ตาม Role
+      if (role === "admin") {
+          router.push("/admin/");
+      } else if (role === "head-selection-committee") {
+          router.push("/head-selection-committee");
+      } else if (role === "selection-committee") {
+          router.push("/selection-committee");
+      } else if (role === "department-head") {
+          router.push("/department-head/consider");
+      } else if (role === "dean") {
+          router.push("/dean/consider");
+      } else if (role === "associate-dean") {
+          router.push("/associate-dean/consider");
+      } else {
+          router.push("/student/student-nomination-form"); 
+      }
+
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      console.error("Login Error:", err);
+      setError(err instanceof Error ? err.message : "เข้าสู่ระบบไม่สำเร็จ");
     } finally {
       setLoading(false);
     }
   }
+
+  // Logic Google Login
+  const handleGoogleLogin = () => {
+    // ยิงไปที่ Proxy ของเรา (/api/...) แล้วให้ Next.js ส่งต่อให้ Backend
+    // Backend จะทำการ Redirect ไปหน้า Google เอง
+    window.location.href = "/api/auth/google/login"; 
+  };
 
   return (
     <div className="min-h-screen flex w-full font-sans">
@@ -162,11 +192,17 @@ export default function LoginPage() {
                         {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
                     </button>
                     
+                    {/* ปุ่ม Google */}
                     <button 
                         type="button"
-                        className="w-full bg-[#00c535] hover:bg-[#00a82d] text-white font-medium py-3 rounded-md transition-colors shadow-lg shadow-green-100"
+                        onClick={handleGoogleLogin} // เรียกใช้ฟังก์ชันนี้
+                        className="w-full bg-[#00c535] hover:bg-[#00a82d] text-white font-medium py-3 rounded-md transition-colors shadow-lg shadow-green-100 flex justify-center items-center gap-2"
                     >
-                        Google
+                        {/* ไอคอน Google (Optional) */}
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81Z" />
+                        </svg>
+                        เข้าสู่ระบบด้วย Google
                     </button>
                 </div>
             </form>

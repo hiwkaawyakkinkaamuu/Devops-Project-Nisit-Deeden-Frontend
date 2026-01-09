@@ -1,0 +1,268 @@
+"use client";
+
+import { useState, useEffect } from "react";
+
+type ActionType = "update_category" | "verify_student" | "submit_committee" | "reject_student";
+
+interface LogEntry {
+  id: number;
+  timestamp: string; // ISO String
+  operator: string;  // ชื่อเจ้าหน้าที่ที่ทำรายการ
+  action: ActionType;
+  targetStudent?: string; // ชื่อนิสิตที่ถูกกระทำ (ถ้ามี)
+  targetStudentId?: string;
+  details: string; // รายละเอียดการแก้ไข (เช่น "ด้านกิจกรรม -> ด้านนวัตกรรม")
+}
+
+export default function SDDHistoryPage() {
+  // --- State ---
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Filters
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterAction, setFilterAction] = useState("all");
+  const [filterDate, setFilterDate] = useState("");
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const [totalPages, setTotalPages] = useState(1); // เพิ่ม State สำหรับจำนวนหน้าทั้งหมด
+
+  // --- Fetch Data ---
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // =========================================================
+        // [API Integration] ดึงข้อมูล Logs (GET)
+        // =========================================================
+        /*
+        const token = localStorage.getItem("accessToken");
+        const params = new URLSearchParams();
+        
+        // แนบ Query Params ตาม Filter
+        if (searchTerm) params.append("search", searchTerm);
+        if (filterAction !== 'all') params.append("action", filterAction);
+        if (filterDate) params.append("date", filterDate); // Format: YYYY-MM-DD
+        
+        // Pagination Params
+        params.append("page", currentPage.toString());
+        params.append("limit", itemsPerPage.toString());
+
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sdd/logs?${params.toString()}`, {
+           method: "GET",
+           headers: { 
+             "Content-Type": "application/json",
+             "Authorization": `Bearer ${token}` 
+           }
+        });
+
+        if (!response.ok) throw new Error("Failed to fetch logs");
+
+        const result = await response.json();
+        
+        // สมมติโครงสร้าง Response: { data: LogEntry[], meta: { totalPages: number, ... } }
+        setLogs(result.data);
+        setTotalPages(result.meta.totalPages); 
+        setLoading(false);
+        return; // ออกจากฟังก์ชันเพื่อไม่ให้รัน Mock Data
+        */
+
+        // =========================================================
+        // [MOCKUP DATA]
+        // =========================================================
+
+        const mockData: LogEntry[] = [
+            {
+                id: 1, timestamp: "2024-02-20T10:30:00", operator: "เจ้าหน้าที่ สมศรี",
+                action: "submit_committee", details: "ส่งรายชื่อนิสิต 15 คน ให้คณะกรรมการพิจารณา",
+            },
+            {
+                id: 2, timestamp: "2024-02-20T09:15:00", operator: "เจ้าหน้าที่ สมศรี",
+                action: "verify_student", targetStudent: "นายสมชาย ใจดี", targetStudentId: "6610401234",
+                details: "เปลี่ยนสถานะเป็น: ตรวจสอบแล้ว (Verified)"
+            },
+            {
+                id: 3, timestamp: "2024-02-19T14:20:00", operator: "เจ้าหน้าที่ มานะ",
+                action: "update_category", targetStudent: "นางสาวสมหญิง รักเรียน", targetStudentId: "6610405678",
+                details: "แก้ไขประเภท: ด้านกิจกรรม -> ด้านนวัตกรรม"
+            },
+            {
+                id: 4, timestamp: "2024-02-19T14:15:00", operator: "เจ้าหน้าที่ มานะ",
+                action: "update_category", targetStudent: "นายเก่ง กล้าหาญ", targetStudentId: "6510409999",
+                details: "แก้ไขประเภท: ด้านความประพฤติดี -> ด้านกิจกรรม"
+            },
+            {
+                id: 5, timestamp: "2024-02-18T16:00:00", operator: "System Admin",
+                action: "reject_student", targetStudent: "นายดื้อ รั้น", targetStudentId: "6710400000",
+                details: "ตีกลับใบสมัคร (เอกสารไม่ครบ)"
+            },
+            {
+                id: 6, timestamp: "2024-02-18T09:00:00", operator: "เจ้าหน้าที่ สมศรี",
+                action: "verify_student", targetStudent: "นางสาวฟ้าใส", targetStudentId: "6710403333",
+                details: "เปลี่ยนสถานะเป็น: ตรวจสอบแล้ว (Verified)"
+            }
+        ];
+        
+        // Mock Filter Logic (Client-side)
+        // (ถ้าใช้ API แล้ว ส่วนนี้จะไม่จำเป็น เพราะ Backend กรองมาให้)
+        const filtered = mockData.filter(log => {
+            const matchSearch = log.operator.includes(searchTerm) || (log.targetStudent && log.targetStudent.includes(searchTerm));
+            const matchAction = filterAction === "all" ? true : log.action === filterAction;
+            const matchDate = filterDate ? log.timestamp.startsWith(filterDate) : true;
+            return matchSearch && matchAction && matchDate;
+        });
+
+        setLogs(filtered);
+        setTotalPages(Math.ceil(filtered.length / itemsPerPage)); // Mock total pages
+        setLoading(false);
+
+      } catch (error) {
+        console.error("Error fetching logs:", error);
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [searchTerm, filterAction, filterDate, currentPage]);
+
+  // --- Helper: Render Badge ---
+  const renderActionBadge = (action: ActionType) => {
+    switch (action) {
+        case "update_category":
+            return <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-bold border border-blue-200">แก้ไขข้อมูล</span>;
+        case "verify_student":
+            return <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs font-bold border border-green-200">ตรวจสอบแล้ว</span>;
+        case "submit_committee":
+            return <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-md text-xs font-bold border border-purple-200">ส่งต่อกรรมการ</span>;
+        case "reject_student":
+            return <span className="px-2 py-1 bg-red-100 text-red-700 rounded-md text-xs font-bold border border-red-200">ตีกลับ/ปฏิเสธ</span>;
+        default:
+            return <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md text-xs border border-gray-200">อื่นๆ</span>;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8 font-sans">
+      
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">ประวัติการดำเนินการ (Audit Logs)</h1>
+        <p className="text-sm text-gray-500 mt-1">ตรวจสอบประวัติการแก้ไขข้อมูล การตรวจสอบ และการส่งรายชื่อ</p>
+      </div>
+
+      {/* Main Card */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        
+        {/* Filters */}
+        <div className="p-5 border-b border-gray-100 bg-gray-50/50 grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Search */}
+            <div className="relative col-span-2">
+                <input 
+                    type="text" 
+                    placeholder="ค้นหาชื่อเจ้าหน้าที่ หรือ ชื่อนิสิต..." 
+                    className="w-full bg-white border border-gray-300 rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={searchTerm} 
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <svg className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </div>
+
+            {/* Action Filter */}
+            <select 
+                className="bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm outline-none cursor-pointer text-gray-600"
+                value={filterAction} 
+                onChange={(e) => setFilterAction(e.target.value)}
+            >
+                <option value="all">ทุกกิจกรรม</option>
+                <option value="update_category">การแก้ไขข้อมูล</option>
+                <option value="verify_student">การตรวจสอบ (Verify)</option>
+                <option value="submit_committee">การส่งต่อกรรมการ</option>
+                <option value="reject_student">การตีกลับ/ปฏิเสธ</option>
+            </select>
+
+            {/* Date Filter */}
+            <input 
+                type="date" 
+                className="bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm outline-none text-gray-600"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+            />
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+                <thead className="bg-gray-100 text-gray-600 text-xs uppercase tracking-wider font-semibold">
+                    <tr>
+                        <th className="p-4 w-[15%]">วัน-เวลา</th>
+                        <th className="p-4 w-[15%]">ผู้ทำรายการ</th>
+                        <th className="p-4 w-[15%] text-center">กิจกรรม</th>
+                        <th className="p-4 w-[20%]">ผู้ถูกกระทำ (นิสิต)</th>
+                        <th className="p-4 w-[35%]">รายละเอียดการเปลี่ยนแปลง</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-sm">
+                    {loading ? (
+                        <tr><td colSpan={5} className="p-8 text-center text-gray-400">กำลังโหลดประวัติ...</td></tr>
+                    ) : logs.length === 0 ? (
+                        <tr><td colSpan={5} className="p-8 text-center text-gray-400">ไม่พบข้อมูลประวัติ</td></tr>
+                    ) : (
+                        logs.map((log) => (
+                            <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                                <td className="p-4 text-gray-500 whitespace-nowrap">
+                                    {new Date(log.timestamp).toLocaleDateString('th-TH')} <br/>
+                                    <span className="text-xs text-gray-400">{new Date(log.timestamp).toLocaleTimeString('th-TH')}</span>
+                                </td>
+                                <td className="p-4 font-medium text-gray-700">
+                                    {log.operator}
+                                </td>
+                                <td className="p-4 text-center">
+                                    {renderActionBadge(log.action)}
+                                </td>
+                                <td className="p-4">
+                                    {log.targetStudent ? (
+                                        <>
+                                            <div className="font-bold text-gray-800">{log.targetStudent}</div>
+                                            <div className="text-xs text-gray-400">{log.targetStudentId}</div>
+                                        </>
+                                    ) : (
+                                        <span className="text-gray-400">-</span>
+                                    )}
+                                </td>
+                                <td className="p-4 text-gray-600">
+                                    {log.details}
+                                </td>
+                            </tr>
+                        ))
+                    )}
+                </tbody>
+            </table>
+        </div>
+
+        {/* Footer (Pagination) */}
+        <div className="p-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500">
+            <div>แสดง {logs.length} รายการ</div>
+            <div className="flex gap-2">
+                <button 
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    ก่อนหน้า
+                </button>
+                <span className="px-2 py-1">หน้า {currentPage} / {totalPages}</span>
+                <button 
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    ถัดไป
+                </button>
+            </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
