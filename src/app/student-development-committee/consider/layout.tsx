@@ -8,7 +8,7 @@ interface TermResponse {
   semester: string;
 }
 
-export default function DeanLayout({
+export default function StudentDevelopmentCommitteeLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -52,7 +52,7 @@ export default function DeanLayout({
 
   return (
     <div className="flex min-h-screen bg-gray-50 font-sans text-gray-800">
-      <Sidebar role="dean" />
+      <Sidebar role="student_development_committee" />
 
       <main className="flex-1 ml-[260px] p-8 pb-20">
         <div className="flex justify-end mb-6">

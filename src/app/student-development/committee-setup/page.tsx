@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import StaffDetailModal from "../../../components/staff-detail-modals"; // ตรวจสอบ path ให้ตรงกับไฟล์จริง
+import StaffDetailModal from "../../../components/staff-detail-modals";
 
 type CommitteeRole = "none" | "committee" | "chairman";
 
@@ -20,24 +20,22 @@ interface Staff {
 }
 
 export default function CommitteeSetupPage() {
-  // --- State ---
+  // State
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterFaculty, setFilterFaculty] = useState("all");
 
-  // --- Modal State ---
+  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalData, setModalData] = useState<Staff | null>(null);
 
-  // --- Fetch Data ---
+  // Fetch Data
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // =========================================================
-        // [API Integration] ดึงรายชื่อบุคลากร (GET)
-        // =========================================================
+        // [API] ดึงรายชื่อบุคลากร (GET)
         /*
         const token = localStorage.getItem("token");
         const params = new URLSearchParams();
@@ -63,10 +61,7 @@ export default function CommitteeSetupPage() {
         return; // ออกจากฟังก์ชันเพื่อไม่ให้ไปรัน Mock Data ด้านล่าง
         */
 
-        // =========================================================
-        // [MOCKUP DATA] ข้อมูลจำลอง (ใช้งานเมื่อยังไม่มี API)
-        // =========================================================
-
+        // MOCKUP DATA
         const mockData: Staff[] = [
             { 
                 id: 1, name: "ศ.ดร. สมเกียรติ (ประธาน)", faculty: "วิศวกรรมศาสตร์", department: "วิศวกรรมคอมพิวเตอร์", role: "chairman", email: "somkiat@ku.th",
@@ -105,25 +100,25 @@ export default function CommitteeSetupPage() {
     fetchData();
   }, [searchTerm, filterFaculty]);
 
-  // --- Logic: View Detail ---
+  // Logic: View Detail
   const handleViewDetail = (staff: Staff) => {
     setModalData(staff);
     setIsModalOpen(true);
   };
 
-  // --- Logic: เปลี่ยนบทบาท (Auto-switch Chairman) ---
+  // Logic: เปลี่ยนบทบาท
   const handleRoleChange = (id: number, newRole: CommitteeRole) => {
     setStaffList((prevList) => {
       let updatedList = [...prevList];
 
-      // 1. ถ้าตั้งคนใหม่เป็น "ประธาน" -> ต้องปลดคนเก่าออกก่อน (เพราะประธานมีได้คนเดียว)
+      // ถ้าตั้งคนใหม่เป็น "ประธาน" -> ต้องปลดคนเก่าออกก่อน (เพราะประธานมีได้คนเดียว)
       if (newRole === "chairman") {
         updatedList = updatedList.map((user) => 
           user.role === "chairman" ? { ...user, role: "committee" } : user
         );
       }
 
-      // 2. อัปเดตบทบาทคนปัจจุบัน
+      // อัปเดตบทบาทคนปัจจุบัน
       updatedList = updatedList.map((user) => 
         user.id === id ? { ...user, role: newRole } : user
       );
@@ -132,7 +127,7 @@ export default function CommitteeSetupPage() {
     });
   };
 
-  // --- Logic: บันทึกข้อมูล ---
+  // Logic: บันทึกข้อมูล
   const handleSave = async () => {
     const chairman = staffList.find(s => s.role === "chairman");
     const committees = staffList.filter(s => s.role === "committee");
@@ -149,9 +144,7 @@ export default function CommitteeSetupPage() {
 
     if (confirm(`ยืนยันการแต่งตั้งคณะกรรมการ?\n\nประธาน: ${chairman.name}\nกรรมการ: ${committees.length} ท่าน`)) {
       
-      // =========================================================
-      // [API Integration] บันทึกการตั้งค่า (POST/PUT)
-      // =========================================================
+      // [API] บันทึกการตั้งค่า (POST/PUT)
       /*
       try {
         const token = localStorage.getItem("token");
@@ -174,7 +167,7 @@ export default function CommitteeSetupPage() {
 
         if (!response.ok) throw new Error("Failed to save committee setup");
 
-        alert("บันทึกรายชื่อคณะกรรมการเรียบร้อยแล้ว ✅");
+        alert("บันทึกรายชื่อคณะกรรมการเรียบร้อยแล้ว");
         
       } catch (error) {
         console.error("Save error:", error);
@@ -182,13 +175,13 @@ export default function CommitteeSetupPage() {
       }
       */
 
-      // Mockup Success (ลบออกเมื่อใช้ API จริง)
-      console.log("Saving...", { chairman, committees });
+      // Mockup Success
+      console.log("Saving", { chairman, committees });
       alert("บันทึกรายชื่อคณะกรรมการเรียบร้อยแล้ว (Mockup)");
     }
   };
 
-  // --- Filtering (Client Side Fallback) ---
+  // Filtering (Client Side Fallback)
   // ถ้าใช้ API Filtering แล้ว ส่วนนี้อาจไม่จำเป็น หรือใช้ช่วยกรองเบื้องต้น
   const filteredList = staffList.filter((item) => {
     const matchSearch = item.name.includes(searchTerm) || item.faculty.includes(searchTerm);
@@ -196,7 +189,7 @@ export default function CommitteeSetupPage() {
     return matchSearch && matchFaculty;
   });
 
-  // --- Stats Calculation ---
+  // Stats Calculation
   const currentChairman = staffList.find(s => s.role === "chairman");
   const committeeCount = staffList.filter(s => s.role === "committee").length;
 
@@ -205,7 +198,7 @@ export default function CommitteeSetupPage() {
       
       {/* Header & Stats */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">แต่งตั้งคณะกรรมการพิจารณา (Committee Setup)</h1>
+        <h1 className="text-2xl font-bold text-gray-800 mb-2">แต่งตั้งคณะกรรมการพิจารณา</h1>
         <p className="text-sm text-gray-500 mb-6">จัดการรายชื่ออาจารย์เพื่อทำหน้าที่เป็นคณะกรรมการคัดเลือกนิสิตดีเด่น</p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -241,7 +234,7 @@ export default function CommitteeSetupPage() {
         {/* Filters */}
         <div className="p-5 border-b border-gray-100 bg-gray-50/50 flex gap-4">
             <input 
-                type="text" placeholder="ค้นหาชื่ออาจารย์..." 
+                type="text" placeholder="ค้นหาชื่ออาจารย์" 
                 className="flex-1 bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                 value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -267,24 +260,24 @@ export default function CommitteeSetupPage() {
           </thead>
           <tbody className="divide-y divide-gray-100 text-sm">
             {loading ? (
-               <tr><td colSpan={4} className="p-8 text-center text-gray-400">กำลังโหลดรายชื่อ...</td></tr>
+               <tr><td colSpan={4} className="p-8 text-center text-gray-400">กำลังโหลดรายชื่อ</td></tr>
             ) : filteredList.length === 0 ? (
                <tr><td colSpan={4} className="p-8 text-center text-gray-400">ไม่พบรายชื่อ</td></tr>
             ) : (
                 filteredList.map((item) => (
                     <tr key={item.id} className={`transition-colors ${item.role !== 'none' ? 'bg-gray-50' : 'hover:bg-white'}`}>
-                        {/* 1. ชื่อ */}
+                        {/* ชื่อ */}
                         <td className="p-4">
                             <div className="font-bold text-gray-800">{item.name}</div>
                             <div className="text-xs text-gray-400">{item.email}</div>
                         </td>
 
-                        {/* 2. สังกัด */}
+                        {/* สังกัด */}
                         <td className="p-4 text-gray-600">
                             {item.faculty} <br/> <span className="text-xs text-gray-400">{item.department}</span>
                         </td>
 
-                        {/* 3. ปุ่มดูรายละเอียด */}
+                        {/* ปุ่มดูรายละเอียด */}
                         <td className="p-4 text-center">
                             <button 
                                 onClick={() => handleViewDetail(item)}
@@ -295,7 +288,7 @@ export default function CommitteeSetupPage() {
                             </button>
                         </td>
 
-                        {/* 4. Dropdown กำหนดบทบาท */}
+                        {/* Dropdown กำหนดบทบาท */}
                         <td className="p-4 text-center">
                             <select 
                                 className={`border rounded-lg px-3 py-2 text-sm font-medium outline-none cursor-pointer transition-all w-48

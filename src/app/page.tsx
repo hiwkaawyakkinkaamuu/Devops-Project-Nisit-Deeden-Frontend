@@ -6,7 +6,7 @@ import { createApiUrl } from "../api/createApiUrl";
 import Link from "next/link";
 import Image from "next/image";
 
-// --- ส่วนจัดการ Error และ Token เหมือนเดิม ---
+// ส่วนจัดการ Error และ Token เหมือนเดิม
 function parseErrorMessage(payload: unknown, status: number): string {
   if (typeof payload === "object" && payload) {
     const maybeError = (payload as Record<string, unknown>).error;
@@ -66,17 +66,19 @@ export default function LoginPage() {
 
       // Redirect ตาม Role
       if (role === "admin") {
-          router.push("/admin/");
+          router.push("/admin/manage-account");
       } else if (role === "head-selection-committee") {
-          router.push("/head-selection-committee");
-      } else if (role === "selection-committee") {
-          router.push("/selection-committee");
-      } else if (role === "department-head") {
-          router.push("/department-head/consider");
+          router.push("/chairman-of-student-development-committee/consider");
+      } else if (role === "chairman-of-student-development-committee") {
+          router.push("/student-development-committee/consider");
+      } else if (role === "student-development") {
+          router.push("/student-development-committee/committee-setup");    
       } else if (role === "dean") {
           router.push("/dean/consider");
       } else if (role === "associate-dean") {
           router.push("/associate-dean/consider");
+          } else if (role === "head-of-department") {
+          router.push("/head-of-department/consider");
       } else {
           router.push("/student/student-nomination-form"); 
       }
@@ -99,7 +101,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex w-full font-sans">
       
-      {/* --- ฝั่งซ้าย (สีเขียว) --- */}
+      {/* ฝั่งซ้าย (สีเขียว) */}
       <div className="hidden lg:flex w-1/2 bg-[#005c30] text-white flex-col justify-center px-16 relative overflow-hidden">
         {/* กราฟิกพื้นหลังจางๆ (ถ้ามี) */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
@@ -119,7 +121,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* --- ฝั่งขวา (ฟอร์ม Login) --- */}
+      {/* ฝั่งขวา (ฟอร์ม Login) */}
       <div className="w-full lg:w-1/2 bg-white flex flex-col justify-center items-center p-8">
         <div className="w-full max-w-md">
             
@@ -217,7 +219,7 @@ export default function LoginPage() {
   );
 }
 
-// --- Component ย่อยสำหรับไอคอนและลิสต์ (จะได้ไม่ต้องลง Library เพิ่ม) ---
+// Component ย่อยสำหรับไอคอนและลิสต์ (จะได้ไม่ต้องลง Library เพิ่ม)
 
 function FeatureItem({ title, desc }: { title: string, desc: string }) {
     return (

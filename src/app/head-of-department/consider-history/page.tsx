@@ -72,7 +72,7 @@ interface MasterDepartment {
   faculty_id: number;
 }
 
-// Mockup Master Data
+// 2. Mockup Master Data
 const MOCK_FACULTIES: MasterFaculty[] = [
     { faculty_id: 1, faculty_name: "คณะวิทยาศาสตร์" },
     { faculty_id: 2, faculty_name: "คณะวิศวกรรมศาสตร์" },
@@ -93,17 +93,18 @@ const MOCK_DEPARTMENTS: MasterDepartment[] = [
 ];
 
 // Main Component
-export default function AssociateDeanConsiderPage() {
+export default function HeadOfDepartmentConsiderHistoryPage() {
+  // Data States
   const [nominations, setNominations] = useState<Nomination[]>([]);
   const [masterFaculties, setMasterFaculties] = useState<MasterFaculty[]>(MOCK_FACULTIES);
   const [masterDepartments, setMasterDepartments] = useState<MasterDepartment[]>(MOCK_DEPARTMENTS);
 
+  // UI States
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalData, setModalData] = useState<Nomination | null>(null);
 
-  // Filters
+  // Filter States
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [filterYear, setFilterYear] = useState("");
@@ -115,7 +116,7 @@ export default function AssociateDeanConsiderPage() {
       direction: 'asc' | 'desc' | 'behavior' | 'innovation' | 'activity' | null 
   }>({ key: null, direction: null });
 
-  // Pagination
+  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
 
@@ -137,9 +138,13 @@ export default function AssociateDeanConsiderPage() {
   };
 
   // Helper: แปลงวันที่ ISO
-  const formatDateStandard = (isoDate: string) => {
+  const formatDateTh = (isoDate: string) => {
       if (!isoDate) return "-";
-      return new Date(isoDate).toLocaleDateString('en-GB');
+      const date = new Date(isoDate);
+      const year = date.getFullYear() + 543;
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${day}/${month}/${year}`;
   };
 
   useEffect(() => {
@@ -160,6 +165,7 @@ export default function AssociateDeanConsiderPage() {
         if (filterYear) params.append("student_year", filterYear);
         if (filterStatusId) params.append("status_id", filterStatusId);
 
+        // ดึงข้อมูลพร้อมกัน
         const [resNominations, resFaculties, resDepartments] = await Promise.all([
             fetch(`${apiUrl}/api/department/nominations?${params.toString()}`, {
                 method: "GET",
@@ -196,7 +202,7 @@ export default function AssociateDeanConsiderPage() {
                 student_year: 1, form_status_id: 1, created_at: "2026-01-15T10:00:00Z", latest_update: "2026-01-15T10:00:00Z",
                 award_type_id: 1, award_type_name: "ด้านความประพฤติดี", 
                 faculty_id: 1, department_id: 10, campus_id: 1, 
-                academic_year: 2026,
+                academic_year: 2569,
                 semester: 1,
                 advisor_name: "ดร. สมหญิง", gpa: 3.75, phone_number: "0812345678", email: "somchai@ku.th", address: "หอพักใน", date_of_birth: "2002-01-01T00:00:00Z",
                 detail: {}, files: [{ file_dir_id: 1, file_name: "transcript.pdf", file_type: "application/pdf", file_size: 1024, file_path: "#" }]
@@ -207,7 +213,7 @@ export default function AssociateDeanConsiderPage() {
                 student_year: 1, form_status_id: 1, created_at: "2026-01-16T09:00:00Z", latest_update: "2026-01-16T09:00:00Z",
                 award_type_id: 1, award_type_name: "ด้านความประพฤติดี", 
                 faculty_id: 2, department_id: 20, campus_id: 1, 
-                academic_year: 2026, 
+                academic_year: 2569, 
                 semester: 1,
                 advisor_name: "อ. สมศรี", gpa: 3.80, phone_number: "0891234567", email: "ying@ku.th", address: "กทม.", date_of_birth: "2002-02-02T00:00:00Z",
                 detail: {}, files: []
@@ -218,7 +224,7 @@ export default function AssociateDeanConsiderPage() {
                 student_year: 1, form_status_id: 1, created_at: "2026-01-15T14:30:00Z", latest_update: "2026-01-15T14:30:00Z",
                 award_type_id: 2, award_type_name: "ด้านความคิดสร้างสรรค์และนวัตกรรม", 
                 faculty_id: 1, department_id: 11, campus_id: 1, 
-                academic_year: 2026, 
+                academic_year: 2569, 
                 semester: 1,
                 advisor_name: "ดร. สมชาย", gpa: 3.50, phone_number: "0811112222", email: "keng@ku.th", address: "นนทบุรี", date_of_birth: "2002-03-03T00:00:00Z",
                 detail: {
@@ -234,7 +240,7 @@ export default function AssociateDeanConsiderPage() {
                 student_year: 2, form_status_id: 1, created_at: "2026-01-10T11:00:00Z", latest_update: "2026-01-10T11:00:00Z",
                 award_type_id: 3, award_type_name: "ด้านกิจกรรมเสริมหลักสูตร", 
                 faculty_id: 3, department_id: 30, campus_id: 1, 
-                academic_year: 2026, 
+                academic_year: 2569, 
                 semester: 1,
                 advisor_name: "อ. มานี", gpa: 3.20, phone_number: "0855556666", email: "mana@ku.th", address: "ปทุมธานี", date_of_birth: "2001-04-04T00:00:00Z",
                 detail: {
@@ -250,7 +256,7 @@ export default function AssociateDeanConsiderPage() {
                 student_year: 3, form_status_id: 1, created_at: "2026-01-12T08:00:00Z", latest_update: "2026-01-12T08:00:00Z",
                 award_type_id: 1, award_type_name: "ด้านความประพฤติดี", 
                 faculty_id: 4, department_id: 40, campus_id: 1, 
-                academic_year: 2026, 
+                academic_year: 2569, 
                 semester: 1,
                 advisor_name: "ดร. ชูใจ", gpa: 3.90, phone_number: "0877778888", email: "wichai@ku.th", address: "หอพักนอก", date_of_birth: "2000-05-05T00:00:00Z",
                 detail: {}, files: []
@@ -261,7 +267,7 @@ export default function AssociateDeanConsiderPage() {
                 student_year: 4, form_status_id: 2, created_at: "2026-01-05T09:00:00Z", latest_update: "2026-01-07T09:00:00Z",
                 award_type_id: 2, award_type_name: "ด้านความคิดสร้างสรรค์และนวัตกรรม", 
                 faculty_id: 5, department_id: 50, campus_id: 1, 
-                academic_year: 2026, 
+                academic_year: 2569, 
                 semester: 1,
                 advisor_name: "ศ. ปิติ", gpa: 3.60, phone_number: "0899990000", email: "piti@ku.th", address: "นครปฐม", date_of_birth: "1999-06-06T00:00:00Z",
                 detail: {
@@ -277,7 +283,7 @@ export default function AssociateDeanConsiderPage() {
                 student_year: 1, form_status_id: 3, created_at: "2026-01-08T13:00:00Z", latest_update: "2026-01-09T10:00:00Z",
                 award_type_id: 3, award_type_name: "ด้านกิจกรรมเสริมหลักสูตร", 
                 faculty_id: 6, department_id: 60, campus_id: 1, 
-                academic_year: 2026, 
+                academic_year: 2569, 
                 semester: 1,
                 advisor_name: "อ. วีระ", gpa: 2.90, phone_number: "0812341234", email: "choojai@ku.th", address: "กทม.", date_of_birth: "2002-07-07T00:00:00Z",
                 detail: {
@@ -301,10 +307,8 @@ export default function AssociateDeanConsiderPage() {
   const filteredNominations = nominations.filter((item) => {
       const fullName = `${item.student_firstname} ${item.student_lastname}`;
       const matchSearch = fullName.includes(searchTerm) || item.student_number.includes(searchTerm);
-      
       const itemDate = item.created_at.split('T')[0];
       const matchDate = filterDate ? itemDate === filterDate : true; 
-      
       const matchYear = filterYear ? item.student_year.toString() === filterYear : true;
       const matchStatus = filterStatusId ? item.form_status_id.toString() === filterStatusId : true;
       return matchSearch && matchDate && matchYear && matchStatus;
@@ -326,11 +330,13 @@ export default function AssociateDeanConsiderPage() {
               ? a.academic_year - b.academic_year 
               : b.academic_year - a.academic_year;
       }
+      
       if (sortConfig.key === 'student_number') {
           return sortConfig.direction === 'asc'
               ? String(a.student_number).localeCompare(String(b.student_number))
               : String(b.student_number).localeCompare(String(a.student_number));
       }
+      
       // Sort วันที่
       if (sortConfig.key === 'created_at') {
           const dateA = new Date(a.created_at).getTime();
@@ -360,27 +366,6 @@ export default function AssociateDeanConsiderPage() {
   const handleViewDetail = (item: Nomination) => {
     setModalData(item);
     setIsModalOpen(true);
-  };
-
-  const handleAction = async (action: "approved" | "rejected") => {
-    if (selectedId === null) {
-      alert("กรุณาเลือกรายชื่อนิสิตก่อน");
-      return;
-    }
-    const statusId = action === "approved" ? 2 : 3;
-    const confirmMsg = action === "approved" ? "ยืนยันการเห็นชอบ?" : "ยืนยันการ 'ไม่' เห็นชอบ?";
-    if (!confirm(confirmMsg)) return;
-
-    try {
-        setNominations((prev) => 
-            prev.map(item => item.form_id === selectedId ? { ...item, form_status_id: statusId } : item)
-        );
-        setSelectedId(null);
-        alert(`ดำเนินการเรียบร้อย`);
-    } catch (error) {
-        console.error(error);
-        alert("เกิดข้อผิดพลาดในการทำรายการ");
-    }
   };
 
   const handleSort = (key: any) => { 
@@ -424,8 +409,8 @@ export default function AssociateDeanConsiderPage() {
     <div className="min-h-screen bg-gray-50 p-8 font-sans">
       
       <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">อนุมัติเห็นชอบหรือไม่เห็นชอบ</h1>
-        <p className="text-gray-400 text-sm mt-1">เลือกนิสิตและกดเห็นชอบหรือไม่เห็นชอบ</p>
+        <h1 className="text-2xl font-bold text-gray-800">ประวัติการพิจารณา</h1>
+        <p className="text-gray-400 text-sm mt-1">แสดงรายชื่อนิสิตที่ผ่านการพิจารณาแล้ว</p>
 
         {/* Filters Bar */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
@@ -434,7 +419,6 @@ export default function AssociateDeanConsiderPage() {
             <svg className="w-4 h-4 absolute left-3 top-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           </div>
           
-          {/* DATE FILTER */}
           <div className="relative">
             <input
                 type="date"
@@ -452,7 +436,10 @@ export default function AssociateDeanConsiderPage() {
           </div>
           <div className="relative">
             <select value={filterStatusId} onChange={(e) => setFilterStatusId(e.target.value)} className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 text-sm text-gray-500 appearance-none cursor-pointer">
-                <option value="">ทั้งหมด</option><option value="1">รอพิจารณา</option><option value="2">เห็นชอบแล้ว</option><option value="3">ไม่เห็นชอบ</option>
+                <option value="">สถานะทั้งหมด</option>
+                <option value="2">เห็นชอบ</option>
+                <option value="3">ไม่เห็นชอบ</option>
+                <option value="1">รอพิจารณา</option>
             </select>
             <svg className="w-4 h-4 absolute right-3 top-3 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
           </div>
@@ -497,15 +484,14 @@ export default function AssociateDeanConsiderPage() {
                 currentItems.map((item) => (
                   <tr 
                     key={item.form_id} 
-                    onClick={() => setSelectedId(item.form_id)} 
-                    className={`cursor-pointer transition-colors duration-150 ${selectedId === item.form_id ? "bg-[#95F2AD] bg-opacity-40" : "hover:bg-gray-50 bg-white"}`}
+                    className="hover:bg-gray-50 bg-white transition-colors"
                   >
                     <td className="p-4 text-sm font-medium text-gray-700">{item.student_firstname} {item.student_lastname}</td>
                     <td className="p-4 text-sm text-center text-gray-600">{item.student_number}</td>
                     <td className="p-4 text-sm text-center text-gray-600">{item.academic_year}</td>
                     <td className="p-4 text-sm text-center text-gray-600 italic">{item.award_type_name}</td>
-        
-                    <td className="p-4 text-sm text-center text-gray-500">{formatDateStandard(item.created_at)}</td>
+                  
+                    <td className="p-4 text-sm text-center text-gray-500">{formatDateTh(item.created_at)}</td>
                     
                     <td className="p-4 text-center">
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(item.form_status_id)}`}>
@@ -514,10 +500,7 @@ export default function AssociateDeanConsiderPage() {
                     </td>
                     <td className="p-4 text-center">
                         <button 
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleViewDetail(item);
-                            }}
+                            onClick={() => handleViewDetail(item)}
                             className="text-gray-400 hover:text-blue-600 transition-colors p-1.5 hover:bg-blue-50 rounded-full"
                             title="ดูรายละเอียด"
                         >
@@ -539,11 +522,6 @@ export default function AssociateDeanConsiderPage() {
                     <button key={page} onClick={() => setCurrentPage(page)} className={`w-8 h-8 flex items-center justify-center rounded text-sm font-bold transition-colors ${currentPage === page ? "bg-blue-100 text-blue-600" : "bg-transparent text-gray-500 hover:bg-gray-100"}`}>{page}</button>
                 ))}
                 <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 text-gray-500 hover:bg-gray-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed">{'>'}</button>
-            </div>
-
-            <div className="flex gap-3">
-                <button onClick={() => handleAction("rejected")} disabled={selectedId === null} className={`px-6 py-2 rounded-lg text-sm font-bold text-white transition-all shadow-md ${selectedId === null ? "bg-gray-300 cursor-not-allowed" : "bg-[#C81E1E] hover:bg-red-800"}`}>ไม่เห็นชอบ</button>
-                <button onClick={() => handleAction("approved")} disabled={selectedId === null} className={`px-6 py-2 rounded-lg text-sm font-bold text-white transition-all shadow-md ${selectedId === null ? "bg-gray-300 cursor-not-allowed" : "bg-[#22C55E] hover:bg-green-700"}`}>เห็นชอบ</button>
             </div>
         </div>
 

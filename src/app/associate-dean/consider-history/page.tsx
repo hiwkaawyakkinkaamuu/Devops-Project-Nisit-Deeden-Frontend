@@ -1,261 +1,355 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import NominationDetailModal from "../../../components/nomination-detail-modal";
+import NominationDetailModal from "../../../components/nomination-detail-modal"; 
 
-// --- 1. Type Definition (ปรับให้ตรงกับ Mock Data เป๊ะๆ) ---
-interface HistoryItem {
-  // --- ข้อมูลหลักสำหรับตาราง ---
-  id: number;
-  name: string;
-  studentId: string;
-  year: string;
-  category: string;
-  status: string;
-  date: string;
-
-  // --- ข้อมูลส่วนตัว (Modal) ---
-  title?: string;
-  firstName?: string;
-  lastName?: string;
-  faculty?: string;
-  major?: string;
-  advisor?: string;
-  gpa?: string;
-  phone?: string;
-  email?: string;
-  address?: string;
-
-  // --- ข้อมูลจำเพาะของรางวัล (Fields ตาม Mock Data) ---
-  awardType?: string;       // 'behavior', 'innovation', 'activity'
-  
-  // Fields สำหรับด้านความคิดสร้างสรรค์และนวัตกรรม (Innovation)
-  innovationQual?: boolean; // คุณสมบัติเบื้องต้น
-  projectName?: string;     // ชื่อผลงาน/โครงการ
-  workName?: string;        // ชิ้นงาน
-  teamName?: string;        // ชื่อทีม
-  
-  // Fields สำหรับด้านกิจกรรมเสริมหลักสูตร(Activity)
-  activityCriteria?: string; // เกณฑ์กิจกรรม (competition, committee, etc.)
-  activityName?: string;     // ชื่อกิจกรรม
-  position?: string;         // ตำแหน่ง
-  
-  // Fields ทั่วไปของรางวัล
-  awardDate?: string;       // วันที่ได้รับรางวัล
-  receivedAward?: string;   // รางวัลที่ได้รับ
-  organizer?: string;       // หน่วยงานที่จัด
-  description?: string;     // รายละเอียด
-  
-  // เอกสารแนบ
-  files?: string[];         // Array ของชื่อไฟล์
-  evidenceFile?: string;    // (เผื่อไว้)
+interface FileResponse {
+  file_dir_id: number;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  file_path: string;
 }
 
-export default function HistoryPage() {
-  // --- State ---
-  const [historyData, setHistoryData] = useState<HistoryItem[]>([]);
+interface ExtracurricularDetail {
+  qualification_type: string;
+  date_received: string;
+  team_name: string;
+  project_title: string;
+  prize: string;
+  organized_by: string;
+  competition_level: string;
+  activity_category: string;
+}
+
+interface CreativityDetail {
+  date_received: string;
+  team_name: string;
+  project_title: string;
+  prize: string;
+  organized_by: string;
+  competition_level: string;
+  activity_category: string;
+}
+
+interface GoodBehaviorDetail {}
+
+interface Nomination {
+  form_id: number;
+  student_id: number;
+  student_firstname: string;
+  student_lastname: string;
+  email: string;
+  student_number: string;
+  faculty_id: number;
+  department_id: number;
+  campus_id: number;
+  academic_year: number;
+  semester: number;
+  form_status_id: number;
+  award_type_id: number;
+  award_type_name: string;
+  created_at: string;
+  latest_update: string;
+  student_year: number;
+  advisor_name: string;
+  phone_number: string;
+  address: string;
+  gpa: number;
+  date_of_birth: string;
+  detail?: ExtracurricularDetail | CreativityDetail | GoodBehaviorDetail;
+  files?: FileResponse[];
+}
+
+interface MasterFaculty {
+  faculty_id: number;
+  faculty_name: string;
+}
+
+interface MasterDepartment {
+  department_id: number;
+  department_name: string;
+  faculty_id: number;
+}
+
+// 2. Mockup Master Data
+const MOCK_FACULTIES: MasterFaculty[] = [
+    { faculty_id: 1, faculty_name: "คณะวิทยาศาสตร์" },
+    { faculty_id: 2, faculty_name: "คณะวิศวกรรมศาสตร์" },
+    { faculty_id: 3, faculty_name: "คณะบริหารธุรกิจ" },
+    { faculty_id: 4, faculty_name: "คณะสังคมศาสตร์" },
+    { faculty_id: 5, faculty_name: "คณะเกษตร" },
+    { faculty_id: 6, faculty_name: "คณะศึกษาศาสตร์" }
+];
+
+const MOCK_DEPARTMENTS: MasterDepartment[] = [
+    { department_id: 10, department_name: "ภาควิชาวิทยาการคอมพิวเตอร์", faculty_id: 1 },
+    { department_id: 11, department_name: "ภาควิชาเคมี", faculty_id: 1 },
+    { department_id: 20, department_name: "ภาควิชาวิศวกรรมไฟฟ้า", faculty_id: 2 },
+    { department_id: 30, department_name: "ภาควิชาการตลาด", faculty_id: 3 },
+    { department_id: 40, department_name: "ภาควิชารัฐศาสตร์", faculty_id: 4 },
+    { department_id: 50, department_name: "ภาควิชาพืชไร่", faculty_id: 5 },
+    { department_id: 60, department_name: "ภาควิชาพลศึกษา", faculty_id: 6 }
+];
+
+// Main Component
+export default function AssociateDeanConsiderHistoryPage() {
+  // Data States
+  const [nominations, setNominations] = useState<Nomination[]>([]);
+  const [masterFaculties, setMasterFaculties] = useState<MasterFaculty[]>(MOCK_FACULTIES);
+  const [masterDepartments, setMasterDepartments] = useState<MasterDepartment[]>(MOCK_DEPARTMENTS);
+
+  // UI States
   const [loading, setLoading] = useState(true);
-
-  // --- Modal State ---
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalData, setModalData] = useState<HistoryItem | null>(null);
+  const [modalData, setModalData] = useState<Nomination | null>(null);
 
-  // --- Filter States ---
+  // Filter States
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDate, setFilterDate] = useState("");
-  const [filterStatus, setFilterStatus] = useState(""); 
-  const [filterCategory, setFilterCategory] = useState(""); 
+  const [filterYear, setFilterYear] = useState("");
+  const [filterStatusId, setFilterStatusId] = useState<string>("");
 
-  // --- Sorting State ---
-  interface SortConfig {
-      key: string | null;
-      direction: string | null; 
-  }
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: null });
+  // Sort State
+  const [sortConfig, setSortConfig] = useState<{ 
+      key: keyof Nomination | 'award_type_name' | 'academic_year' | null, 
+      direction: 'asc' | 'desc' | 'behavior' | 'innovation' | 'activity' | null 
+  }>({ key: null, direction: null });
 
-  // --- Pagination State ---
+  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6; 
+  const itemsPerPage = 6;
 
-  // Reset Pagination เมื่อ Filter เปลี่ยน
+  // Helpers
+  const getStatusName = (id: number) => {
+      switch(id) {
+          case 2: return "เห็นชอบ";
+          case 3: return "ไม่เห็นชอบ";
+          default: return "รอพิจารณา";
+      }
+  };
+  
+  const getStatusColor = (id: number) => {
+      switch(id) {
+          case 2: return "bg-green-100 text-green-700";
+          case 3: return "bg-red-100 text-red-700";
+          default: return "bg-yellow-100 text-yellow-700";
+      }
+  };
+
+  // Helper: แปลงวันที่ ISO
+  const formatDateTh = (isoDate: string) => {
+      if (!isoDate) return "-";
+      const date = new Date(isoDate);
+      const year = date.getFullYear() + 543;
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${day}/${month}/${year}`;
+  };
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterDate, filterStatus, filterCategory, sortConfig]);
+  }, [searchTerm, filterDate, filterYear, filterStatusId, sortConfig]);
 
-  // --- Fetch Data ---
+  // Fetch Data
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // =========================================================
-        // 🟡 [API Integration] ส่วนเชื่อมต่อหลังบ้าน (สมบูรณ์)
-        // =========================================================
-        /*
-        // 1. เตรียม Token และ URL
-        const token = localStorage.getItem("accessToken"); // หรือใช้ Session Hook
-        if (!token) {
-            console.warn("No access token found");
-            setLoading(false);
-            return;
-        }
-
-        // 2. แปลง Category ไทย -> อังกฤษ (ถ้า Backend ต้องการภาษาอังกฤษ)
-        const categoryMap: Record<string, string> = {
-            "ด้านความประพฤติดี": "behavior",
-            "ด้านความคิดสร้างสรรค์และนวัตกรรม": "innovation",
-            "ด้านกิจกรรมเสริมหลักสูตร": "activity"
-        };
-        const backendCategory = categoryMap[filterCategory] || "";
-
-        // 3. สร้าง Query Parameters
+        const token = localStorage.getItem("accessToken");
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+        
         const params = new URLSearchParams();
-        if (searchTerm) params.append("q", searchTerm); // ค้นหาชื่อ/รหัสนิสิต
+        if (searchTerm) params.append("q", searchTerm);
         if (filterDate) params.append("date", filterDate);
-        if (filterStatus) params.append("status", filterStatus); // approved, rejected, pending
-        if (filterCategory) params.append("type", backendCategory); // ส่งค่าภาษาอังกฤษไป
-        
-        // Pagination (ส่งไปให้ Backend ตัด)
-        params.append("page", currentPage.toString());
-        params.append("limit", itemsPerPage.toString());
+        if (filterYear) params.append("student_year", filterYear);
+        if (filterStatusId) params.append("status_id", filterStatusId);
 
-        // 4. ยิง Request (GET)
-        // ใช้ Path ที่ Proxy ไว้ใน next.config.js หรือ URL เต็ม
-        const response = await fetch(`/api/associate-dean/history?${params.toString()}`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          }
-        });
+        // ดึงข้อมูลพร้อมกัน
+        const [resNominations, resFaculties, resDepartments] = await Promise.all([
+            fetch(`${apiUrl}/api/department/nominations?${params.toString()}`, {
+                method: "GET",
+                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
+            }),
+            fetch(`${apiUrl}/api/master/faculties`, { headers: { "Authorization": `Bearer ${token}` } }),
+            fetch(`${apiUrl}/api/master/departments`, { headers: { "Authorization": `Bearer ${token}` } })
+        ]);
 
-        if (!response.ok) {
-            // Handle error logic (e.g. 401 Unauthorized -> Logout)
-            if (response.status === 401) {
-                // router.push('/login');
-            }
-            throw new Error(`API Error: ${response.status} - ${response.statusText}`);
+        if (resNominations.ok) {
+            const data = await resNominations.json();
+            setNominations(data.data || []);
+        } else {
+            throw new Error("Nominations API Failed");
         }
 
-        const result = await response.json();
-        
-        // 5. Transform Data (ถ้าชื่อ Field หลังบ้านไม่ตรงกับหน้าบ้าน)
-        // สมมติ Backend ส่งกลับมาเป็น { data: [...], total: 100 }
-        const formattedData: HistoryItem[] = result.data.map((item: any) => ({
-            id: item.id,
-            name: `${item.student.title} ${item.student.firstName} ${item.student.lastName}`,
-            studentId: item.student.studentId,
-            year: item.student.year, // อาจต้องคำนวณจากรหัส
-            category: item.awardType === 'innovation' ? 'ด้านความคิดสร้างสรรค์และนวัตกรรม' : 
-                      item.awardType === 'behavior' ? 'ด้านความประพฤติดี' : 'ด้านกิจกรรมเสริมหลักสูตร',
-            status: item.status,
-            date: item.submittedDate,
-            // ... Map fields อื่นๆ ให้ครบตาม Interface HistoryItem ...
-            firstName: item.student.firstName,
-            lastName: item.student.lastName,
-            email: item.student.email,
-            // ...
-        }));
-
-        setHistoryData(formattedData);
-        // setTotalItems(result.total); // ถ้ามี State เก็บจำนวนทั้งหมด
-        */
-        
-        // --- MOCK DATA (Structure ตรงตาม Interface) ---
-        const mockData: HistoryItem[] = [
-          { 
-            id: 1, 
-            name: "สมชาย ใจดี", firstName: "สมชาย", lastName: "ใจดี", studentId: "66104524665", 
-            year: "1", category: "ด้านความประพฤติดี", status: "approved", date: "2024-01-15",
-            awardType: "behavior", faculty: "วิทยาศาสตร์", major: "วิทยาการคอมพิวเตอร์", advisor: "ดร. สมหญิง", gpa: "3.75", phone: "0812345678", email: "somchai@ku.th", address: "หอพักใน", 
-            files: ["transcript.pdf"], description: "มีความประพฤติเรียบร้อย ช่วยเหลืองานคณะสม่ำเสมอ"
-          },
-          { 
-            id: 2, 
-            name: "สมหญิง รักเรียน", firstName: "สมหญิง", lastName: "รักเรียน", studentId: "66104524885", 
-            year: "1", category: "ด้านความประพฤติดี", status: "approved", date: "2024-01-16",
-            awardType: "behavior", faculty: "มนุษยศาสตร์", major: "ภาษาอังกฤษ", advisor: "อ. สมศรี", gpa: "3.80", phone: "0891234567", email: "ying@ku.th", address: "กทม.",
-            description: "เก็บของหายคืนเจ้าของ และเป็นตัวแทนนิสิตในการทำกิจกรรมจิตอาสา"
-          },
-          { 
-            id: 3, 
-            name: "เก่ง กล้า", firstName: "เก่ง", lastName: "กล้า", studentId: "66104524999", 
-            year: "1", category: "ด้านความคิดสร้างสรรค์และนวัตกรรม", status: "approved", date: "2024-01-15",
-            awardType: "innovation", faculty: "วิศวกรรมศาสตร์", major: "ไฟฟ้า", advisor: "ดร. สมชาย", gpa: "3.50", phone: "0811112222", email: "keng@ku.th", address: "นนทบุรี",
-            innovationQual: true, awardDate: "2023-12-01", projectName: "Smart Home AI", teamName: "AI Team", workName: "Robot", receivedAward: "Gold Medal", organizer: "Google", files: ["project.pdf"]
-          },
-          { 
-            id: 4, 
-            name: "มานะ อดทน", firstName: "มานะ", lastName: "อดทน", studentId: "66104524111", 
-            year: "2", category: "ด้านกิจกรรมเสริมหลักสูตร", status: "approved", date: "2024-01-10",
-            awardType: "activity", faculty: "บริหารธุรกิจ", major: "การตลาด", advisor: "อ. มานี", gpa: "3.20", phone: "0855556666", email: "mana@ku.th", address: "ปทุมธานี",
-            activityCriteria: "competition", awardDate: "2023-11-20", projectName: "Startup Pitching", teamName: "Biz Kids", workName: "App", receivedAward: "Winner", organizer: "SET", files: ["cert.pdf"]
-          },
-          { 
-            id: 5, 
-            name: "วิชัย ใจสู้", firstName: "วิชัย", lastName: "ใจสู้", studentId: "66104524222", 
-            year: "3", category: "ด้านความประพฤติดี", status: "approved", date: "2024-01-12",
-            awardType: "behavior", faculty: "สังคมศาสตร์", major: "รัฐศาสตร์", advisor: "ดร. ชูใจ", gpa: "3.90", phone: "0877778888", email: "wichai@ku.th", address: "หอพักนอก",
-            description: "อุทิศตนเพื่อสังคม ออกค่ายอาสาอย่างต่อเนื่อง"
-          },
-          { 
-            id: 6, 
-            name: "ปิติ ยินดี", firstName: "ปิติ", lastName: "ยินดี", studentId: "66104524333", 
-            year: "4", category: "ด้านความคิดสร้างสรรค์และนวัตกรรม", status: "approved", date: "2024-01-05",
-            awardType: "innovation", faculty: "เกษตร", major: "พืชไร่", advisor: "ศ. ปิติ", gpa: "3.60", phone: "0899990000", email: "piti@ku.th", address: "นครปฐม",
-            innovationQual: true, awardDate: "2023-10-10", projectName: "Green Farm", teamName: "Green Team", workName: "Organic", receivedAward: "Silver", organizer: "DOA", files: ["research.pdf"]
-          }, 
-          { 
-            id: 7, 
-            name: "ชูใจ ใฝ่ดี", firstName: "ชูใจ", lastName: "ใฝ่ดี", studentId: "66104524444", 
-            year: "1", category: "ด้านกิจกรรมเสริมหลักสูตร", status: "rejected", date: "2024-01-08",
-            awardType: "activity", faculty: "ศึกษาศาสตร์", major: "พลศึกษา", advisor: "อ. วีระ", gpa: "2.90", phone: "0812341234", email: "choojai@ku.th", address: "กทม.",
-            activityCriteria: "committee", awardDate: "2023-09-01", projectName: "Sport Day", teamName: "-", workName: "-", receivedAward: "-", organizer: "KU", files: ["activity_log.pdf"]
-          }, 
-        ];
-        
-        // เรียงลำดับตามวันที่ (ล่าสุดขึ้นก่อน)
-        setHistoryData(mockData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        if (resFaculties.ok) {
+            const data = await resFaculties.json();
+            if (data.data?.length > 0) setMasterFaculties(data.data);
+        }
+        if (resDepartments.ok) {
+            const data = await resDepartments.json();
+            if (data.data?.length > 0) setMasterDepartments(data.data);
+        }
 
       } catch (error) {
-        console.error("Error fetching history:", error);
+        console.warn("⚠️ Fetch Error (Using Mockup Data):", error);
+
+        // MOCKUP
+        setNominations([
+            { 
+                form_id: 1, student_id: 101, student_number: "66104524665", 
+                student_firstname: "สมชาย", student_lastname: "ใจดี", 
+                student_year: 1, form_status_id: 1, created_at: "2026-01-15T10:00:00Z", latest_update: "2026-01-15T10:00:00Z",
+                award_type_id: 1, award_type_name: "ด้านความประพฤติดี", 
+                faculty_id: 1, department_id: 10, campus_id: 1, 
+                academic_year: 2569,
+                semester: 1,
+                advisor_name: "ดร. สมหญิง", gpa: 3.75, phone_number: "0812345678", email: "somchai@ku.th", address: "หอพักใน", date_of_birth: "2002-01-01T00:00:00Z",
+                detail: {}, files: [{ file_dir_id: 1, file_name: "transcript.pdf", file_type: "application/pdf", file_size: 1024, file_path: "#" }]
+            },
+            { 
+                form_id: 2, student_id: 102, student_number: "66104524885", 
+                student_firstname: "สมหญิง", student_lastname: "รักเรียน", 
+                student_year: 1, form_status_id: 1, created_at: "2026-01-16T09:00:00Z", latest_update: "2026-01-16T09:00:00Z",
+                award_type_id: 1, award_type_name: "ด้านความประพฤติดี", 
+                faculty_id: 2, department_id: 20, campus_id: 1, 
+                academic_year: 2569, 
+                semester: 1,
+                advisor_name: "อ. สมศรี", gpa: 3.80, phone_number: "0891234567", email: "ying@ku.th", address: "กทม.", date_of_birth: "2002-02-02T00:00:00Z",
+                detail: {}, files: []
+            },
+            { 
+                form_id: 3, student_id: 103, student_number: "66104524999", 
+                student_firstname: "เก่ง", student_lastname: "กล้า", 
+                student_year: 1, form_status_id: 1, created_at: "2026-01-15T14:30:00Z", latest_update: "2026-01-15T14:30:00Z",
+                award_type_id: 2, award_type_name: "ด้านความคิดสร้างสรรค์และนวัตกรรม", 
+                faculty_id: 1, department_id: 11, campus_id: 1, 
+                academic_year: 2569, 
+                semester: 1,
+                advisor_name: "ดร. สมชาย", gpa: 3.50, phone_number: "0811112222", email: "keng@ku.th", address: "นนทบุรี", date_of_birth: "2002-03-03T00:00:00Z",
+                detail: {
+                    project_title: "Smart Home AI", team_name: "AI Team", prize: "Gold Medal", 
+                    organized_by: "Google", competition_level: "International", activity_category: "Innovation",
+                    date_received: "2023-12-01T00:00:00Z"
+                } as CreativityDetail,
+                files: [{ file_dir_id: 2, file_name: "project.pdf", file_type: "application/pdf", file_size: 2048, file_path: "#" }]
+            },
+            { 
+                form_id: 4, student_id: 104, student_number: "66104524111", 
+                student_firstname: "มานะ", student_lastname: "อดทน", 
+                student_year: 2, form_status_id: 1, created_at: "2026-01-10T11:00:00Z", latest_update: "2026-01-10T11:00:00Z",
+                award_type_id: 3, award_type_name: "ด้านกิจกรรมเสริมหลักสูตร", 
+                faculty_id: 3, department_id: 30, campus_id: 1, 
+                academic_year: 2569, 
+                semester: 1,
+                advisor_name: "อ. มานี", gpa: 3.20, phone_number: "0855556666", email: "mana@ku.th", address: "ปทุมธานี", date_of_birth: "2001-04-04T00:00:00Z",
+                detail: {
+                    qualification_type: "Competition", project_title: "Startup Pitching", team_name: "Biz Kids", prize: "Winner", 
+                    organized_by: "SET", competition_level: "National", activity_category: "Business",
+                    date_received: "2023-11-20T00:00:00Z"
+                } as ExtracurricularDetail,
+                files: [{ file_dir_id: 3, file_name: "cert.pdf", file_type: "application/pdf", file_size: 1500, file_path: "#" }]
+            },
+            { 
+                form_id: 5, student_id: 105, student_number: "66104524222", 
+                student_firstname: "วิชัย", student_lastname: "ใจสู้", 
+                student_year: 3, form_status_id: 1, created_at: "2026-01-12T08:00:00Z", latest_update: "2026-01-12T08:00:00Z",
+                award_type_id: 1, award_type_name: "ด้านความประพฤติดี", 
+                faculty_id: 4, department_id: 40, campus_id: 1, 
+                academic_year: 2569, 
+                semester: 1,
+                advisor_name: "ดร. ชูใจ", gpa: 3.90, phone_number: "0877778888", email: "wichai@ku.th", address: "หอพักนอก", date_of_birth: "2000-05-05T00:00:00Z",
+                detail: {}, files: []
+            },
+            { 
+                form_id: 6, student_id: 106, student_number: "66104524333", 
+                student_firstname: "ปิติ", student_lastname: "ยินดี", 
+                student_year: 4, form_status_id: 2, created_at: "2026-01-05T09:00:00Z", latest_update: "2026-01-07T09:00:00Z",
+                award_type_id: 2, award_type_name: "ด้านความคิดสร้างสรรค์และนวัตกรรม", 
+                faculty_id: 5, department_id: 50, campus_id: 1, 
+                academic_year: 2569, 
+                semester: 1,
+                advisor_name: "ศ. ปิติ", gpa: 3.60, phone_number: "0899990000", email: "piti@ku.th", address: "นครปฐม", date_of_birth: "1999-06-06T00:00:00Z",
+                detail: {
+                    project_title: "Green Farm", team_name: "Green Team", prize: "Silver", 
+                    organized_by: "DOA", competition_level: "National", activity_category: "Agriculture",
+                    date_received: "2023-10-10T00:00:00Z"
+                } as CreativityDetail,
+                files: []
+            },
+            { 
+                form_id: 7, student_id: 107, student_number: "66104524444", 
+                student_firstname: "ชูใจ", student_lastname: "ใฝ่ดี", 
+                student_year: 1, form_status_id: 3, created_at: "2026-01-08T13:00:00Z", latest_update: "2026-01-09T10:00:00Z",
+                award_type_id: 3, award_type_name: "ด้านกิจกรรมเสริมหลักสูตร", 
+                faculty_id: 6, department_id: 60, campus_id: 1, 
+                academic_year: 2569, 
+                semester: 1,
+                advisor_name: "อ. วีระ", gpa: 2.90, phone_number: "0812341234", email: "choojai@ku.th", address: "กทม.", date_of_birth: "2002-07-07T00:00:00Z",
+                detail: {
+                    qualification_type: "Committee", project_title: "Sport Day", team_name: "-", prize: "-", 
+                    organized_by: "KU", competition_level: "University", activity_category: "Sports",
+                    date_received: "2023-09-01T00:00:00Z"
+                } as ExtracurricularDetail,
+                files: [{ file_dir_id: 4, file_name: "activity_log.pdf", file_type: "application/pdf", file_size: 500, file_path: "#" }]
+            }
+        ]);
+
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
-  }, [searchTerm, filterDate, filterStatus, filterCategory]);
 
-  // --- Filtering Logic ---
-  const filteredData = historyData.filter((item) => {
-    const matchSearch = item.name.includes(searchTerm) || item.studentId.includes(searchTerm);
-    const matchDate = filterDate ? item.date === filterDate : true;
-    const matchStatus = filterStatus ? item.status === filterStatus : true;
-    const matchCategory = filterCategory ? item.category === filterCategory : true;
-    return matchSearch && matchDate && matchStatus && matchCategory;
+    fetchData();
+  }, [searchTerm, filterDate, filterYear, filterStatusId]);
+
+  // Filtering Logic
+  const filteredNominations = nominations.filter((item) => {
+      const fullName = `${item.student_firstname} ${item.student_lastname}`;
+      const matchSearch = fullName.includes(searchTerm) || item.student_number.includes(searchTerm);
+      const itemDate = item.created_at.split('T')[0];
+      const matchDate = filterDate ? itemDate === filterDate : true; 
+      const matchYear = filterYear ? item.student_year.toString() === filterYear : true;
+      const matchStatus = filterStatusId ? item.form_status_id.toString() === filterStatusId : true;
+      return matchSearch && matchDate && matchYear && matchStatus;
   });
 
-  // --- Sorting Logic ---
-  const sortedData = [...filteredData].sort((a, b) => {
+  // Sorting Logic
+  const sortedNominations = [...filteredNominations].sort((a, b) => {
       if (!sortConfig.key || !sortConfig.direction) return 0;
 
-      if (['name', 'studentId', 'year'].includes(sortConfig.key)) {
-          const valA = a[sortConfig.key as keyof HistoryItem]?.toString() || '';
-          const valB = b[sortConfig.key as keyof HistoryItem]?.toString() || '';
-          if (sortConfig.direction === 'asc') return valA.localeCompare(valB);
-          if (sortConfig.direction === 'desc') return valB.localeCompare(valA);
+      if (sortConfig.key === 'student_firstname') {
+          const nameA = `${a.student_firstname} ${a.student_lastname}`;
+          const nameB = `${b.student_firstname} ${b.student_lastname}`;
+          return sortConfig.direction === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
       }
-
-      if (sortConfig.key === 'category') {
-          const isA = a.category === sortConfig.direction;
-          const isB = b.category === sortConfig.direction;
-          if (isA && !isB) return -1;
-          if (!isA && isB) return 1;
-          return 0;
+      
+      // Sort ปีการศึกษา
+      if (sortConfig.key === 'academic_year') { 
+          return sortConfig.direction === 'asc' 
+              ? a.academic_year - b.academic_year 
+              : b.academic_year - a.academic_year;
       }
-
-      if (sortConfig.key === 'status') {
-          const isA = a.status === sortConfig.direction;
-          const isB = b.status === sortConfig.direction;
+      
+      if (sortConfig.key === 'student_number') {
+          return sortConfig.direction === 'asc'
+              ? String(a.student_number).localeCompare(String(b.student_number))
+              : String(b.student_number).localeCompare(String(a.student_number));
+      }
+      
+      // Sort วันที่
+      if (sortConfig.key === 'created_at') {
+          const dateA = new Date(a.created_at).getTime();
+          const dateB = new Date(b.created_at).getTime();
+          return sortConfig.direction === 'desc' ? dateB - dateA : dateA - dateB;
+      }
+      
+      if (sortConfig.key === 'award_type_name') {
+          const target = sortConfig.direction === 'behavior' ? 'ด้านความประพฤติดี'
+                       : sortConfig.direction === 'innovation' ? 'ด้านความคิดสร้างสรรค์และนวัตกรรม'
+                       : 'ด้านกิจกรรมเสริมหลักสูตร';
+          const isA = a.award_type_name === target;
+          const isB = b.award_type_name === target;
           if (isA && !isB) return -1;
           if (!isA && isB) return 1;
           return 0;
@@ -263,30 +357,33 @@ export default function HistoryPage() {
       return 0;
   });
 
-  // --- Pagination Logic ---
-  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+  // Pagination
+  const totalPages = Math.ceil(sortedNominations.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentItems = sortedData.slice(startIndex, startIndex + itemsPerPage);
+  const currentItems = sortedNominations.slice(startIndex, startIndex + itemsPerPage);
 
-  // --- Handlers: Sorting Loop ---
-  const handleSort = (key: string) => {
+  // Handlers
+  const handleViewDetail = (item: Nomination) => {
+    setModalData(item);
+    setIsModalOpen(true);
+  };
+
+  const handleSort = (key: any) => { 
       setSortConfig((prev) => {
           if (prev.key !== key) {
-              if (key === 'category') return { key, direction: 'ด้านความประพฤติดี' };
-              if (key === 'status') return { key, direction: 'approved' };
+              if (key === 'created_at') return { key, direction: 'desc' };
+              if (key === 'award_type_name') return { key, direction: 'behavior' };
               return { key, direction: 'asc' };
           }
-          if (key === 'category') {
-              // 3 Categories Loop
-              const cats = ['ด้านความประพฤติดี', 'ด้านความคิดสร้างสรรค์และนวัตกรรม', 'ด้านกิจกรรมเสริมหลักสูตร'];
-              const idx = cats.indexOf(prev.direction || '');
-              return { key, direction: cats[(idx + 1) % cats.length] || cats[0] };
-          } 
-          else if (key === 'status') {
-              if (prev.direction === 'approved') return { key, direction: 'rejected' };
-              if (prev.direction === 'rejected') return { key: null, direction: null };
-              return { key: null, direction: null };
-          } 
+          if (key === 'created_at') {
+              if (prev.direction === 'desc') return { key, direction: 'asc' };
+              if (prev.direction === 'asc') return { key: null, direction: null };
+          }
+          else if (key === 'award_type_name') {
+              if (prev.direction === 'behavior') return { key, direction: 'innovation' };
+              if (prev.direction === 'innovation') return { key, direction: 'activity' };
+              if (prev.direction === 'activity') return { key: null, direction: null };
+          }
           else {
               if (prev.direction === 'asc') return { key, direction: 'desc' };
               if (prev.direction === 'desc') return { key: null, direction: null };
@@ -295,124 +392,116 @@ export default function HistoryPage() {
       });
   };
 
-  const handleViewDetail = (item: HistoryItem) => {
-    setModalData(item);
-    setIsModalOpen(true);
-  };
-
-  // --- Helper Render Icon ---
   const renderSortIcon = (key: string) => {
       if (sortConfig.key !== key || sortConfig.direction === null) return null;
-      
-      if (key === 'category') return <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded ml-1 font-normal whitespace-nowrap truncate max-w-[90px] inline-block align-middle" title={sortConfig.direction}>({sortConfig.direction})</span>;
-      
-      if (key === 'status') {
-          // Map English status to Thai for sorting badge
-          let label = sortConfig.direction;
-          let colorClass = "bg-gray-100 text-gray-600";
-          if(label === 'approved') { label = 'เห็นชอบ'; colorClass = 'bg-green-50 text-green-700'; }
-          else if(label === 'rejected') { label = 'ไม่เห็นชอบ'; colorClass = 'bg-red-50 text-red-700'; }
-
-          return <span className={`text-[10px] px-1.5 py-0.5 rounded ml-1 font-normal whitespace-nowrap ${colorClass}`}>({label})</span>;
+      if (key === 'award_type_name') {
+          const label = sortConfig.direction === 'behavior' ? '(ประพฤติดี)'
+                      : sortConfig.direction === 'innovation' ? '(นวัตกรรม)'
+                      : '(กิจกรรม)';
+          return <span className="text-xs text-blue-600 bg-blue-50 px-1 rounded ml-1 font-normal">{label}</span>;
       }
-      
-      if (sortConfig.direction === 'asc') return <svg className="w-4 h-4 text-blue-500 ml-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg>;
-      
-      if (sortConfig.direction === 'desc') return <svg className="w-4 h-4 text-blue-500 ml-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>;
-      
-      return null;
-  };
-
-  // --- Helper Render Status Badge ---
-  const renderStatusBadge = (status: string) => {
-      switch(status) {
-          case 'approved':
-              return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">เห็นชอบ</span>;
-          case 'rejected':
-              return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">ไม่เห็นชอบ</span>;
-          default:
-              return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{status}</span>;
-      }
+      return sortConfig.direction === 'asc' 
+        ? <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg>
+        : <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>;
   };
 
   return (
     <div className="min-h-screen bg-gray-50 p-8 font-sans">
       
-      {/* Header Card */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">ประวัติการพิจารณาเห็นชอบและไม่เห็นชอบ</h1>
-        <p className="text-gray-400 text-sm mt-1">แสดงรายการประวัติการพิจารณาย้อนหลังทั้งหมด</p>
+        <h1 className="text-2xl font-bold text-gray-800">ประวัติการพิจารณา</h1>
+        <p className="text-gray-400 text-sm mt-1">แสดงรายชื่อนิสิตที่ผ่านการพิจารณาแล้ว</p>
 
         {/* Filters Bar */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
           <div className="relative">
-            <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 pl-10 text-sm focus:ring-1 focus:ring-green-500 text-gray-700" />
+            <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 pl-10 text-sm focus:ring-1 focus:ring-green-500" />
             <svg className="w-4 h-4 absolute left-3 top-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           </div>
+          
           <div className="relative">
-            <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 text-sm text-gray-500" />
+            <input
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 text-sm text-gray-500"
+            />
           </div>
+
           <div className="relative">
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 text-sm text-gray-500 appearance-none cursor-pointer">
-              <option value="">การกระทำ (ทั้งหมด)</option>
-              <option value="approved">เห็นชอบ</option>
-              <option value="rejected">ไม่เห็นชอบ</option>
+            <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 text-sm text-gray-500 appearance-none cursor-pointer">
+                <option value="">ทุกระดับชั้น</option><option value="1">ปี 1</option><option value="2">ปี 2</option><option value="3">ปี 3</option><option value="4">ปี 4</option>
             </select>
             <svg className="w-4 h-4 absolute right-3 top-3 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
           </div>
           <div className="relative">
-            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 text-sm text-gray-500 appearance-none cursor-pointer">
-              <option value="">ทุกประเภทรางวัล</option>
-              <option value="ด้านความประพฤติดี">ด้านความประพฤติดี</option>
-              <option value="ด้านความคิดสร้างสรรค์และนวัตกรรม">ด้านความคิดสร้างสรรค์และนวัตกรรม</option>
-              <option value="ด้านกิจกรรมเสริมหลักสูตร">ด้านกิจกรรมเสริมหลักสูตร</option>
+            <select value={filterStatusId} onChange={(e) => setFilterStatusId(e.target.value)} className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 text-sm text-gray-500 appearance-none cursor-pointer">
+                <option value="">สถานะทั้งหมด</option>
+                <option value="2">เห็นชอบ</option>
+                <option value="3">ไม่เห็นชอบ</option>
+                <option value="1">รอพิจารณา</option>
             </select>
             <svg className="w-4 h-4 absolute right-3 top-3 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
           </div>
         </div>
 
-        {/* Table Section */}
-        <div className="mt-6 overflow-hidden rounded-lg border border-gray-100 bg-white">
+        {/* Table */}
+        <div className="mt-6 overflow-hidden rounded-lg border border-gray-100">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-100 text-gray-600 text-sm uppercase tracking-wider select-none">
-                <th className="p-4 font-semibold text-left cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('name')}>
-                    <div className="flex items-center gap-1">ชื่อ-นามสกุล {renderSortIcon('name')}</div>
+                
+                <th className="p-4 font-semibold cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleSort('student_firstname')}>
+                    <div className="flex items-center gap-1">ชื่อ-นามสกุล {renderSortIcon('student_firstname')}</div>
                 </th>
-                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('studentId')}>
-                    <div className="flex items-center justify-center gap-1">รหัสนิสิต {renderSortIcon('studentId')}</div>
+
+                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleSort('student_number')}>
+                    <div className="flex items-center justify-center gap-1">รหัสนิสิต {renderSortIcon('student_number')}</div>
                 </th>
-                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('year')}>
-                    <div className="flex items-center justify-center gap-1">ชั้นปี {renderSortIcon('year')}</div>
+
+                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleSort('academic_year')}>
+                    <div className="flex items-center justify-center gap-1">ปีการศึกษา {renderSortIcon('academic_year')}</div>
                 </th>
-                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('category')}>
-                    <div className="flex items-center justify-center gap-1">ประเภทรางวัล {renderSortIcon('category')}</div>
+
+                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleSort('award_type_name')}>
+                    <div className="flex items-center justify-center gap-1">ประเภทรางวัล {renderSortIcon('award_type_name')}</div>
                 </th>
-                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('status')}>
-                    <div className="flex items-center justify-center gap-1">การพิจารณา {renderSortIcon('status')}</div>
+                
+                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleSort('created_at')}>
+                    <div className="flex items-center justify-center gap-1">วันที่ส่ง {renderSortIcon('created_at')}</div>
                 </th>
+
+                <th className="p-4 font-semibold text-center">สถานะ</th>
                 <th className="p-4 font-semibold text-center">รายละเอียด</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                 <tr><td colSpan={6} className="p-8 text-center text-gray-400">กำลังโหลด...</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-gray-400">กำลังโหลด...</td></tr>
               ) : currentItems.length === 0 ? (
-                 <tr><td colSpan={6} className="p-8 text-center text-gray-400">ไม่พบข้อมูลประวัติ</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-gray-400">ไม่พบข้อมูลที่ค้นหา</td></tr>
               ) : (
                 currentItems.map((item) => (
-                  <tr key={item.id} className="hover:bg-green-50 bg-white transition-colors duration-150">
-                    <td className="p-4 text-sm font-medium text-gray-700">{item.name}</td>
-                    <td className="p-4 text-sm text-center text-gray-600">{item.studentId}</td>
-                    <td className="p-4 text-sm text-center text-gray-600">{item.year}</td>
-                    <td className="p-4 text-sm text-center text-gray-600">{item.category}</td>
-                    <td className="p-4 text-sm text-center font-medium">
-                      {renderStatusBadge(item.status)}
+                  <tr 
+                    key={item.form_id} 
+                    className="hover:bg-gray-50 bg-white transition-colors"
+                  >
+                    <td className="p-4 text-sm font-medium text-gray-700">{item.student_firstname} {item.student_lastname}</td>
+                    <td className="p-4 text-sm text-center text-gray-600">{item.student_number}</td>
+                    <td className="p-4 text-sm text-center text-gray-600">{item.academic_year}</td>
+                    <td className="p-4 text-sm text-center text-gray-600 italic">{item.award_type_name}</td>
+                  
+                    <td className="p-4 text-sm text-center text-gray-500">{formatDateTh(item.created_at)}</td>
+                    
+                    <td className="p-4 text-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(item.form_status_id)}`}>
+                            {getStatusName(item.form_status_id)}
+                        </span>
                     </td>
                     <td className="p-4 text-center">
                         <button 
                             onClick={() => handleViewDetail(item)}
-                            className="text-gray-400 hover:text-blue-600 transition-colors p-2 hover:bg-blue-50 rounded-full"
+                            className="text-gray-400 hover:text-blue-600 transition-colors p-1.5 hover:bg-blue-50 rounded-full"
                             title="ดูรายละเอียด"
                         >
                             <svg className="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
@@ -425,26 +514,26 @@ export default function HistoryPage() {
           </table>
         </div>
 
-        {/* Pagination */}
+        {/* Footer */}
         <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
             <div className="flex items-center gap-2">
-                <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 text-gray-500 hover:bg-gray-200 text-sm disabled:opacity-50">{'<'}</button>
+                <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 text-gray-500 hover:bg-gray-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed">{'<'}</button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                     <button key={page} onClick={() => setCurrentPage(page)} className={`w-8 h-8 flex items-center justify-center rounded text-sm font-bold transition-colors ${currentPage === page ? "bg-blue-100 text-blue-600" : "bg-transparent text-gray-500 hover:bg-gray-100"}`}>{page}</button>
                 ))}
-                <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 text-gray-500 hover:bg-gray-200 text-sm disabled:opacity-50">{'>'}</button>
-            </div>
-            <div className="text-xs text-gray-400 hidden md:block">
-                แสดง {startIndex + 1} ถึง {Math.min(startIndex + itemsPerPage, sortedData.length)} จาก {sortedData.length} รายการ
+                <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 text-gray-500 hover:bg-gray-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed">{'>'}</button>
             </div>
         </div>
 
       </div>
 
+      {/* ส่ง Master Data เข้าไปใน Modal */}
       <NominationDetailModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
-        data={modalData as any} 
+        data={modalData} 
+        faculties={masterFaculties}
+        departments={masterDepartments}
       />
 
     </div>

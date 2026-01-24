@@ -4,9 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
 
-// ============================================================================
-// 1. รวมไอคอนทั้งหมด (เพิ่มไอคอนฝั่งนิสิตให้ครบ)
-// ============================================================================
+// รวมไอคอนทั้งหมด
 const Icons = {
   CheckUser: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -14,7 +12,7 @@ const Icons = {
   History: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
   ),
-  // --- ไอคอนนิสิต ---
+  // ไอคอนนิสิต
   Badge: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138z" /></svg>
   ),
@@ -35,10 +33,8 @@ const Icons = {
   )
 };
 
-// ============================================================================
-// 2. Config เมนู (อัปเดตให้ตรงกับหน้าเว็บจริงของคุณ)
-// ============================================================================
-type UserRole = "student" | "department_head" | "associate_dean" | "dean" | "head_selection_committee" | "selection_committee" | "student_development_division" | "admin"; 
+// Config เมนู
+type UserRole = "student" | "head_of_department" | "dean" | "associate_dean" | "chairman_of_student_development_committee" | "student_development_committee" | "student_development"; 
 
 interface MenuItemType {
   href: string;
@@ -47,17 +43,21 @@ interface MenuItemType {
 }
 
 const MENU_CONFIG: Record<UserRole, MenuItemType[]> = {
-  // *** แก้ไขตรงนี้ให้ตรงกับ Path ของคุณ ***
   student: [
     { href: "/student/student-nomination-form", label: "เสนอรายชื่อนิสิตดีเด่น", icon: Icons.Badge },
-    { href: "/tracking", label: "ติดตามสถานะ", icon: Icons.Track },
+    { href: "/student/trace-nomination", label: "ติดตามสถานะ", icon: Icons.Track },
     { href: "/student/edit-student-nomination-form", label: "แก้ไขข้อมูลการเสนอ", icon: Icons.Edit },
     { href: "/student/profile", label: "โปรไฟล์ผู้ใช้", icon: Icons.User },
   ],
   
-  department_head: [
-    { href: "/department-head/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
-    { href: "/department-head/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
+  head_of_department: [
+    { href: "/head-of-department/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
+    { href: "/head-of-department/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
+  ],
+  
+  dean: [
+    { href: "/dean/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
+    { href: "/dean/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
   ],
 
   associate_dean: [
@@ -65,31 +65,26 @@ const MENU_CONFIG: Record<UserRole, MenuItemType[]> = {
     { href: "/associate-dean/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
   ],
 
-  dean: [
-    { href: "/dean/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
-    { href: "/dean/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
+  chairman_of_student_development_committee: [
+    { href: "/chairman-of-student-development-committee/consider", label: "รับรองผลการคัดเลือก", icon: Icons.CheckUser }
   ],
 
-  head_selection_committee: [
-    { href: "/head-selection-committee/consider", label: "รับรองผลการคัดเลือก", icon: Icons.CheckUser }
+  student_development_committee: [
+    { href: "/student-development-committee/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser }
   ],
 
-  selection_committee: [
-    { href: "/selection-committee/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser }
+  student_development: [
+    { href: "/student-development/verify-submit", label: "ตรวจสอบความถูกต้องและส่งรายชื่อ", icon: Icons.DocumentCheck },
+    { href: "/student-development/committee-setup", label: "ตั้งค่าและจัดการคณะกรรมการ", icon: Icons.UsersGroup },
+    { href: "/student-development/history-verify-submit", label: "ประวัติการเเก้ไขประเภท", icon: Icons.History },
+    { href: "/student-development/manage-account", label: "จัดการบัญชีผู้ใช้", icon: Icons.DocumentCheck },
+    { href: "/student-development/master-data", label: "จัดการคณะเเละสาขาวิชา", icon: Icons.UsersGroup },
+    { href: "/student-development/setting", label: "ตั้งค่าและจัดการเวลาเปิด-ปิด", icon: Icons.History },
   ],
 
-  student_development_division: [
-    { href: "/student-development-division/verify-submit", label: "ตรวจสอบความถูกต้องและส่งรายชื่อ", icon: Icons.DocumentCheck },
-    { href: "/student-development-division/committee-setup", label: "ตั้งค่าและจัดการคณะกรรมการ", icon: Icons.UsersGroup },
-    { href: "/student-development-division/history-verify-submit", label: "ประวัติการเเก้ไขประเภท", icon: Icons.History },
-  ],
-
-  admin: []
 };
 
-// ============================================================================
-// 3. Component Sidebar หลัก (เหมือนเดิม)
-// ============================================================================
+// Component Sidebar หลัก
 export default function Sidebar({ role = "student" }: { role?: UserRole }) {
   const pathname = usePathname();
   const menuItems = MENU_CONFIG[role] || [];
@@ -115,7 +110,8 @@ export default function Sidebar({ role = "student" }: { role?: UserRole }) {
               <div>
                   <h1 className="font-bold text-base text-gray-800 leading-tight">ระบบนิสิตดีเด่น</h1>
                   <p className="text-[11px] text-gray-400 mt-0.5 capitalize">
-                    {role === 'department_head' ? 'Head of Department' : role === 'student' ? 'Student Portal' : role === 'associate_dean' ? 'Associate Dean' : role === 'student_development_division' ? 'Student Development Division' : role === 'dean' ? 'Dean of Faculty' : role === 'head_selection_committee' ? 'Committee Chairperson' : role === 'selection_committee' ? 'Selection Committee' : role}
+                    {role === 'student' ? 'Student Portal' : 
+                    role === 'head_of_department' ? 'Head of Department' : role === 'associate_dean' ? 'Associate Dean' : role === 'student_development' ? 'Student Development Division' : role === 'dean' ? 'Dean of Faculty' : role === 'chairman_of_student_development_committee' ? 'Committee Chairperson' : role === 'student_development_committee' ? 'Selection Committee' : role}
                   </p>
               </div>
           </div>

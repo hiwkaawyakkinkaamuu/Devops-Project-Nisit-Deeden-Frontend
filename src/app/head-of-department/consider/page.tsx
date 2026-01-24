@@ -93,7 +93,7 @@ const MOCK_DEPARTMENTS: MasterDepartment[] = [
 ];
 
 // Main Component
-export default function AssociateDeanConsiderPage() {
+export default function HeadOfDepartmentConsiderPage() {
   const [nominations, setNominations] = useState<Nomination[]>([]);
   const [masterFaculties, setMasterFaculties] = useState<MasterFaculty[]>(MOCK_FACULTIES);
   const [masterDepartments, setMasterDepartments] = useState<MasterDepartment[]>(MOCK_DEPARTMENTS);
