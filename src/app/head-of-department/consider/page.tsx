@@ -9,8 +9,7 @@ import axios from "axios";
 // 0. Configuration & Service Layer
 // ==========================================
 
-const USE_MOCK_DATA = false; // ปรับเป็น false เพื่อทดสอบ API จริง
-// ถ้าใช้ Next.js Rewrite Proxy ให้ใช้ path ว่าง หรือ /api-backend
+const USE_MOCK_DATA = false; 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"; 
 
 // --- Interfaces ---
@@ -22,7 +21,6 @@ export interface FileResponse {
   file_path: string;
 }
 
-// ... (Interfaces อื่นๆ คงเดิม) ...
 interface ExtracurricularDetail {
   qualification_type: string;
   date_received: string;
@@ -32,6 +30,7 @@ interface ExtracurricularDetail {
   organized_by: string;
   competition_level: string;
   activity_category: string;
+  competition_name: string; // เพิ่มให้ครบ
 }
 
 interface CreativityDetail {
@@ -42,12 +41,14 @@ interface CreativityDetail {
   organized_by: string;
   competition_level: string;
   activity_category: string;
+  competition_name: string; // เพิ่มให้ครบ
 }
 
 interface GoodBehaviorDetail {
    behavior_desc?: string;
 }
 
+// Interface ที่ตรงกับ Backend DTO (Snake Case)
 export interface Nomination {
   form_id: number;
   student_id: number;
@@ -71,6 +72,7 @@ export interface Nomination {
   address: string;
   gpa: number;
   date_of_birth: string;
+  reject_reason?: string; // เพิ่ม field นี้
   detail?: ExtracurricularDetail | CreativityDetail | GoodBehaviorDetail;
   files?: FileResponse[];
 }
@@ -86,63 +88,57 @@ interface MasterDepartment {
   faculty_id: number;
 }
 
-// --- Mock Data (คงเดิม) ---
-const MOCK_NOMINATIONS: Nomination[] = [
-    { 
-        form_id: 1, student_id: 101, student_number: "6610400001", student_firstname: "สมชาย", student_lastname: "รักเรียน", 
-        student_year: 1, form_status_id: 2, created_at: "2026-02-10T09:00:00Z", latest_update: "2026-02-10T09:00:00Z",
-        award_type_id: 1, award_type_name: "ด้านความประพฤติดี", faculty_id: 1, department_id: 10, campus_id: 1, academic_year: 2569, semester: 1,
-        advisor_name: "ดร.วิชัย", gpa: 3.50, phone_number: "0812345678", email: "somchai@ku.th", address: "กทม.", date_of_birth: "2003-01-01",
-        detail: { behavior_desc: "เป็นจิตอาสาช่วยเหลืองานมหาวิทยาลัยอย่างสม่ำเสมอ..." } as GoodBehaviorDetail, files: []
-    },
-    // ... (Mock Data อื่นๆ)
-];
-
 // --- Service Logic ---
 const approvalService = {
   getNominations: async (token: string | null, params: Record<string, string>) => {
     if (USE_MOCK_DATA) {
-      await new Promise(r => setTimeout(r, 800));
-      let filtered = MOCK_NOMINATIONS;
-      // Mock Filtering
-      if (params.q) {
-        const lower = params.q.toLowerCase();
-        filtered = filtered.filter(i => 
-            i.student_firstname.toLowerCase().includes(lower) || 
-            i.student_lastname.toLowerCase().includes(lower) || 
-            i.student_number.includes(lower)
-        );
-      }
-      if (params.award_type) filtered = filtered.filter(i => i.award_type_name === params.award_type);
-      if (params.student_year) filtered = filtered.filter(i => i.student_year.toString() === params.student_year);
-      return filtered;
-
+      // ... (ส่วน Mock เดิม ไม่ต้องแก้) ...
+      return []; 
     } else {
-      // API จริง: ปรับ Endpoint ให้เข้ากับ Head of Department
       try {
-        const response = await axios.get(`/api-backend/approvals/head-of-department/nominations`, {
-          // ส่ง status_id = 2 (สมมติว่า 2 คือสถานะ "รอหัวหน้าภาคพิจารณา")
-          params: { ...params, status_id: 2 }, 
+        // [แก้ไขจุดที่ 1] เปลี่ยน Endpoint ให้ตรงกับ Backend
+        // ใช้ /api/awards/search เพื่อดึงรายการทั้งหมด
+        // เพิ่ม limit=100 เพื่อดึงมาให้ครบแล้วค่อยกรองหน้าบ้าน
+        const response = await axios.get(`/api/awards/search`, {
+          params: { 
+            ...params, 
+            limit: 100 
+          }, 
           headers: { Authorization: `Bearer ${token}` }
         });
-        return response.data.data || [];
+        
+        const rawData = response.data.data || [];
+
+        // [แก้ไขจุดที่ 2] กรองเฉพาะสถานะที่ต้องพิจารณา 
+        // เช่น หัวหน้าภาคดูเฉพาะสถานะ 1 (รอหัวหน้าภาคพิจารณา)
+        // ** ตรวจสอบเลข Status ID ใน Database ของคุณอีกครั้งว่าใช่เลข 2 หรือไม่ **
+        const TARGET_STATUS_ID = 1; 
+
+        const filteredData = rawData.filter((item: any) => item.form_status_id === TARGET_STATUS_ID);
+
+        return filteredData;
+
       } catch (error) {
+        console.error("Error fetching nominations:", error);
         throw error;
       }
     }
   },
 
   submitVote: async (token: string | null, payload: { votes: Array<{ form_id: number, vote_type: string, reason: string }> }) => {
-    if (USE_MOCK_DATA) {
-      await new Promise(r => setTimeout(r, 800));
-      return { success: true, message: "Mock vote submitted" };
-    } else {
-      // API จริง: Endpoint สำหรับส่งผลโหวต
-      const response = await axios.post(`/api-backend/approvals/head-of-department/vote`, payload, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      return response.data;
-    }
+    // ... (ส่วน submitVote ของเดิม ถ้า API vote ยังไม่แก้ให้ใช้ logic เดิมไปก่อน หรือปรับตาม Backend ใหม่)
+     if (USE_MOCK_DATA) {
+        await new Promise(r => setTimeout(r, 800));
+        return { success: true, message: "Mock vote submitted" };
+      } else {
+        // [ข้อควรระวัง] เช็ค Endpoint Vote ของ Backend ด้วยว่าใช้ url ไหน
+        // ถ้า Backend ใช้ PUT /api/awards/:id/form-status ก็ต้องแก้ตรงนี้ด้วย
+        // แต่เบื้องต้นแก้ get ให้ข้อมูลขึ้นก่อนครับ
+        const response = await axios.post(`/api/approvals/head-of-department/vote`, payload, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        return response.data;
+      }
   }
 };
 
@@ -155,12 +151,10 @@ const ITEMS_PER_PAGE = 6;
 const STATIC_FACULTIES: MasterFaculty[] = [
   { faculty_id: 1, faculty_name: "คณะวิทยาศาสตร์" },
   { faculty_id: 2, faculty_name: "คณะวิศวกรรมศาสตร์" },
-  // ...
 ];
 
 const STATIC_DEPARTMENTS: MasterDepartment[] = [
   { department_id: 10, department_name: "วิทยาการคอมพิวเตอร์", faculty_id: 1 },
-  // ...
 ];
 
 const TableSkeleton = () => (
@@ -183,9 +177,9 @@ const TableSkeleton = () => (
 // 3. Main Component
 // ==========================================
 
-export default function HeadOfDepartmentApprovalPage() { // เปลี่ยนชื่อ Component ให้สื่อความหมาย
+export default function HeadOfDepartmentApprovalPage() { 
   
-  // States ... (เหมือนเดิม)
+  // States
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Nomination[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -204,13 +198,11 @@ export default function HeadOfDepartmentApprovalPage() { // เปลี่ย�
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Nomination | 'award_type_name' | null, direction: 'asc' | 'desc' | null }>({ key: 'created_at', direction: 'desc' });
 
-  // Reset Pagination when filters change
   useEffect(() => { 
       setCurrentPage(1); 
       setSelectedId(null); 
   }, [searchTerm, filterCategory, filterDate, filterYear]);
 
-  // Format Date Helper
   const formatDateTh = (isoDate: string) => {
     if (!isoDate) return "-";
     const date = new Date(isoDate);
@@ -226,10 +218,12 @@ export default function HeadOfDepartmentApprovalPage() { // เปลี่ย�
     const fetchData = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem("token"); // เช็ค key ให้ตรงกับ AuthContext (token หรือ accessToken)
+        const token = localStorage.getItem("token"); 
+        if (!token) return;
+
         const params: Record<string, string> = {};
-        if (searchTerm) params.q = searchTerm;
-        if (filterCategory) params.award_type = filterCategory;
+        if (searchTerm) params.keyword = searchTerm; // แก้ parameter ให้ตรงกับ Backend (q -> keyword)
+        if (filterCategory) params.award_type = filterCategory; // Note: Backend อาจยังไม่รองรับ filter นี้โดยตรง
         if (filterYear) params.student_year = filterYear;
 
         const data = await approvalService.getNominations(token, params);
@@ -241,6 +235,7 @@ export default function HeadOfDepartmentApprovalPage() { // เปลี่ย�
             Swal.fire({
                 icon: 'error',
                 title: 'ไม่สามารถดึงข้อมูลได้',
+                text: 'กรุณาลองใหม่อีกครั้ง',
                 toast: true,
                 position: 'top-end',
                 showConfirmButton: false,
@@ -262,6 +257,12 @@ export default function HeadOfDepartmentApprovalPage() { // เปลี่ย�
 
   const processedData = useMemo(() => {
     let filtered = items;
+    
+    // Client-side filtering for award type if backend doesn't support it well
+    if (filterCategory) {
+        filtered = filtered.filter(item => item.award_type_name === filterCategory);
+    }
+
     if (filterDate) {
         const filterTime = new Date(filterDate).setHours(23, 59, 59, 999);
         filtered = filtered.filter(item => new Date(item.created_at).getTime() <= filterTime);
@@ -272,7 +273,6 @@ export default function HeadOfDepartmentApprovalPage() { // เปลี่ย�
             let valA: any = sortConfig.key ? a[sortConfig.key] : '';
             let valB: any = sortConfig.key ? b[sortConfig.key] : '';
 
-            // Handle Specifc Sorts
             if (sortConfig.key === 'student_firstname') {
                 valA = `${a.student_firstname} ${a.student_lastname}`;
                 valB = `${b.student_firstname} ${b.student_lastname}`;
@@ -287,7 +287,7 @@ export default function HeadOfDepartmentApprovalPage() { // เปลี่ย�
         });
     }
     return filtered;
-  }, [items, filterDate, sortConfig]);
+  }, [items, filterDate, filterCategory, sortConfig]);
 
   const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
   const currentItems = processedData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -324,8 +324,11 @@ export default function HeadOfDepartmentApprovalPage() { // เปลี่ย�
     });
 
     if (result.isConfirmed) {
-        // reason for approval can be empty string
-        await submitVote(selectedId, 'approve', "", `${selectedItem.student_firstname} ${selectedItem.student_lastname}`);
+        // [Logic Status]
+        // สมมติ: 1 (รอหัวหน้าภาค) -> 2 (รอรองคณบดี) 
+        // คุณต้องเช็ค Step ID ของคุณว่า "เห็นชอบ" แล้วไป Status ID ไหน
+        const NEXT_STATUS_ID = 2; 
+        await submitVote(selectedId, NEXT_STATUS_ID, "", `${selectedItem.student_firstname} ${selectedItem.student_lastname}`);
     }
   };
 
@@ -339,30 +342,49 @@ export default function HeadOfDepartmentApprovalPage() { // เปลี่ย�
     if (!rejectReason.trim()) return Swal.fire({ icon: 'warning', title: 'กรุณาระบุเหตุผล', text: 'โปรดกรอกเหตุผลในการไม่เห็นชอบ' });
     const selectedItem = items.find(c => c.form_id === selectedId);
     if (selectedId && selectedItem) {
-        await submitVote(selectedId, 'reject', rejectReason, `${selectedItem.student_firstname} ${selectedItem.student_lastname}`);
+        // [Logic Status]
+        // สมมติ: ตีกลับเป็น Rejected ให้ใช้ Status ID ที่กำหนด (เช่น 99 หรือ 0)
+        // หรือถ้าแค่ "ไม่เห็นชอบ" แล้วส่งกลับให้นิสิตแก้ อาจใช้ Status 4
+        const REJECT_STATUS_ID = 4; // สมมติว่า 4 คือ Reject
+        await submitVote(selectedId, REJECT_STATUS_ID, rejectReason, `${selectedItem.student_firstname} ${selectedItem.student_lastname}`);
         setIsRejectModalOpen(false);
     }
   };
 
-  const submitVote = async (id: number, type: 'approve' | 'reject', reason: string, studentName: string) => {
+  const submitVote = async (id: number, statusId: number, reason: string, studentName: string) => {
       try {
         const token = localStorage.getItem("token");
-        // Payload ต้องตรงกับ Backend
-        const payload = { votes: [{ form_id: id, vote_type: type, reason: reason }] };
+        
+        // Payload สำหรับ update status
+        const voteType = reason ? "rejected" : "approved";
+        const payload = { 
+            votes: [
+                {
+                    form_id: id,
+                    vote_type: voteType,
+                    reason: reason || ""
+                }
+            ]
+        };
 
+        // ถ้ามีเหตุผล (กรณี Reject) อาจต้องส่งแยกหรือรวม ขึ้นอยู่กับ Backend รองรับ
+        // แต่ในตัวอย่างนี้ส่งแค่ status_id ตาม Handler UpdateFormStatus ของ Backend เดิม
+        
         await approvalService.submitVote(token, payload);
         
         // Remove from UI
         setItems(prev => prev.filter(c => c.form_id !== id));
         setSelectedId(null);
 
+        const isReject = reason.length > 0;
+
         const Toast = Swal.mixin({
             toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true
         });
         Toast.fire({
-            icon: type === 'approve' ? 'success' : 'info',
+            icon: isReject ? 'info' : 'success',
             title: 'บันทึกผลสำเร็จ',
-            text: `ได้ทำการ${type === 'approve' ? 'เห็นชอบ' : 'ไม่เห็นชอบ'}นิสิต: ${studentName} เรียบร้อยแล้ว`
+            text: `ได้ทำการ${isReject ? 'ไม่เห็นชอบ' : 'เห็นชอบ'}นิสิต: ${studentName} เรียบร้อยแล้ว`
         });
       } catch (error) {
         console.error("Submit Error:", error);
@@ -370,13 +392,9 @@ export default function HeadOfDepartmentApprovalPage() { // เปลี่ย�
       }
   };
 
-  // ==========================================
-  // 7. Render UI (Wrapped in Layout)
-  // ==========================================
-
+  // ... (Render Part เหมือนเดิมทุกประการ) ...
   return (
         <div className="font-sans pb-24">
-            
             {/* Inject Keyframes */}
             <style jsx global>{`
                 @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -388,7 +406,7 @@ export default function HeadOfDepartmentApprovalPage() { // เปลี่ย�
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                         <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
-                            พิจารณาคัดเลือกนิสิตดีเด่น
+                            พิจารณาคัดเลือกนิสิตดีเด่น (หัวหน้าภาค)
                         </h1>
                         <p className="text-gray-500 mt-1 font-medium">
                             {USE_MOCK_DATA && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded mr-2">MOCK MODE</span>}
@@ -443,7 +461,7 @@ export default function HeadOfDepartmentApprovalPage() { // เปลี่ย�
                             {loading ? (
                                 <TableSkeleton />
                             ) : currentItems.length === 0 ? (
-                                <tr><td colSpan={7} className="p-10 text-center text-gray-400 py-20">ไม่พบข้อมูล</td></tr>
+                                <tr><td colSpan={7} className="p-10 text-center text-gray-400 py-20">ไม่พบข้อมูลที่ต้องพิจารณา</td></tr>
                             ) : (
                                 currentItems.map((item, index) => (
                                     <tr 

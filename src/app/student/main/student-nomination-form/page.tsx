@@ -444,7 +444,7 @@ export default function StudentNominationForm() {
                    <Link href="/student/main/trace-nomination" className="w-full py-3 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition-all">
                        ตรวจสอบสถานะ
                    </Link>
-                   <Link href="/student/nomination-history" className="w-full py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold rounded-xl hover:opacity-90 transition-all shadow-lg shadow-orange-200">
+                   <Link href="/student/main/nomination-history" className="w-full py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold rounded-xl hover:opacity-90 transition-all shadow-lg shadow-orange-200">
                        ดูประวัติการส่ง
                    </Link>
                </div>

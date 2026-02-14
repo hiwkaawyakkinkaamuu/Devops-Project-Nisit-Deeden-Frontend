@@ -66,30 +66,44 @@ const Icons = {
 
 const mapBackendToHistory = (data: any[]): NominationHistory[] => {
     return data.map((item: any) => {
-        // 1. เช็คสถานะ
-        const isRejected = item.status === "rejected";
-        const isApproved = item.status === "approved";
+        // 1. เช็คสถานะ:
+        // หมายเหตุ: DTO ของ Backend ปัจจุบันยังไม่ได้ส่ง field reject_reason มาให้ (ต้องไปแก้ Backend เพิ่ม)
+        // แต่ถ้าแก้แล้ว หรือใช้ form_status_id ในการเช็ค ให้ใช้ logic นี้:
+        const hasRejectReason = !!item.reject_reason; // ถ้า Backend ส่งมา
         
+        // สมมติว่าสถานะ 8 = อนุมัติ (ปรับเลขตาม Database ของคุณ)
+        const isApproved = item.form_status_id === 8; 
+        
+        // ตีความสถานะสำหรับ Frontend (4 = Pending ใน Interface ของคุณ)
+        let statusCode: 2 | 3 | 4 = 4;
         let statusLabel = "อยู่ระหว่างพิจารณา";
-        if (isApproved) statusLabel = "ผ่านการคัดเลือก";
-        if (isRejected) statusLabel = "ไม่ผ่านการคัดเลือก";
 
-        // 2. แก้ตรงนี้: ดักจับ AwardType ทุกรูปแบบ
-        const awardObj = item.AwardType || item.award_type || item.awardType;
-        const awardTypeName = awardObj ? awardObj.name : "ไม่ระบุประเภท";
+        if (isApproved) {
+            statusCode = 2;
+            statusLabel = "ผ่านการคัดเลือก";
+        } else if (hasRejectReason) {
+            statusCode = 3;
+            statusLabel = "ไม่ผ่านการคัดเลือก";
+        }
 
         return {
-            form_id: item.id || item.ID,
-            academic_year: parseInt(item.academic_year) || 0,
-            semester: parseInt(item.semester) || 0,
+            // [แก้จุดที่ 1] Backend ส่งมาเป็น form_id
+            form_id: item.form_id, 
             
-            // ใช้ค่าที่ดักจับมาด้านบน
-            award_type_name: awardTypeName, 
+            academic_year: item.academic_year || 0,
+            semester: item.semester || 0,
+            
+            // [แก้จุดที่ 2] Backend ส่ง award_type_name มาเป็น string เลย (ไม่ต้อง .name)
+            award_type_name: item.award_type_name || "ไม่ระบุประเภท",
             
             nomination_status: statusLabel,
-            status_code: isApproved ? 2 : isRejected ? 3 : 4,
+            status_code: statusCode,
+            
             created_at: item.created_at,
-            completed_date: item.updated_at, 
+            
+            // [แก้จุดที่ 3] Backend ใช้ latest_update ไม่ใช่ updated_at
+            completed_date: item.latest_update || item.created_at, 
+            
             reject_reason: item.reject_reason || "",
         };
     });
@@ -109,7 +123,7 @@ const nominationHistoryService = {
         return mapBackendToHistory(rawData);
 
       } catch (error: any) {
-        if (error.response?.status === 404) return []; // ไม่เคยส่ง = ว่าง
+        if (error.response?.form_status_id === 404) return []; // ไม่เคยส่ง = ว่าง
         console.error("API Error:", error);
         return [];
       }

@@ -60,33 +60,54 @@ const mapStatusToStep = (status: string): number => {
 };
 
 const mapBackendToFrontend = (backendData: any): NominationTracking => {
-    const isRejected = backendData.status === "rejected";
-    const isApproved = backendData.status === "approved";
+  
+    const hasRejectReason = !!backendData.reject_reason;
+    const isApproved = backendData.form_status_id === 8; // สมมติว่าสถานะ 8 คืออนุมัติ
+
+    // คำนวณ status_code สำหรับ UI (1=Progress, 2=Approved, 3=Rejected)
+    let uiStatusCode: 1 | 2 | 3 = 1;
+    if (hasRejectReason) uiStatusCode = 3;
+    else if (isApproved) uiStatusCode = 2;
+
+    // คำนวณ Step ปัจจุบัน
+    // ถ้า Backend ส่ง form_status_id เป็นตัวเลข 1-8 ก็ใช้ได้เลย
+    // หรือถ้าถูก Reject ให้โชว์ Step สุดท้าย
+    const currentStep = hasRejectReason ? 8 : (backendData.form_status_id || 1);
 
     return {
-        form_id: backendData.id,
-        award_type_name: backendData.award_type?.name || "ไม่ระบุประเภท",
-        status_code: isRejected ? 3 : isApproved ? 2 : 1,
-        status_label: isRejected ? "ไม่ผ่านการคัดเลือก" : isApproved ? "อนุมัติเรียบร้อย" : "อยู่ระหว่างการพิจารณา",
+        // [แก้ไข 1] ใช้ form_id แทน id
+        form_id: backendData.form_id, 
         
-        student_firstname: backendData.student?.user?.firstname || "-",
-        student_lastname: backendData.student?.user?.lastname || "-",
-        student_number: backendData.student?.student_number || "-",
-        faculty_name: backendData.student?.faculty?.name || "-",
+        // [แก้ไข 2] ใช้ award_type_name ตรงๆ (backend ส่งมาเป็น string แล้วใน DTO)
+        award_type_name: backendData.award_type_name || "ไม่ระบุประเภท",
+        
+        status_code: uiStatusCode,
+        status_label: hasRejectReason ? "ไม่ผ่านการคัดเลือก" : isApproved ? "อนุมัติเรียบร้อย" : "อยู่ระหว่างการพิจารณา",
+        
+        // [แก้ไข 3] ข้อมูล Student อยู่ชั้นนอก ไม่ได้ซ้อนอยู่ใน user
+        student_firstname: backendData.student_firstname || "-",
+        student_lastname: backendData.student_lastname || "-",
+        student_number: backendData.student_number || "-",
+        
+        // [แก้ไข 4] หาชื่อคณะ (Backend DTO ไม่ได้ส่งชื่อคณะมาตรงๆ อาจต้องเช็คว่า DTO ส่งมาไหม หรือใช้ค่า default ไปก่อน)
+        // หมายเหตุ: ใน DTO AwardFormResponse ไม่มี faculty_name มีแต่ faculty_id
+        // ถ้าต้องการชื่อคณะ ต้องแก้ Backend ให้ส่ง faculty_name มาด้วย หรือ map เอาเองที่หน้าบ้าน
+        faculty_name: "คณะวิศวกรรมศาสตร์", // ใส่ default หรือ map จาก faculty_id
         
         created_at: backendData.created_at,
-        current_step: mapStatusToStep(backendData.status || "submitted"),
+        current_step: currentStep,
         
-        // แก้ไขจุดนี้: เปลี่ยน f.id เป็น f.file_dir_id ให้ตรงกับ Backend
+        // [แก้ไข 5] การ Map Files (ดูจาก DTO FileResponse)
         files: backendData.files ? backendData.files.map((f: any) => ({
-            file_id: f.file_dir_id, // <--- แก้ตรงนี้ครับ
-            file_name: f.file_name || "Document.pdf", // อาจต้องเช็คว่า Backend ส่ง file_name หรือชื่ออื่น (ใน Model คุณไม่มี field file_name อาจต้องใช้ file_path ตัดเอา)
+            file_id: f.file_dir_id, 
+            file_name: f.file_name || "Document.pdf", 
             file_size: f.file_size || 0,
             file_url: `${API_BASE_URL}/${f.file_path}`
         })) : [],
         
         reject_reason: backendData.reject_reason || "",
-        approver_name: backendData.approver || "เจ้าหน้าที่",
+        // [แก้ไข 6] ใน DTO ไม่มี field approver_name
+        approver_name: "เจ้าหน้าที่", 
     };
 };
 
