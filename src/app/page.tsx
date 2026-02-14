@@ -2,205 +2,283 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createApiUrl } from "../api/createApiUrl";
 import Link from "next/link";
-import Image from "next/image";
+import Swal from "sweetalert2";
+import axios from "axios";
+import { useAuth } from "@/context/AuthContext"; // ✅ 1. Import useAuth
 
-// ส่วนจัดการ Error และ Token เหมือนเดิม
-function parseErrorMessage(payload: unknown, status: number): string {
-  if (typeof payload === "object" && payload) {
-    const maybeError = (payload as Record<string, unknown>).error;
-    if (typeof maybeError === "string" && maybeError) return maybeError;
+// ==========================================
+// 0. Configuration & Service Layer
+// ==========================================
+
+const USE_MOCK_DATA = false;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+
+// Interface
+interface LoginResponse {
+  token: string;
+  role: string;
+  user: {
+    firstname: string;
+    lastname: string;
+    role_id: number;
+    first_login: boolean; 
+  };
+}
+
+const mapRoleIdToRoleName = (roleId: number): string => {
+  switch (roleId) {
+    case 1: return "student";
+    case 2: return "admin";
+    case 3: return "head_of_department";
+    case 4: return "dean";
+    case 5: return "associate_dean";
+    case 6: return "student_development";
+    case 7: return "student_development_committee";
+    case 8: return "chairman_of_student_development_committee";
+    default: return "student";
   }
-  if (typeof payload === "string" && payload) return payload;
-  return `Login failed (${status})`;
-}
+};
 
-function extractToken(payload: unknown): string | undefined {
-  if (typeof payload !== "object" || !payload) return undefined;
-  const p = payload as { token?: unknown; access_token?: unknown; data?: { token?: unknown } };
-  if (typeof p.token === "string" && p.token) return p.token;
-  if (p.data && typeof p.data.token === "string" && p.data.token) return p.data.token;
-  if (typeof p.access_token === "string" && p.access_token) return p.access_token;
-  return undefined;
-}
+// --- Service Logic ---
+const authService = {
+  login: async (email: string, password: string): Promise<LoginResponse> => {
+    if (USE_MOCK_DATA) {
+      await new Promise((r) => setTimeout(r, 1000));
+      return { 
+        token: "mock_token", 
+        role: "student", 
+        user: { firstname: "Mock", lastname: "User", role_id: 1, first_login: true } // ลองแก้เป็น true เพื่อเทส Mock
+      };
+    } else {
+      try {
+        const response = await axios.post(
+          `${API_BASE_URL}/auth/login`, 
+          { email, password },
+          { 
+            withCredentials: true,
+            headers: { "Content-Type": "application/json" }
+          }
+        );
+        
+        const backendData = response.data;
+        const roleName = mapRoleIdToRoleName(backendData.user.role_id);
+
+        return {
+          token: backendData.token,
+          role: roleName,
+          user: {
+            ...backendData.user,
+            // Map จาก 'is_first_login' (Go) -> 'first_login' (React)
+            first_login: backendData.user.is_first_login 
+          }
+        };
+      } catch (error: any) {
+        throw error.response?.data?.error || error.response?.data?.message || error.message || "การเชื่อมต่อล้มเหลว";
+      }
+    }
+  },
+
+  googleLogin: () => {
+    window.location.href = `${API_BASE_URL}/auth/google/login`;
+  }
+};
+
+// ==========================================
+// 1. Main Component
+// ==========================================
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth(); // ✅ 2. ดึงฟังก์ชัน login จาก Context
+
+  // UI States
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false); // เพิ่ม State สำหรับปุ่มลูกตา
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Logic Login ปกติ (Email/Pass)
-  async function onSubmit(e: React.FormEvent) {
+  // Helper: Role-based Redirect พร้อม Logic First Login
+  const handleRedirect = (role: string, firstLogin: boolean) => {
+    
+    // 1. ดักจับเงื่อนไข First Login สำหรับนิสิตก่อน
+    if (role === "student" && firstLogin) {
+      router.push("/student/first-login");
+      return; // จบฟังก์ชันทันที ไม่ต้องไปเช็ค role อื่น
+    }
+
+    // 2. ถ้าไม่ใช่ First Login ให้ไปตาม Role ปกติ
+    const routes: Record<string, string> = {
+      head_of_department: "/head-of-department/consider",
+      dean: "/dean/consider",
+      associate_dean: "/associate-dean/consider",
+      chairman_of_student_development_committee: "/chairman-of-student-development-committee/consider",
+      student_development_committee: "/student-development-committee/consider",
+      student_development: "/student-development/verify-submit",
+      student: "/student/student-nomination-form",
+      admin: "/admin/users",
+    };
+    
+    router.push(routes[role] || "/");
+  };
+
+  // Logic: Login
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+
+    if (!email || !password) {
+      Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณากรอกอีเมลและรหัสผ่าน' });
+      return;
+    }
+
     setLoading(true);
+
     try {
-      const url = createApiUrl("/auth/login"); 
-      
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+      // 2. Call Service เพื่อยิง API
+      const data = await authService.login(email, password);
+
+      // ✅ 3. ใช้ login() จาก Context แทนการ localStorage.setItem เอง
+      // (Context จะทำการ setItem และ update state ให้อัตโนมัติ)
+      login(data.token, data.role, data.user);
+
+      await Swal.fire({
+        icon: "success",
+        title: "เข้าสู่ระบบสำเร็จ",
+        text: `ยินดีต้อนรับคุณ ${data.user.firstname}`,
+        timer: 1500,
+        showConfirmButton: false,
       });
 
-      const contentType = res.headers.get("content-type") || "";
-      const payload: any = contentType.includes("application/json")
-        ? await res.json().catch(() => null)
-        : await res.text().catch(() => "");
+      // ส่งค่า first_login ไปเช็คเพื่อ Redirect
+      handleRedirect(data.role, data.user.first_login);
 
-      if (!res.ok) {
-        throw new Error(parseErrorMessage(payload, res.status));
-      }
-
-      const token = extractToken(payload);
-      const role = payload.role;
-
-      if (!token) throw new Error("Missing token from server");
-
-      localStorage.setItem("token", token);
-      if (role) localStorage.setItem("role", role);
-
-      // Redirect ตาม Role
-      if (role === "admin") {
-          router.push("/admin/manage-account");
-      } else if (role === "head-selection-committee") {
-          router.push("/chairman-of-student-development-committee/consider");
-      } else if (role === "chairman-of-student-development-committee") {
-          router.push("/student-development-committee/consider");
-      } else if (role === "student-development") {
-          router.push("/student-development-committee/committee-setup");    
-      } else if (role === "dean") {
-          router.push("/dean/consider");
-      } else if (role === "associate-dean") {
-          router.push("/associate-dean/consider");
-          } else if (role === "head-of-department") {
-          router.push("/head-of-department/consider");
-      } else {
-          router.push("/student/student-nomination-form"); 
-      }
-
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error("Login Error:", err);
-      setError(err instanceof Error ? err.message : "เข้าสู่ระบบไม่สำเร็จ");
+      let errorMessage = typeof err === 'string' ? err : "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
+      
+      if (errorMessage === "invalid credentials" || errorMessage === "record not found") {
+          errorMessage = "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
+      }
+
+      Swal.fire({
+        icon: "error",
+        title: "เข้าสู่ระบบไม่สำเร็จ",
+        text: errorMessage,
+        confirmButtonColor: "#d33",
+        confirmButtonText: "ลองใหม่อีกครั้ง",
+      });
     } finally {
       setLoading(false);
     }
-  }
-
-  // Logic Google Login
-  const handleGoogleLogin = () => {
-    // ยิงไปที่ Proxy ของเรา (/api/...) แล้วให้ Next.js ส่งต่อให้ Backend
-    // Backend จะทำการ Redirect ไปหน้า Google เอง
-    window.location.href = "/api/auth/google/login"; 
   };
 
   return (
-    <div className="min-h-screen flex w-full font-sans">
+    <div className="min-h-screen flex w-full font-sans bg-gray-50">
       
-      {/* ฝั่งซ้าย (สีเขียว) */}
-      <div className="hidden lg:flex w-1/2 bg-[#005c30] text-white flex-col justify-center px-16 relative overflow-hidden">
-        {/* กราฟิกพื้นหลังจางๆ (ถ้ามี) */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+      {/* Animation Styles */}
+      <style jsx global>{`
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+        .animate-scale-up { animation: scaleUp 0.5s ease-out forwards; }
+      `}</style>
+
+      {/* Left Side (Green Banner) */}
+      <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-[#006633] to-[#004d24] text-white flex-col justify-center px-16 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 animate-pulse"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-green-400 opacity-10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
         
-        <div className="z-10">
-            <h1 className="text-4xl font-bold mb-4">ยินดีต้อนรับเข้าสู่ระบบนิสิตดีเด่น</h1>
-            <p className="text-green-100 mb-10 text-lg font-light leading-relaxed">
-            ระบบการเสนอชื่อและพิจารณานิสิตดีเด่นของมหาวิทยาลัยเกษตรศาสตร์ <br/>
-            เพื่อส่งเสริมและยกย่องนิสิตที่มีผลงานโดดเด่น
+        <div className="z-10 animate-fade-in-up">
+            <h1 className="text-5xl font-extrabold mb-6 leading-tight tracking-tight drop-shadow-sm">
+                ระบบคัดเลือก<br/>นิสิตดีเด่น
+            </h1>
+            <p className="text-green-100 mb-12 text-lg font-light leading-relaxed max-w-lg">
+            ระบบการเสนอชื่อและพิจารณานิสิตดีเด่นของมหาวิทยาลัยเกษตรศาสตร์ เพื่อส่งเสริมและยกย่องนิสิตที่มีผลงานโดดเด่นและเป็นแบบอย่างที่ดี
             </p>
 
-            <div className="space-y-6">
-                <FeatureItem title="ระบบเสนอรายชื่อ" desc="เสนอชื่อนิสิตดีเด่นได้อย่างสะดวกรวดเร็ว" />
-                <FeatureItem title="ติดตามสถานะ" desc="ตรวจสอบสถานะการพิจารณาแบบเรียลไทม์" />
-                <FeatureItem title="ระบบอนุมัติหลายขั้นตอน" desc="กระบวนการพิจารณาที่โปร่งใสและมีมาตรฐาน" />
+            <div className="space-y-8">
+                <FeatureItem title="เสนอรายชื่อออนไลน์" desc="ลดขั้นตอนเอกสาร สะดวก รวดเร็ว ใช้งานง่าย" delay="0ms" />
+                <FeatureItem title="ติดตามสถานะได้ทันที" desc="ตรวจสอบผลการพิจารณาได้แบบ Real-time" delay="150ms" />
+                <FeatureItem title="โปร่งใสและตรวจสอบได้" desc="กระบวนการพิจารณาเป็นระบบและมีมาตรฐาน" delay="300ms" />
             </div>
         </div>
       </div>
 
-      {/* ฝั่งขวา (ฟอร์ม Login) */}
-      <div className="w-full lg:w-1/2 bg-white flex flex-col justify-center items-center p-8">
-        <div className="w-full max-w-md">
+      {/* Right Side (Login Form) */}
+      <div className="w-full lg:w-1/2 bg-white flex flex-col justify-center items-center p-8 lg:p-12 relative">
+        <div className="w-full max-w-md animate-scale-up">
             
             {/* Logo Area */}
-            <div className="text-center mb-8">
-                {/* ถ้ามีรูป Logo KU ให้ใส่ตรงนี้ แทน div สีเขียว */}
-                {/* <Image src="/img/logo-ku.png" width={80} height={80} alt="NDD Logo" className="mx-auto mb-4" /> */}
-                <div className="w-16 h-16 bg-green-600 rounded-lg rotate-3 mx-auto mb-4 flex items-center justify-center text-white font-bold text-xl shadow-lg">
-                    NDD
+            <div className="text-center mb-10">
+                <div className="w-20 h-20 bg-gradient-to-tr from-green-600 to-emerald-500 rounded-2xl rotate-3 mx-auto mb-6 flex items-center justify-center text-white font-bold text-2xl shadow-xl shadow-green-100 transform hover:rotate-0 transition-all duration-300">
+                    KU
                 </div>
-                <h2 className="text-2xl font-bold text-gray-800">ระบบนิสิตดีเด่น</h2>
-                <p className="text-sm text-gray-500 mt-1">มหาวิทยาลัยเกษตรศาสตร์</p>
-                <p className="text-xs text-gray-400">Kasetsart University Outstanding Student System</p>
+                <h2 className="text-3xl font-bold text-gray-800 tracking-tight">เข้าสู่ระบบ</h2>
+                <p className="text-sm text-gray-500 mt-2">
+                    {USE_MOCK_DATA && <span className="inline-block px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded text-xs mr-2 font-bold">MOCK MODE</span>}
+                    กรุณากรอกข้อมูลเพื่อเข้าใช้งานระบบ
+                </p>
             </div>
 
-            <h3 className="text-xl font-semibold text-gray-900 mb-6">เข้าสู่ระบบ</h3>
-
-            {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{error}</div>}
-
-            <form onSubmit={onSubmit} className="space-y-4">
+            <form onSubmit={onSubmit} className="space-y-5">
                 {/* Email Input */}
-                <div>
-                    <input 
-                        type="text" 
-                        placeholder="อีเมล" 
-                        className="w-full bg-gray-100 border-transparent focus:bg-white focus:border-green-500 focus:ring-0 rounded-md px-4 py-3 text-gray-700 transition-all placeholder-gray-400"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                    />
+                <div className="group">
+                    <label className="block text-sm font-medium text-gray-700 mb-1 ml-1 group-focus-within:text-green-600 transition-colors">อีเมลมหาวิทยาลัย</label>
+                    <div className="relative">
+                        <input 
+                            type="text" 
+                            placeholder="name.s@ku.th" 
+                            className="w-full bg-gray-50 border border-gray-200 focus:bg-white focus:border-green-500 focus:ring-4 focus:ring-green-100 rounded-xl px-4 py-3.5 text-gray-700 transition-all placeholder-gray-400 outline-none"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                        />
+                        <span className="absolute right-4 top-3.5 text-gray-400 group-focus-within:text-green-500 transition-colors">
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" /></svg>
+                        </span>
+                    </div>
                 </div>
 
                 {/* Password Input */}
-                <div className="relative">
-                    <input 
-                        type={showPassword ? "text" : "password"} 
-                        placeholder="รหัสผ่าน" 
-                        className="w-full bg-gray-100 border-transparent focus:bg-white focus:border-green-500 focus:ring-0 rounded-md px-4 py-3 text-gray-700 transition-all placeholder-gray-400"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                    />
-                    <button 
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                        {showPassword ? <EyeOpenIcon /> : <EyeClosedIcon />}
-                    </button>
-                </div>
-
-                {/* Options Row */}
-                <div className="flex items-center justify-between text-sm">
-                    <label className="flex items-center space-x-2 cursor-pointer text-gray-600">
-                        <input type="checkbox" className="rounded border-gray-300 text-green-600 focus:ring-green-500" />
-                        <span>จดจำผู้ใช้</span>
-                    </label>
-                    <Link href="#" className="text-green-600 hover:text-green-700 font-medium">
-                        ลืมรหัสผ่าน ?
-                    </Link>
+                <div className="group">
+                    <label className="block text-sm font-medium text-gray-700 mb-1 ml-1 group-focus-within:text-green-600 transition-colors">รหัสผ่าน</label>
+                    <div className="relative">
+                        <input 
+                            type={showPassword ? "text" : "password"} 
+                            placeholder="••••••••" 
+                            className="w-full bg-gray-50 border border-gray-200 focus:bg-white focus:border-green-500 focus:ring-4 focus:ring-green-100 rounded-xl px-4 py-3.5 text-gray-700 transition-all placeholder-gray-400 outline-none"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                        />
+                        <button 
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-full transition-colors focus:outline-none"
+                        >
+                            {showPassword ? <EyeOpenIcon /> : <EyeClosedIcon />}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Buttons */}
-                <div className="space-y-3 mt-6">
+                <div className="space-y-4 pt-4">
                     <button 
                         type="submit" 
                         disabled={loading}
-                        className="w-full bg-gray-900 hover:bg-black text-white font-medium py-3 rounded-md transition-colors shadow-lg shadow-gray-200"
+                        className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-gray-200 disabled:bg-gray-400 disabled:cursor-not-allowed transform active:scale-[0.98] hover:shadow-xl"
                     >
-                        {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
+                        {loading ? (
+                            <span className="flex items-center justify-center gap-2">
+                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                กำลังเข้าสู่ระบบ...
+                            </span>
+                        ) : "เข้าสู่ระบบ"}
                     </button>
                     
-                    {/* ปุ่ม Google */}
                     <button 
                         type="button"
-                        onClick={handleGoogleLogin} // เรียกใช้ฟังก์ชันนี้
-                        className="w-full bg-[#00c535] hover:bg-[#00a82d] text-white font-medium py-3 rounded-md transition-colors shadow-lg shadow-green-100 flex justify-center items-center gap-2"
+                        onClick={authService.googleLogin} 
+                        className="w-full bg-[#00c535] hover:bg-[#00a82d] text-white font-medium py-3.5 rounded-xl transition-colors shadow-lg shadow-green-100 flex justify-center items-center gap-2 transform active:scale-[0.98] hover:shadow-green-200"
                     >
-                        {/* ไอคอน Google (Optional) */}
                         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81Z" />
                         </svg>
@@ -210,7 +288,7 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-8 text-center text-sm text-gray-500">
-              ยังไม่มีบัญชีผู้ใช้ ? <Link href="/register" className="text-green-600 font-medium hover:underline">สมัครสมาชิก</Link>
+              ยังไม่มีบัญชีผู้ใช้ ? <Link href="/register" className="text-green-600 font-medium hover:underline hover:text-green-700 transition-colors">สมัครสมาชิก</Link>
             </div>
 
         </div>
@@ -219,17 +297,19 @@ export default function LoginPage() {
   );
 }
 
-// Component ย่อยสำหรับไอคอนและลิสต์ (จะได้ไม่ต้องลง Library เพิ่ม)
+// ==========================================
+// 2. Sub-Components
+// ==========================================
 
-function FeatureItem({ title, desc }: { title: string, desc: string }) {
+function FeatureItem({ title, desc, delay }: { title: string, desc: string, delay: string }) {
     return (
-        <div className="flex items-start space-x-4">
-            <div className="mt-1 flex-shrink-0 w-6 h-6 rounded-full border-2 border-green-300 flex items-center justify-center">
+        <div className="flex items-start space-x-4 group hover:translate-x-2 transition-transform duration-300" style={{ animationDelay: delay }}>
+            <div className="mt-1 flex-shrink-0 w-6 h-6 rounded-full border-2 border-green-300 flex items-center justify-center group-hover:bg-green-500 group-hover:border-green-500 transition-all duration-300 shadow-sm">
                 <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
             </div>
             <div>
                 <h4 className="font-semibold text-lg">{title}</h4>
-                <p className="text-green-200 text-sm font-light">{desc}</p>
+                <p className="text-green-100 text-sm font-light opacity-90">{desc}</p>
             </div>
         </div>
     )

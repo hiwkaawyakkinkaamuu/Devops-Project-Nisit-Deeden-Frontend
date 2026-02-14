@@ -1,456 +1,695 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import Link from "next/link"; 
+import { useState, useRef, useEffect, useMemo } from "react";
+import Link from "next/link";
+import Swal from "sweetalert2";
+import { useRouter } from "next/navigation";
+import axios from "axios";
+
+// ==========================================
+// 0. Configuration
+// ==========================================
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+const MAX_TOTAL_FILE_SIZE_MB = 10;
 
 interface UserProfile {
   student_firstname: string;
   student_lastname: string;
   student_number: string;
+  email: string;
   student_year: string;
-  faculty_name: string;
-  department_name: string;
+  faculty_id: string;
+  department_id: string;
   advisor_name: string;
   gpa: string;
-  email: string;
   phone_number: string;
 }
 
-// Main Component
+// ==========================================
+// 1. Service Layer
+// ==========================================
+
+const nominationService = {
+  // ดึงข้อมูล User Profile
+  getProfile: async (token: string) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000,
+      });
+      const u = response.data.user;
+      return {
+        student_firstname: u.firstname,
+        student_lastname: u.lastname,
+        student_number: u.student_data?.student_number || "",
+        email: u.email,
+        student_year: u.student_data?.year ? String(u.student_data.year) : "",
+        faculty_id: String(u.student_data?.faculty_id || ""),
+        department_id: String(u.student_data?.department_id || ""),
+        advisor_name: "", // ให้ User กรอกเพิ่ม
+        gpa: "",          // ให้ User กรอกเพิ่ม
+        phone_number: ""  // ให้ User กรอกเพิ่ม
+      };
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+      return null;
+    }
+  },
+
+  // ดึงปีการศึกษาปัจจุบัน
+  getCurrentTerm: async (token: string) => {
+    const response = await axios.get(`${API_BASE_URL}/academic-years/current/semester`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data.data; // { year: 2569, semester: 1 }
+  },
+
+  // เช็คประวัติการส่ง (เทียบกับปี/เทอมปัจจุบัน)
+  checkSubmissionHistory: async (token: string, currentYear: number, currentSemester: number) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/awards/my/submissions`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const submissions = response.data.data || [];
+      
+      // เช็คว่ามีรายการไหนที่ year และ semester ตรงกับปัจจุบัน
+      return submissions.some((sub: any) => 
+        Number(sub.academic_year) === Number(currentYear) && 
+        Number(sub.semester) === Number(currentSemester)
+      );
+    } catch (error) {
+      console.error("Check submission error:", error);
+      return false; // ถ้าเช็คไม่ได้ ให้สันนิษฐานว่ายังไม่ส่ง (หรือจะ Block ก็ได้แล้วแต่ Policy)
+    }
+  },
+
+  // ส่งข้อมูล (Submit)
+  submitNomination: async (token: string, formData: FormData) => {
+    const response = await axios.post(`${API_BASE_URL}/awards/submit`, formData, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
+};
+
+// ==========================================
+// 2. Main Component
+// ==========================================
+
 export default function StudentNominationForm() {
+  const router = useRouter();
+
+  // --- UI States ---
   const [loading, setLoading] = useState(true);
   const [hasNominated, setHasNominated] = useState(false);
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+  const [currentTermInfo, setCurrentTermInfo] = useState<{year: number, semester: number} | null>(null);
 
-  // Form State
+  // --- Form Data ---
   const [awardType, setAwardType] = useState(""); 
   const [activityCriteria, setActivityCriteria] = useState("");
-  
-  // ข้อมูลส่วนตัว (รวม GPA และ ชั้นปี)
+  const [innovationQual, setInnovationQual] = useState(false);
+
+  // Profile Data
   const [userProfile, setUserProfile] = useState<UserProfile>({
-    student_firstname: "", 
-    student_lastname: "", 
-    student_number: "", 
-    student_year: "", 
-    faculty_name: "", 
-    department_name: "", 
-    advisor_name: "", 
-    gpa: "", 
-    email: "", 
-    phone_number: ""
+    student_firstname: "", student_lastname: "", student_number: "",
+    email: "", student_year: "", faculty_id: "", department_id: "",
+    advisor_name: "", gpa: "", phone_number: "",
   });
 
-  // ข้อมูลที่ต้องกรอกเอง
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [age, setAge] = useState("");
   const [address, setAddress] = useState("");
 
-  // ข้อมูลรางวัล
+  // Activity/Innovation Data
   const [dateReceived, setDateReceived] = useState("");
   const [projectTitle, setProjectTitle] = useState("");
   const [teamName, setTeamName] = useState("");
   const [prize, setPrize] = useState("");
   const [organizedBy, setOrganizedBy] = useState("");
-  const [innovationQual, setInnovationQual] = useState(false);
 
   // Files
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch Data
+  // Computed
+  const totalFileSize = useMemo(
+    () => selectedFiles.reduce((acc, file) => acc + file.size, 0),
+    [selectedFiles]
+  );
+  const fileSizePercentage = (totalFileSize / MAX_TOTAL_FILE_SIZE_BYTES) * 100;
+
+  // ==========================================
+  // 3. Effects (Initialization)
+  // ==========================================
+
   useEffect(() => {
-    const fetchData = async () => {
+    const init = async () => {
       setLoading(true);
+      const token = localStorage.getItem("token");
+      if (!token) {
+        router.push("/");
+        return;
+      }
+
       try {
-        const token = localStorage.getItem("accessToken");
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+        // 1. ดึงปีการศึกษาปัจจุบัน
+        const termData = await nominationService.getCurrentTerm(token);
+        setCurrentTermInfo({ year: termData.year, semester: termData.semester });
 
-        // API Logic
-        const [resProfile, resStatus] = await Promise.all([
-            fetch(`${apiUrl}/api/profile/me`, { headers: { "Authorization": `Bearer ${token}` } }),
-            fetch(`${apiUrl}/api/nomination/check-status`, { headers: { "Authorization": `Bearer ${token}` } }) 
-        ]);
-
-        if (resProfile.ok) {
-            const data = await resProfile.json();
-            setUserProfile(data.data || data);
-        }
-        if (resStatus.ok) {
-            const statusData = await resStatus.json();
-            if (statusData.has_nominated) setHasNominated(true);
+        // 2. เช็คประวัติการส่งทันที
+        if (termData) {
+            const isSubmitted = await nominationService.checkSubmissionHistory(token, termData.year, termData.semester);
+            if (isSubmitted) {
+                setAlreadySubmitted(true); // เจอประวัติ -> Block UI ทันที
+                setLoading(false);
+                return;
+            }
         }
 
-        // [MOCKUP]
-        const mockProfile: UserProfile = {
-            student_firstname: "สมชาย",
-            student_lastname: "ใจดี",
-            student_number: "66104524665",
-            student_year: "3",
-            faculty_name: "คณะวิทยาศาสตร์",
-            department_name: "ภาควิชาวิทยาการคอมพิวเตอร์",
-            advisor_name: "ดร. สมหญิง รักเรียน", 
-            gpa: "3.75", 
-            email: "somchai@ku.th",
-            phone_number: "0812345678"
-        };
-        setUserProfile(mockProfile);
+        // 3. ถ้ายังไม่ส่ง -> ดึง Profile มาเติมในฟอร์ม
+        const profile = await nominationService.getProfile(token);
+        if (profile) {
+            setUserProfile(prev => ({...prev, ...profile}));
+        }
 
-        // Mock Status
-        const isAlreadySubmitted = false; 
-        if (isAlreadySubmitted) setHasNominated(true);
-        
-      } catch (error) {
-        console.warn("Error:", error);
+      } catch (err) {
+        console.error("Init Error:", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
-  }, []);
 
-  // Handlers
+    init();
+  }, [router]);
+
+  // ... (Helper functions: formatFileSize, handleProfileChange, etc. - คงเดิม)
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  const handleProfileChange = (key: keyof UserProfile, value: string) => {
+    setUserProfile((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/\D/g, ""); // รับเฉพาะตัวเลข
+    if (val.length <= 10) {
+      setUserProfile((prev) => ({ ...prev, phone_number: val }));
+    }
+  };
+
+  const handleGpaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (/^\d*\.?\d{0,2}$/.test(val)) {
+        setUserProfile((prev) => ({ ...prev, gpa: val }));
+    }
+  };
+
   const handleDobChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setDateOfBirth(val);
     if (val) {
-        const today = new Date();
-        const birthDate = new Date(val);
-        let a = today.getFullYear() - birthDate.getFullYear();
-        const m = today.getMonth() - birthDate.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) a--;
-        setAge(a.toString());
+      const today = new Date();
+      const birthDate = new Date(val);
+      let a = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) a--;
+      setAge(a.toString());
     } else {
-        setAge("");
+      setAge("");
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
-      if (newFiles.some(file => file.type !== "application/pdf")) {
-          alert("กรุณาอัปโหลดเฉพาะไฟล์ PDF เท่านั้น");
-          if (fileInputRef.current) fileInputRef.current.value = "";
-          return;
+      // Validate PDF
+      if (newFiles.some((file) => file.type !== "application/pdf")) {
+        Swal.fire({ icon: "warning", title: "ไฟล์ไม่ถูกต้อง", text: "ระบบรองรับเฉพาะไฟล์ PDF เท่านั้น" });
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
       }
-      setSelectedFiles(prev => [...prev, ...newFiles]);
+      // Validate Size
+      const newTotalSize = totalFileSize + newFiles.reduce((acc, f) => acc + f.size, 0);
+      if (newTotalSize > MAX_TOTAL_FILE_SIZE_BYTES) {
+        Swal.fire({ icon: "error", title: "พื้นที่จัดเก็บไม่พอ", text: `ขนาดไฟล์รวมเกิน ${MAX_TOTAL_FILE_SIZE_MB}MB` });
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      setSelectedFiles((prev) => [...prev, ...newFiles]);
     }
-    if (fileInputRef.current) fileInputRef.current.value = ""; 
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleRemoveFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Submit Logic
+  const getLabels = () => {
+    switch (awardType) {
+      case "activity": return { title: "รายละเอียดกิจกรรม", name: "ชื่อโครงการ/กิจกรรม", date: "วันที่เข้าร่วมกิจกรรม", role_prize: "บทบาท/หน้าที่ (หรือรางวัลที่ได้รับ)", org: "หน่วยงานที่จัดกิจกรรม", team: "ชื่อทีม (ถ้ามี)" };
+      case "innovation": return { title: "รายละเอียดผลงานนวัตกรรม", name: "ชื่อผลงานนวัตกรรม", date: "วันที่ได้รับรางวัล", role_prize: "รางวัลที่ได้รับ", org: "เวทีการประกวด", team: "ชื่อทีม (ถ้ามี)" };
+      default: return { title: "", name: "", date: "", role_prize: "", org: "", team: "" };
+    }
+  };
+  const labels = getLabels();
+
+  // ==========================================
+  // 4. Submit Logic
+  // ==========================================
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation
-    if (parseInt(age) < 17) return alert("อายุต้อง 17 ปีขึ้นไป");
-    if (awardType === "activity" && !activityCriteria) return alert("เลือกคุณสมบัติกิจกรรม");
-    if (awardType === "innovation" && !innovationQual) return alert("กรุณายืนยันคุณสมบัตินวัตกรรม");
-    if (awardType !== "behavior" && selectedFiles.length === 0) return alert("อัปโหลดเอกสารประกอบ");
+    // 🛑 1. Validate รหัสนิสิต (10 หลัก)
+    if (!/^\d{10}$/.test(userProfile.student_number)) {
+        Swal.fire({ icon: "warning", title: "ข้อมูลไม่ถูกต้อง", text: "รหัสนิสิตต้องเป็นตัวเลข 10 หลักเท่านั้น" });
+        return;
+    }
+
+    // 🛑 2. Validate เบอร์โทร (ขึ้นต้น 0, 10 หลัก)
+    if (!/^0\d{9}$/.test(userProfile.phone_number)) {
+        Swal.fire({ icon: "warning", title: "ข้อมูลไม่ถูกต้อง", text: "เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมีครบ 10 หลัก" });
+        return;
+    }
+
+    // 🛑 3. Validate GPA (0.00 - 4.00)
+    const gpaNum = parseFloat(userProfile.gpa);
+    if (isNaN(gpaNum) || gpaNum < 0 || gpaNum > 4.00) {
+        Swal.fire({ icon: "warning", title: "ข้อมูลไม่ถูกต้อง", text: "เกรดเฉลี่ยต้องอยู่ระหว่าง 0.00 - 4.00" });
+        return;
+    }
+
+    // 🛑 4. Check Required Fields
+    if (!userProfile.student_year || !userProfile.advisor_name || !dateOfBirth || !address) {
+        Swal.fire({ icon: "warning", title: "ข้อมูลไม่ครบถ้วน", text: "กรุณากรอกข้อมูลส่วนตัวให้ครบทุกช่องที่มี *" });
+        return;
+    }
+    if (!awardType) {
+        Swal.fire({ icon: "warning", title: "ข้อมูลไม่ครบถ้วน", text: "กรุณาเลือกประเภทรางวัล" });
+        return;
+    }
+    if (selectedFiles.length === 0) {
+        Swal.fire({ icon: "warning", title: "ขาดเอกสารแนบ", text: "กรุณาอัปโหลดเอกสาร PDF อย่างน้อย 1 ไฟล์" });
+        return;
+    }
+
+    // --- Prepare Data for Backend ---
+    const token = localStorage.getItem("token");
+    if(!token) return;
+
+    let awardTypeId = 0;
+    if (awardType === "activity") awardTypeId = 1;
+    else if (awardType === "behavior") awardTypeId = 2;
+    else if (awardType === "innovation") awardTypeId = 3;
+
+    const result = await Swal.fire({
+      title: "ยืนยันการส่งข้อมูล?",
+      text: "ตรวจสอบความถูกต้องก่อนยืนยัน ท่านสามารถส่งได้เพียง 1 ครั้งต่อภาคเรียน",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "ยืนยัน",
+      confirmButtonColor: "#10B981",
+      cancelButtonText: "แก้ไข",
+    });
+
+    if (!result.isConfirmed) return;
 
     try {
-        const token = localStorage.getItem("accessToken");
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const formData = new FormData();
+      
+      // Common Fields (ตรงกับ Handler)
+      formData.append("award_type_id", String(awardTypeId));
+      formData.append("student_year", userProfile.student_year);
+      formData.append("advisor_name", userProfile.advisor_name);
+      formData.append("phone_number", userProfile.phone_number);
+      formData.append("address", address);
+      formData.append("gpa", userProfile.gpa);
+      formData.append("date_of_birth", dateOfBirth); // format: YYYY-MM-DD
 
-        let awardTypeId = "1";
-        if (awardType === "innovation") awardTypeId = "2";
-        if (awardType === "activity") awardTypeId = "3";
+      // Specific Fields
+      if (awardTypeId === 1) { // Extracurricular
+          formData.append("qualification_type", "activity"); // Backend might expect this string
+          formData.append("activity_category", activityCriteria); // 'committee', 'competition', etc.
+          formData.append("project_title", projectTitle);
+          formData.append("date_received", dateReceived);
+          formData.append("prize", prize);
+          formData.append("organized_by", organizedBy);
+          formData.append("team_name", teamName);
+      } else if (awardTypeId === 3) { // Creativity
+          formData.append("team_name", teamName);
+          formData.append("project_title", projectTitle);
+          formData.append("prize", prize);
+          formData.append("organized_by", organizedBy);
+          formData.append("date_received", dateReceived);
+          formData.append("competition_level", innovationQual ? "National/International" : "Local"); 
+      }
 
-        const formData = new FormData();
-        formData.append("award_type_id", awardTypeId);
-        formData.append("student_number", userProfile.student_number);
-        formData.append("student_year", userProfile.student_year);
-        formData.append("gpa", userProfile.gpa);
-        formData.append("advisor_name", userProfile.advisor_name);
-        formData.append("phone_number", userProfile.phone_number);
-        formData.append("date_of_birth", dateOfBirth);
-        formData.append("address", address);
+      // Files
+      selectedFiles.forEach((file) => {
+        formData.append("files", file);
+      });
 
-        if (awardType === "activity") {
-            formData.append("activity_category", "Sports");
-            formData.append("qualification_type", activityCriteria);
-        }
-        
-        if (awardType !== "behavior") {
-             formData.append("date_received", dateReceived);
-             formData.append("project_title", projectTitle);
-             formData.append("team_name", teamName);
-             formData.append("prize", prize);
-             formData.append("organized_by", organizedBy);
-        }
+      await nominationService.submitNomination(token, formData);
 
-        selectedFiles.forEach((file) => formData.append("files", file));
+      // Success
+      await Swal.fire({ icon: "success", title: "บันทึกสำเร็จ", text: "ระบบได้รับข้อมูลเรียบร้อยแล้ว", timer: 2000, showConfirmButton: false });
+      setHasNominated(true);
 
-        // [API] Submit
-        const response = await fetch(`${apiUrl}/api/nomination/submit`, {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${token}` },
-            body: formData, 
-        });
-        if (!response.ok) throw new Error("Submission failed");
+    } catch (error: any) {
+      console.error("Submit Error:", error);
+      let errorMsg = "เกิดข้อผิดพลาดในการส่งข้อมูล";
+      if (axios.isAxiosError(error)) {
+        errorMsg = error.response?.data?.message || error.message;
+      }
 
-        // MOCKUP Success Flow
-        setHasNominated(true); 
+      // Double Check: ถ้า Backend ตอบกลับว่า Duplicate (กันเหนียว)
+      if (errorMsg.toLowerCase().includes("duplicate") || errorMsg.toLowerCase().includes("unique constraint")) {
+          await Swal.fire({ icon: "warning", title: "ท่านเคยเสนอชื่อไปแล้ว", text: "ระบบพบข้อมูลการสมัครในปีการศึกษานี้แล้ว" });
+          setAlreadySubmitted(true);
+          return;
+      }
 
-    } catch (error) {
-        setHasNominated(true); 
+      Swal.fire({ icon: "error", title: "บันทึกไม่สำเร็จ", text: errorMsg });
     }
   };
 
-  // Render Conditions
+  // ==========================================
+  // 5. Render Views
+  // ==========================================
 
-  if (loading) return <div className="p-20 text-center animate-pulse text-gray-500">กำลังโหลดข้อมูลโปรไฟล์...</div>;
-
-  // 1. Success Screen
+  // ✅ View 1: Success (ส่งเสร็จแล้ว)
   if (hasNominated) {
-      return (
-        <div className="w-full h-full flex items-center justify-center py-20">
-            <div className="bg-white rounded-[24px] shadow-sm p-12 text-center max-w-lg w-full border border-gray-100 animate-scale-up">
-                <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <svg className="w-12 h-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                </div>
-                <h2 className="text-3xl font-bold text-gray-800 mb-3">ดำเนินการสำเร็จ</h2>
-                <p className="text-gray-500 mb-10 leading-relaxed">
-                    คุณได้เสนอรายชื่อนิสิตดีเด่นเรียบร้อยแล้ว<br/>
-                    ไม่สามารถส่งซ้ำได้ในรอบนี้
-                </p>
-                
-                <div className="flex flex-col gap-3">
-                    <Link href="/student/trace-nomination" className="w-full px-6 py-3.5 bg-blue-600 text-white rounded-xl text-base font-bold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg">
-                        ติดตามสถานะ
-                    </Link>
-                </div>
-            </div>
+    return (
+      <div className="w-full h-screen flex items-center justify-center bg-gray-50 p-6">
+        <div className="bg-white rounded-3xl shadow-xl p-10 text-center max-w-md w-full border border-green-100">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">บันทึกข้อมูลสำเร็จ</h2>
+          <p className="text-gray-500 mb-8">ระบบได้รับข้อมูลของท่านเรียบร้อยแล้ว</p>
+          <Link href="/student/trace-nomination" className="block w-full py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 font-bold transition-all shadow-md">
+            ติดตามสถานะ
+          </Link>
         </div>
-      );
+      </div>
+    );
   }
 
-  // 2. Main Form
-  return (
-    <div className="w-full font-sans">
-      <div className="bg-white rounded-[24px] shadow-sm p-8 md:p-12 min-h-[600px]">
-        
-        {/* Header */}
-        <div className="mb-10 border-b border-gray-100 pb-6">
-            <h2 className="text-3xl font-bold text-gray-900">เสนอรายชื่อนิสิตดีเด่น</h2>
-            <p className="text-gray-500 mt-2 text-sm">กรุณากรอกข้อมูลให้ครบถ้วนเพื่อดำเนินการเสนอรายชื่อ</p>
-        </div>
+  // ✅ View 2: Already Submitted (ส่งไปแล้วก่อนหน้านี้) -> Block UI
+  if (alreadySubmitted) {
+    return (
+      <div className="w-full h-screen flex items-center justify-center bg-gray-50 p-6">
+        <div className="bg-white rounded-3xl shadow-2xl p-10 max-w-lg w-full text-center border border-orange-100 relative overflow-hidden">
+           {/* Decorative Background */}
+           <div className="absolute top-0 right-0 w-32 h-32 bg-orange-50 rounded-bl-full opacity-50"></div>
+           <div className="relative z-10">
+               <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                   <svg className="w-10 h-10 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+               </div>
+               
+               <h2 className="text-2xl font-bold text-gray-800 mb-3">ท่านได้ดำเนินการเสนอชื่อไปแล้ว</h2>
+               <p className="text-gray-500 mb-6 leading-relaxed">
+                   ระบบพบว่าท่านได้ยื่นเสนอชื่อในปีการศึกษา <span className="font-bold text-orange-600">{currentTermInfo?.year}/{currentTermInfo?.semester}</span> แล้ว<br/>
+                   <span className="text-xs text-gray-400 block mt-2">(จำกัด 1 ครั้งต่อภาคเรียน)</span>
+               </p>
 
-        <form onSubmit={handleSubmit} className="space-y-10">
-            
-            {/* 1. Award Selector */}
-            <div className="space-y-3">
-                <label className="text-sm font-bold text-gray-800 flex items-center gap-1">
-                    ประเภทรางวัล <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                    <select 
-                        value={awardType}
-                        onChange={(e) => setAwardType(e.target.value)}
-                        className="w-full md:w-1/2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-700 font-medium cursor-pointer focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all hover:bg-white"
-                    >
-                        <option value="">-- กรุณาเลือกประเภทรางวัลเพื่อเริ่ม --</option>
-                        <option value="behavior">ด้านความประพฤติดีเด่น</option>
-                        <option value="innovation">ด้านความคิดสร้างสรรค์และนวัตกรรม</option>
-                        <option value="activity">ด้านกิจกรรมเสริมหลักสูตร</option>
-                    </select>
-                </div>
+               <div className="flex flex-col gap-3">
+                   <Link href="/student/trace-nomination" className="w-full py-3 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition-all">
+                       ตรวจสอบสถานะ
+                   </Link>
+                   <Link href="/student/nomination-history" className="w-full py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold rounded-xl hover:opacity-90 transition-all shadow-lg shadow-orange-200">
+                       ดูประวัติการส่ง
+                   </Link>
+               </div>
+           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ View 3: Normal Form (ยังไม่เคยส่ง)
+  return (
+    <div className="w-full font-sans bg-[#F8F9FA] min-h-screen p-6 md:p-10 flex justify-center pb-24">
+      {/* Animation Styles */}
+      <style jsx global>{`
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
+        .animate-delay-100 { animation-delay: 100ms; }
+        .animate-delay-200 { animation-delay: 200ms; }
+        .animate-delay-300 { animation-delay: 300ms; }
+      `}</style>
+
+      <div className="bg-white/90 backdrop-blur-sm rounded-[32px] shadow-lg p-8 md:p-12 w-full max-w-5xl border border-white/60 animate-fade-in-up">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+             <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin"></div>
+             <div className="text-gray-400 font-medium">กำลังโหลดข้อมูล...</div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-10">
+            {/* Header */}
+            <div className="border-b border-gray-100 pb-6">
+              <h2 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight">เสนอรายชื่อนิสิตดีเด่น</h2>
+              <p className="text-gray-500 mt-2 text-base">กรุณากรอกข้อมูลและแนบเอกสารหลักฐานให้ครบถ้วน</p>
             </div>
 
-            {/* Form Content */}
+            {/* 1. Award Type */}
+            <div className="animate-fade-in-up animate-delay-100">
+              <label className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">1</span>
+                ประเภทรางวัล <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Card: Behavior */}
+                <div onClick={() => setAwardType("behavior")} className={`cursor-pointer rounded-2xl border-2 p-6 flex flex-col items-center justify-center gap-4 transition-all duration-300 hover:shadow-lg ${awardType === "behavior" ? "border-blue-500 bg-blue-50 text-blue-700 ring-4 ring-blue-100/50" : "border-gray-100 bg-white text-gray-500 hover:border-blue-200"}`}>
+                  <span className={`p-4 rounded-full ${awardType === 'behavior' ? 'bg-blue-200 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </span>
+                  <div className="text-center">
+                    <span className="block text-lg font-bold">ด้านความประพฤติดี</span>
+                    <span className="block text-xs opacity-70 mt-1">จิตอาสา คุณธรรม</span>
+                  </div>
+                </div>
+                {/* Card: Innovation */}
+                <div onClick={() => setAwardType("innovation")} className={`cursor-pointer rounded-2xl border-2 p-6 flex flex-col items-center justify-center gap-4 transition-all duration-300 hover:shadow-lg ${awardType === "innovation" ? "border-purple-500 bg-purple-50 text-purple-700 ring-4 ring-purple-100/50" : "border-gray-100 bg-white text-gray-500 hover:border-purple-200"}`}>
+                   <span className={`p-4 rounded-full ${awardType === 'innovation' ? 'bg-purple-200 text-purple-700' : 'bg-gray-100 text-gray-400'}`}>
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                   </span>
+                   <div className="text-center">
+                    <span className="block text-lg font-bold">ด้านนวัตกรรม</span>
+                    <span className="block text-xs opacity-70 mt-1">สิ่งประดิษฐ์ งานวิจัย</span>
+                   </div>
+                </div>
+                {/* Card: Activity */}
+                <div onClick={() => setAwardType("activity")} className={`cursor-pointer rounded-2xl border-2 p-6 flex flex-col items-center justify-center gap-4 transition-all duration-300 hover:shadow-lg ${awardType === "activity" ? "border-orange-500 bg-orange-50 text-orange-700 ring-4 ring-orange-100/50" : "border-gray-100 bg-white text-gray-500 hover:border-orange-200"}`}>
+                   <span className={`p-4 rounded-full ${awardType === 'activity' ? 'bg-orange-200 text-orange-700' : 'bg-gray-100 text-gray-400'}`}>
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" /></svg>
+                   </span>
+                   <div className="text-center">
+                    <span className="block text-lg font-bold">ด้านกิจกรรม</span>
+                    <span className="block text-xs opacity-70 mt-1">ผู้นำกิจกรรม แข่งขันวิชาการ</span>
+                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Form Fields (Show only if type selected) */}
             {awardType && (
-                <div className="space-y-10 animate-fade-in">
-                    
-                    {/* Part A: ข้อมูลนิสิต (Read Only) */}
-                    <div className="space-y-6">
-                        <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                            <span className="w-1.5 h-6 bg-blue-600 rounded-full"></span>
-                            ข้อมูลส่วนตัว
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-gray-500">ชื่อ-นามสกุล</label>
-                                <div className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 cursor-not-allowed">
-                                    {userProfile.student_firstname} {userProfile.student_lastname}
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-gray-500">รหัสนิสิต</label>
-                                <div className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 cursor-not-allowed">
-                                    {userProfile.student_number}
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-gray-500">ชั้นปี</label>
-                                <div className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 cursor-not-allowed">
-                                    {userProfile.student_year}
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-gray-500">เกรดเฉลี่ยสะสม</label>
-                                <div className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 cursor-not-allowed">
-                                    {userProfile.gpa}
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-gray-500">คณะ/สาขา</label>
-                                <div className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 cursor-not-allowed">
-                                    {userProfile.faculty_name} / {userProfile.department_name}
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-gray-500">อาจารย์ที่ปรึกษา</label>
-                                <div className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 cursor-not-allowed">
-                                    {userProfile.advisor_name}
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-gray-500">อีเมล</label>
-                                <div className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 cursor-not-allowed">
-                                    {userProfile.email}
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-gray-500">เบอร์โทรศัพท์</label>
-                                <div className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 cursor-not-allowed">
-                                    {userProfile.phone_number}
-                                </div>
-                            </div>
-                        </div>
+              <div className="space-y-10 animate-fade-in-up animate-delay-200">
+                
+                {/* 2. User Info */}
+                <div className="bg-white/60 backdrop-blur-sm p-8 rounded-[24px] border border-gray-200 shadow-sm relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 to-indigo-500"></div>
+                  <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm">2</span>
+                    ข้อมูลส่วนตัว
+                  </h3>
+
+                  {/* Read Only Info */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                      <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
+                          <span className="text-[10px] uppercase font-bold text-gray-400 block">ชื่อ-นามสกุล</span>
+                          <span className="font-bold text-blue-900">{userProfile.student_firstname} {userProfile.student_lastname}</span>
+                      </div>
+                      <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
+                          <span className="text-[10px] uppercase font-bold text-gray-400 block">รหัสนิสิต</span>
+                          <span className="font-mono font-bold text-blue-900">{userProfile.student_number}</span>
+                      </div>
+                      <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
+                          <span className="text-[10px] uppercase font-bold text-gray-400 block">อีเมล</span>
+                          <span className="font-medium text-blue-900 truncate">{userProfile.email}</span>
+                      </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold text-gray-700">ชั้นปี <span className="text-red-500">*</span></label>
+                        <select value={userProfile.student_year} onChange={(e) => handleProfileChange("student_year", e.target.value)} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-blue-100 outline-none">
+                            <option value="">-- เลือกชั้นปี --</option>
+                            {[1, 2, 3, 4, 5, 6].map(y => <option key={y} value={y}>ปี {y}</option>)}
+                        </select>
                     </div>
-
-                    {/* Part B: ข้อมูลเพิ่มเติม (Editable) */}
-                    <div className="space-y-6">
-                        <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                            <span className="w-1.5 h-6 bg-orange-500 rounded-full"></span>
-                            ข้อมูลเพิ่มเติม
-                        </h3>
-                        <div className="p-6 bg-orange-50/30 rounded-2xl border border-orange-100 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                            <div className="space-y-2">
-                                <label className="text-sm font-bold text-gray-800">วันเกิด <span className="text-red-500">*</span></label>
-                                <input required type="date" value={dateOfBirth} onChange={handleDobChange} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm cursor-pointer focus:ring-2 focus:ring-orange-200 outline-none transition-all" />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-bold text-gray-800">อายุ (ปี)</label>
-                                <input readOnly type="text" value={age} className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 cursor-not-allowed" placeholder="คำนวณอัตโนมัติ" />
-                            </div>
-                            <div className="space-y-2 md:col-span-2">
-                                <label className="text-sm font-bold text-gray-800">ที่อยู่ <span className="text-red-500">*</span></label>
-                                <textarea required rows={3} value={address} onChange={e => setAddress(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-orange-200 outline-none transition-all"></textarea>
-                            </div>
-                        </div>
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold text-gray-700">เกรดเฉลี่ย <span className="text-red-500">*</span></label>
+                        <input type="number" step="0.01" value={userProfile.gpa} onChange={handleGpaChange} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-blue-100 outline-none font-mono" />
                     </div>
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold text-gray-700">อาจารย์ที่ปรึกษา <span className="text-red-500">*</span></label>
+                        <input type="text" value={userProfile.advisor_name} onChange={(e) => handleProfileChange("advisor_name", e.target.value)} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-blue-100 outline-none" />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold text-gray-700">เบอร์โทรศัพท์ <span className="text-red-500">*</span></label>
+                        <input type="tel" maxLength={10} value={userProfile.phone_number} onChange={handlePhoneChange} placeholder="0xxxxxxxxx" className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-blue-100 outline-none font-mono" />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold text-gray-700">วันเกิด <span className="text-red-500">*</span></label>
+                        <input type="date" value={dateOfBirth} onChange={handleDobChange} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-blue-100 outline-none" />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold text-gray-700">อายุ</label>
+                        <input type="text" readOnly value={age} className="w-full bg-gray-100 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 cursor-not-allowed" />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                        <label className="text-sm font-bold text-gray-700">ที่อยู่ปัจจุบัน <span className="text-red-500">*</span></label>
+                        <textarea rows={2} value={address} onChange={(e) => setAddress(e.target.value)} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-4 focus:ring-blue-100 outline-none resize-none" />
+                    </div>
+                  </div>
+                </div>
 
-                    {/* Part C: รายละเอียดรางวัล (Dynamic) */}
-                    {awardType !== "behavior" && (
-                         <div className="space-y-6 pt-2">
-                             <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                <span className="w-1.5 h-6 bg-purple-600 rounded-full"></span>
-                                รายละเอียดผลงาน
-                             </h3>
-
-                             {awardType === "activity" && (
-                                 <div className="space-y-4 mb-6">
-                                     <label className="text-sm font-bold text-gray-800">เลือกคุณสมบัติ <span className="text-red-500">*</span></label>
-                                     <div className="flex flex-col gap-3">
-                                         {["committee", "competition", "reputation"].map((val, idx) => {
-                                             const isSelected = activityCriteria === val;
-                                             return (
-                                                 <label 
-                                                     key={val} 
-                                                     className={`flex items-start gap-4 p-4 rounded-xl border transition-all cursor-pointer hover:shadow-md ${
-                                                         isSelected ? "bg-purple-50 border-purple-500 shadow-sm" : "bg-white border-gray-200 hover:border-purple-300"
-                                                     }`}
-                                                 >
-                                                     <div className="mt-0.5">
-                                                         <input type="radio" name="activity_criteria" value={val} checked={isSelected} onChange={e => setActivityCriteria(e.target.value)} className="w-5 h-5 text-purple-600 focus:ring-purple-500 border-gray-300 cursor-pointer" />
-                                                     </div>
-                                                     <span className={`text-sm leading-relaxed ${isSelected ? "text-purple-900 font-medium" : "text-gray-600"}`}>
-                                                         {idx === 0 && "เป็นนิสิตที่ดำเนินกิจกรรมและต้องแสดงให้เห็นว่าเมื่อดำเนินกิจกรรมแล้ว ชาวบ้าน ชุมชนในท้องถิ่น หรือผู้เข้าร่วมกิจกรรมได้รับประโยชน์อย่างไรจากการดำเนินกิจกรรมก่อให้เกิดประโยชน์ต่อส่วนรวมและเป็นการสร้างชื่อเสียง เกียรติคุณต่อคณะหรือมหาวิทยาลัยหรือไม่"}
-                                                         {idx === 1 && "เป็นนิสิตที่เข้าร่วมแข่งขันทางวิชาการหรือศิลปวัฒนธรรมระดับอุดมศึกษา ระดับชาติหรือระดับนานาชาติและได้รับรางวัลใดรางวัลหนึ่งจากการแข่งขัน"}
-                                                         {idx === 2 && "เป็นนิสิตที่ดำรงตำแหน่งนายกองค์การบริหาร องค์การนิสิต ประธานสภาผู้แทนนิสิต หรือนายกสโมสรนิสิต (กองกิจการนิสิตเสนอชื่อโดยตำแหน่ง)"}
-                                                     </span>
-                                                 </label>
-                                             );
-                                         })}
-                                     </div>
-                                 </div>
-                             )}
-                             
-                             {awardType === "innovation" && (
-                                <div className="p-4 bg-green-50 border border-green-200 rounded-xl mb-6">
-                                    <label className="flex items-start gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={innovationQual} onChange={e => setInnovationQual(e.target.checked)} className="mt-1 w-5 h-5 text-green-600 rounded border-gray-300 focus:ring-green-500" />
-                                        <span className="text-sm text-green-800 font-medium">ข้าพเจ้าขอรับรองว่า ได้รับรางวัลจากการประกวดหรือการแข่งขันระดับอุดมศึกษา ระดับชาติหรือระดับนานาชาติที่มีหน่วยงานภาครัฐหรือเอกชนเป็นผู้จัดจริง</span>
-                                    </label>
-                                </div>
-                             )}
-
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                               <div className="space-y-2"><label className="text-sm font-bold text-gray-800">วันที่ได้รับรางวัล</label><input required type="date" value={dateReceived} onChange={e => setDateReceived(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-200 outline-none" /></div>
-                               <div className="space-y-2"><label className="text-sm font-bold text-gray-800">ชื่อโครงการ</label><input required type="text" value={projectTitle} onChange={e => setProjectTitle(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-200 outline-none" /></div>
-                               <div className="space-y-2"><label className="text-sm font-bold text-gray-800">ชื่อทีม</label><input required type="text" value={teamName} onChange={e => setTeamName(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-200 outline-none" /></div>
-                               <div className="space-y-2"><label className="text-sm font-bold text-gray-800">รางวัลที่ได้</label><input required type="text" value={prize} onChange={e => setPrize(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-200 outline-none" /></div>
-                               <div className="space-y-2 md:col-span-2"><label className="text-sm font-bold text-gray-800">ผู้จัด</label><input required type="text" value={organizedBy} onChange={e => setOrganizedBy(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-200 outline-none" /></div>
-                             </div>
-                          </div>
-                    )}
-
-                    {/* Part D: เอกสารประกอบ */}
-                    {awardType !== "behavior" && (
-                        <div className="space-y-6 pt-6 border-t border-gray-100">
-                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                <span className="w-1.5 h-6 bg-gray-600 rounded-full"></span>
-                                เอกสารประกอบ
-                            </h3>
-                            
-                            <input type="file" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf" />
-                            
-                            <div 
-                                onClick={() => fileInputRef.current?.click()} 
-                                className="border-2 border-dashed border-gray-300 rounded-xl p-10 flex flex-col items-center justify-center text-center hover:bg-gray-50 hover:border-blue-400 transition-all cursor-pointer bg-white group"
-                            >
-                                <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
-                                    <svg className="w-8 h-8 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
-                                </div>
-                                <p className="text-base text-gray-700 font-semibold group-hover:text-blue-600">คลิกเพื่ออัปโหลดไฟล์ PDF</p>
-                                <p className="text-xs text-gray-400 mt-2">รองรับเฉพาะไฟล์ .pdf ขนาดไม่เกิน 10 MB</p>
-                            </div>
-
-                            {selectedFiles.length > 0 && (
-                                <div className="space-y-3 animate-fade-in">
-                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">ไฟล์ที่เลือก ({selectedFiles.length}):</p>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        {selectedFiles.map((file, index) => (
-                                            <div key={index} className="flex justify-between items-center p-3 bg-green-50 rounded-xl border border-green-200 shadow-sm">
-                                                <div className="flex items-center gap-3 overflow-hidden">
-                                                    <span className="w-8 h-8 bg-green-200 rounded-lg flex items-center justify-center text-green-700 text-xs font-bold shrink-0">PDF</span>
-                                                    <span className="text-sm text-green-900 truncate font-medium">{file.name}</span>
-                                                </div>
-                                                <button type="button" onClick={() => handleRemoveFile(index)} className="text-gray-400 hover:text-red-500 p-1 hover:bg-white rounded transition-colors">
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                                </button>
-                                            </div>
+                {/* 3. Award Details */}
+                {awardType !== "behavior" && (
+                    <div className="bg-white/60 backdrop-blur-sm p-8 rounded-[24px] border border-gray-200 shadow-sm relative overflow-hidden animate-fade-in-up">
+                        <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${awardType === "innovation" ? "from-purple-400 to-pink-500" : "from-orange-400 to-red-500"}`}></div>
+                        <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+                            <span className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm ${awardType === "innovation" ? "bg-purple-600" : "bg-orange-500"}`}>3</span>
+                            {labels.title}
+                        </h3>
+                        
+                        <div className="space-y-6">
+                            {/* Extra options for Activity */}
+                            {awardType === "activity" && (
+                                <div className="space-y-3">
+                                    <label className="text-sm font-bold text-gray-800">เลือกประเภทกิจกรรม <span className="text-red-500">*</span></label>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        {[
+                                            { val: "committee", text: "เป็นนิสิตที่ดำเนินกิจกรรมและต้องแสดงให้เห็นว่าเมื่อดำเนินกิจกรรมแล้ว..." },
+                                            { val: "competition", text: "เข้าร่วมแข่งขันทางวิชาการหรือศิลปวัฒนธรรม..." },
+                                            { val: "reputation", text: "ดำรงตำแหน่งนายกองค์การบริหาร องค์การนิสิต..." }
+                                        ].map((item) => (
+                                            <label key={item.val} className={`flex items-start gap-3 p-4 rounded-xl border transition-all cursor-pointer ${activityCriteria === item.val ? "bg-orange-50 border-orange-300 shadow-sm" : "bg-white border-gray-200 hover:border-orange-200"}`}>
+                                                <input type="radio" name="act_crit" value={item.val} checked={activityCriteria === item.val} onChange={(e) => setActivityCriteria(e.target.value)} className="mt-1 w-4 h-4 text-orange-600 focus:ring-orange-500" />
+                                                <span className="text-sm text-gray-700">{item.text}</span>
+                                            </label>
                                         ))}
                                     </div>
                                 </div>
                             )}
-                        </div>
-                    )}
 
-                    <div className="pt-8 flex justify-end border-t border-gray-100">
-                        <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-3.5 rounded-xl text-base font-bold shadow-lg shadow-blue-200 hover:shadow-xl transition-all active:scale-95 w-full md:w-auto">
-                            ยืนยันการเสนอรายชื่อ
-                        </button>
+                            {/* Extra options for Innovation */}
+                            {awardType === "innovation" && (
+                                <div className="p-4 bg-purple-50 rounded-xl border border-purple-100">
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={innovationQual} onChange={(e) => setInnovationQual(e.target.checked)} className="w-5 h-5 text-purple-600 rounded border-gray-300 focus:ring-purple-500" />
+                                        <span className="text-sm text-purple-900 font-medium">ยืนยันว่าผลงานได้รับรางวัลจากการประกวด/แข่งขัน ระดับชาติหรือนานาชาติ</span>
+                                    </label>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700">{labels.name} <span className="text-red-500">*</span></label>
+                                    <input type="text" value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-opacity-50 focus:ring-indigo-300" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700">{labels.date} <span className="text-red-500">*</span></label>
+                                    <input type="date" value={dateReceived} onChange={(e) => setDateReceived(e.target.value)} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-opacity-50 focus:ring-indigo-300" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700">{labels.role_prize} <span className="text-red-500">*</span></label>
+                                    <input type="text" value={prize} onChange={(e) => setPrize(e.target.value)} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-opacity-50 focus:ring-indigo-300" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-700">{labels.org}</label>
+                                    <input type="text" value={organizedBy} onChange={(e) => setOrganizedBy(e.target.value)} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-opacity-50 focus:ring-indigo-300" />
+                                </div>
+                                <div className="space-y-2 md:col-span-2">
+                                    <label className="text-sm font-bold text-gray-700">{labels.team}</label>
+                                    <input type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="ระบุชื่อทีม (ถ้ามี)" className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-opacity-50 focus:ring-indigo-300" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* 4. Files */}
+                <div className="bg-white/60 backdrop-blur-sm p-8 rounded-[24px] border border-gray-200 shadow-sm animate-fade-in-up animate-delay-300">
+                    <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+                        <span className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm ${awardType === "behavior" ? "bg-gray-600" : "bg-gray-600"}`}>{awardType === "behavior" ? "3" : "4"}</span>
+                        เอกสารประกอบ <span className="text-red-500 text-sm font-normal ml-2">* (PDF เท่านั้น)</span>
+                    </h3>
+                    
+                    <div onClick={() => fileInputRef.current?.click()} className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-all group">
+                        <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4 text-blue-50 group-hover:scale-110 transition-transform">
+                            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        </div>
+                        <span className="font-bold text-gray-700">คลิกเพื่ออัปโหลดไฟล์</span>
+                        <span className="text-sm text-gray-400 mt-1 mb-4">สูงสุด 10MB</span>
+                        
+                        {/* Progress Bar */}
+                        <div className="w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                <span>พื้นที่จัดเก็บ</span>
+                                <span className={fileSizePercentage > 100 ? "text-red-500" : ""}>{formatFileSize(totalFileSize)} / 10 MB</span>
+                            </div>
+                            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div className={`h-full transition-all ${fileSizePercentage > 100 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${Math.min(fileSizePercentage, 100)}%` }}></div>
+                            </div>
+                        </div>
+                        <input type="file" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf" />
                     </div>
 
+                    {/* File List */}
+                    {selectedFiles.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                            {selectedFiles.map((file, idx) => (
+                                <div key={idx} className="flex justify-between items-center p-3 bg-white border border-gray-200 rounded-xl">
+                                    <div className="flex items-center gap-3 overflow-hidden">
+                                        <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded">PDF</span>
+                                        <span className="text-sm text-gray-700 truncate">{file.name}</span>
+                                        <span className="text-xs text-gray-400">({formatFileSize(file.size)})</span>
+                                    </div>
+                                    <button type="button" onClick={() => handleRemoveFile(idx)} className="text-red-400 hover:text-red-600">
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
+
+                {/* Submit Button */}
+                <div className="flex justify-end pt-4 animate-fade-in-up animate-delay-300">
+                    <button type="submit" className="bg-gray-900 hover:bg-black text-white px-10 py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                        ยืนยันการเสนอรายชื่อ
+                    </button>
+                </div>
+
+              </div>
             )}
-        </form>
+          </form>
+        )}
       </div>
     </div>
   );

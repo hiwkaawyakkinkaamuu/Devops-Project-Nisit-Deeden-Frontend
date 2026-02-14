@@ -2,175 +2,483 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ReactNode } from "react";
+import { ReactNode, useState, useEffect } from "react";
+import Swal from "sweetalert2";
+import axios from "axios";
+import { z } from "zod";
+import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/context/AuthContext";
 
-// รวมไอคอนทั้งหมด
-const Icons = {
-  CheckUser: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-  ),
-  History: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
-  ),
-  // ไอคอนนิสิต
-  Badge: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138z" /></svg>
-  ),
-  Track: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-  ),
-  Edit: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-  ),
-  User: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0c0 .884-.5 2-2 2h4c-1.5 0-2-1.116-2-2z" /></svg>
-  ),
-  DocumentCheck: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-  ),
-  UsersGroup: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-  )
-};
+// ==========================================
+// 1. Interfaces & Types
+// ==========================================
 
-// Config เมนู
-type UserRole = "student" | "head_of_department" | "dean" | "associate_dean" | "chairman_of_student_development_committee" | "student_development_committee" | "student_development"; 
+type UserRole = "student" | "head_of_department" | "dean" | "associate_dean" | "chairman_of_student_development_committee" | "student_development_committee" | "student_development" | "admin";
+
+interface UserProfileData {
+  user_id: number;
+  firstname: string;
+  lastname: string;
+  email: string;
+  role_id: number;
+  campus_id: number;
+  image_path?: string;
+  student_data?: {
+    student_number: string;
+    faculty_id?: string;
+    department_id?: string;
+  };
+}
 
 interface MenuItemType {
   href: string;
   label: string;
   icon: ReactNode;
+  isAction?: boolean;
 }
 
-const MENU_CONFIG: Record<UserRole, MenuItemType[]> = {
+interface SidebarProps {
+  isCollapsed: boolean;
+  toggleSidebar: () => void;
+}
+
+// ==========================================
+// 2. Constants & Helpers
+// ==========================================
+
+const getRoleKey = (roleId: number | undefined): UserRole => {
+  switch (roleId) {
+    case 1: return "student";
+    case 2: return "admin";
+    case 3: return "head_of_department";
+    case 4: return "dean";
+    case 5: return "associate_dean";
+    case 6: return "student_development";
+    case 7: return "student_development_committee";
+    case 8: return "chairman_of_student_development_committee";
+    default: return "student";
+  }
+};
+
+const getCampusName = (campusId: number | undefined) => {
+    switch (campusId) {
+        case 1: return "วิทยาเขตบางเขน";
+        case 2: return "วิทยาเขตกำแพงแสน";
+        case 3: return "วิทยาเขตศรีราชา";
+        case 4: return "วิทยาเขตเฉลิมพระเกียรติ จ.สกลนคร";
+        case 5: return "โครงการจัดตั้งวิทยาเขตสุพรรณบุรี";
+        default: return "ไม่ระบุวิทยาเขต";
+    }
+};
+
+const Icons = {
+    CheckUser: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+    History: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>,
+    Badge: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 01-3.138-3.138z" /></svg>,
+    Track: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+    Edit: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
+    User: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0c0 .884-.5 2-2 2h4c-1.5 0-2-1.116-2-2z" /></svg>,
+    DocumentCheck: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>,
+    UsersGroup: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
+    Menu: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>,
+    MenuClose: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>,
+    Logout: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>,
+    Close: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+};
+
+const MENU_CONFIG: Record<string, MenuItemType[]> = {
   student: [
     { href: "/student/student-nomination-form", label: "เสนอรายชื่อนิสิตดีเด่น", icon: Icons.Badge },
     { href: "/student/trace-nomination", label: "ติดตามสถานะ", icon: Icons.Track },
-    { href: "/student/edit-student-nomination-form", label: "แก้ไขข้อมูลการเสนอ", icon: Icons.Edit },
-    { href: "/student/profile", label: "โปรไฟล์ผู้ใช้", icon: Icons.User },
+    { href: "/student/nomination-history", label: "ประวัติการเสนอ", icon: Icons.History },
   ],
-  
   head_of_department: [
     { href: "/head-of-department/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
     { href: "/head-of-department/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
   ],
-  
   dean: [
     { href: "/dean/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
     { href: "/dean/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
   ],
-
   associate_dean: [
     { href: "/associate-dean/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
     { href: "/associate-dean/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
   ],
-
   chairman_of_student_development_committee: [
     { href: "/chairman-of-student-development-committee/consider", label: "รับรองผลการคัดเลือก", icon: Icons.CheckUser }
   ],
-
   student_development_committee: [
-    { href: "/student-development-committee/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser }
+    { href: "/student-development-committee/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
+    { href: "/student-development-committee/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History }
   ],
-
   student_development: [
-    { href: "/student-development/verify-submit", label: "ตรวจสอบความถูกต้องและส่งรายชื่อ", icon: Icons.DocumentCheck },
-    { href: "/student-development/committee-setup", label: "ตั้งค่าและจัดการคณะกรรมการ", icon: Icons.UsersGroup },
+    { href: "/student-development/verify-submit", label: "ตรวจสอบความถูกต้อง", icon: Icons.DocumentCheck },
     { href: "/student-development/history-verify-submit", label: "ประวัติการเเก้ไขประเภท", icon: Icons.History },
+    { href: "/student-development/committee-setup", label: "จัดการคณะกรรมการ", icon: Icons.UsersGroup },
     { href: "/student-development/manage-account", label: "จัดการบัญชีผู้ใช้", icon: Icons.DocumentCheck },
-    { href: "/student-development/master-data", label: "จัดการคณะเเละสาขาวิชา", icon: Icons.UsersGroup },
-    { href: "/student-development/setting", label: "ตั้งค่าและจัดการเวลาเปิด-ปิด", icon: Icons.History },
+    { href: "/student-development/master-data", label: "จัดการคณะเเละสาขา", icon: Icons.UsersGroup },
+    { href: "/student-development/setting", label: "ตั้งค่าช่วงเวลารับสมัคร", icon: Icons.History },
   ],
-
+  admin: [
+    { href: "/admin/users", label: "จัดการผู้ใช้งานทั้งหมด", icon: Icons.UsersGroup },
+    { href: "/admin/system-log", label: "Log การทำงาน", icon: Icons.History },
+  ]
 };
 
-// Component Sidebar หลัก
-export default function Sidebar({ role = "student" }: { role?: UserRole }) {
-  const pathname = usePathname();
-  const menuItems = MENU_CONFIG[role] || [];
+// ==========================================
+// 3. Sub-Components (Enhanced Design)
+// ==========================================
 
-  const isActive = (path: string) => {
-      if (path === "/" && pathname !== "/") return false;
-      return pathname === path || pathname.startsWith(path + "/");
-  };
+function MenuItem({ href, label, icon, active, collapsed, onClick, index }: any) {
+  return (
+    <Link href={href} onClick={onClick} className="relative block mb-1">
+      <motion.div
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: index * 0.05, duration: 0.3 }}
+        className={`
+            group flex items-center px-3 py-3 rounded-2xl text-sm font-medium transition-all duration-300 cursor-pointer overflow-hidden relative
+            ${active 
+                ? 'text-emerald-700 font-bold' 
+                : 'text-gray-500 hover:text-emerald-700 hover:bg-emerald-50/50'
+            }
+            ${collapsed ? 'justify-center' : 'gap-3'}
+        `}
+        title={collapsed ? label : ""}
+      >
+        {/* Active Indicator Background (Floating Effect) */}
+        {active && (
+          <motion.div
+            layoutId="active-menu-bg"
+            className="absolute inset-0 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-100/50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          />
+        )}
+
+        {/* Active Left Pill */}
+        {active && (
+            <motion.div 
+                layoutId="active-pill"
+                className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-emerald-500 rounded-r-full"
+            />
+        )}
+
+        {/* Icon with Hover Effect */}
+        <span className={`relative z-10 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 ${active ? 'text-emerald-600' : 'text-gray-400 group-hover:text-emerald-600'}`}>
+          {icon}
+        </span>
+
+        {/* Label */}
+        {!collapsed && (
+          <span className="relative z-10 truncate tracking-wide">{label}</span>
+        )}
+      </motion.div>
+    </Link>
+  )
+}
+
+const ProfileSkeleton = ({ isCollapsed }: { isCollapsed: boolean }) => (
+  <div className={`flex items-center gap-3 animate-pulse ${isCollapsed ? 'justify-center' : 'w-full'}`}>
+    <div className="w-10 h-10 bg-gray-200 rounded-full shrink-0"></div>
+    {!isCollapsed && (
+      <div className="flex-1 space-y-2 min-w-0">
+        <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+        <div className="h-2 bg-gray-200 rounded w-1/2"></div>
+      </div>
+    )}
+  </div>
+);
+
+// ✅ Profile Modal: สวยงามขึ้น + Animation สมูท
+function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () => void; data: UserProfileData | null }) {
+  if (!isOpen || !data) return null;
+
+  const roleName = getRoleKey(data.role_id).replace(/_/g, ' ').toUpperCase();
+  const campusName = getCampusName(data.campus_id);
 
   return (
-    <aside className="w-[300px] bg-white h-screen fixed left-0 top-0 flex flex-col z-30 border-r border-gray-100 shadow-[0_0_15px_rgba(0,0,0,0.05)] font-sans">
-      
-      {/* Logo */}
-      <div className="p-6 pb-4">
-          <div className="flex items-center gap-3">
-              <div className="text-green-600"> 
-                  <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M20 0L37.3205 10V30L20 40L2.67949 30V10L20 0Z" fill="#22C55E" fillOpacity="0.2"/>
-                      <path d="M20 5L32.9904 12.5V27.5L20 35L7.00962 27.5V12.5L20 5Z" fill="#22C55E"/>
-                      <text x="50%" y="54%" dominantBaseline="middle" textAnchor="middle" fill="white" fontSize="9" fontWeight="bold">NDD</text>
-                  </svg>
-              </div>
-              <div>
-                  <h1 className="font-bold text-base text-gray-800 leading-tight">ระบบนิสิตดีเด่น</h1>
-                  <p className="text-[11px] text-gray-400 mt-0.5 capitalize">
-                    {role === 'student' ? 'Student Portal' : 
-                    role === 'head_of_department' ? 'Head of Department' : role === 'associate_dean' ? 'Associate Dean' : role === 'student_development' ? 'Student Development Division' : role === 'dean' ? 'Dean of Faculty' : role === 'chairman_of_student_development_committee' ? 'Committee Chairperson' : role === 'student_development_committee' ? 'Selection Committee' : role}
-                  </p>
-              </div>
-          </div>
-      </div>
+    <AnimatePresence>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            {/* Backdrop Blur */}
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-slate-900/30 backdrop-blur-md"
+                onClick={onClose}
+            />
+            
+            {/* Modal Card */}
+            <motion.div
+                initial={{ scale: 0.85, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                className="relative bg-white rounded-[32px] shadow-2xl w-full max-w-sm overflow-hidden z-10 border border-white/50"
+            >
+                {/* Header with Pattern */}
+                <div className="h-32 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-full opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+                    <button 
+                        onClick={onClose} 
+                        className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/40 text-white rounded-full transition-all backdrop-blur-sm"
+                    >
+                        {Icons.Close}
+                    </button>
+                </div>
 
-      {/* Menu Items */}
-      <nav className="flex-1 px-4 space-y-1.5 mt-2">
-          {menuItems.map((item, index) => (
-              <MenuItem 
-                  key={index}
-                  href={item.href} 
-                  label={item.label} 
-                  active={isActive(item.href)} 
-                  icon={item.icon} 
-              />
-          ))}
-      </nav>
+                <div className="px-8 pb-8 relative">
+                    {/* Avatar with Ring */}
+                    <div className="-mt-14 mb-5 flex justify-center">
+                        <div className="w-28 h-28 rounded-full p-1.5 bg-white shadow-xl">
+                            <div className="w-full h-full rounded-full bg-gray-50 overflow-hidden relative border border-gray-100">
+                                {data.image_path ? (
+                                    <img src={data.image_path} alt="Profile" className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center bg-emerald-50 text-emerald-600 text-4xl font-bold">
+                                        {data.firstname ? data.firstname.charAt(0) : "U"}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Main Info */}
+                    <div className="text-center mb-8">
+                        <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">{data.firstname} {data.lastname}</h2>
+                        <div className="flex justify-center gap-2 mt-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full">
+                                {roleName}
+                            </span>
+                        </div>
+                        <p className="mt-3 text-sm text-gray-500 font-medium">{campusName}</p>
+                    </div>
 
-      {/* User Profile */}
-      <div className="p-4 mt-auto border-t border-gray-50">
-          <div className="bg-gray-50 rounded-xl p-3 flex items-center gap-3 border border-transparent hover:border-gray-200 hover:shadow-sm transition-all cursor-pointer group">
-              <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-400 overflow-hidden group-hover:bg-white transition-all shadow-sm">
-                   <svg className="w-12 h-12 -mt-2" fill="currentColor" viewBox="0 0 24 24"><path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-900 truncate">ชื่อ นามสกุล</p>
-                  <p className="text-[11px] text-gray-500 capitalize">{role}</p>
-              </div>
-
-              <Link href="/" className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-all" title="ออกจากระบบ">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                  </svg>
-              </Link>
-          </div>
-      </div>
-    </aside>
+                    {/* Info Card List */}
+                    <div className="space-y-4">
+                        {/* Email */}
+                        <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
+                            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                            </div>
+                            <div className="overflow-hidden">
+                                <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wide">อีเมลมหาวิทยาลัย</p>
+                                <p className="text-sm text-gray-800 font-bold truncate">{data.email}</p>
+                            </div>
+                        </div>
+                        
+                        {/* Student ID */}
+                        {data.student_data?.student_number && (
+                            <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
+                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100">
+                                    {Icons.User}
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wide">รหัสนิสิต</p>
+                                    <p className="text-sm text-gray-800 font-mono font-bold tracking-wider">{data.student_data.student_number}</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </motion.div>
+        </div>
+    </AnimatePresence>
   );
 }
 
-// Helper MenuItem
-function MenuItem({ href, label, icon, active }: any) {
-    return (
-        <Link 
-            href={href} 
-            className={`group flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                active 
-                ? 'bg-[#95F2AD] text-green-900 shadow-sm' 
-                : 'text-gray-500 hover:text-green-700 hover:bg-green-50'
-            }`}
-        >
-            <span className={`transition-colors duration-200 ${
-                active 
-                ? 'text-green-900' 
-                : 'text-gray-400 group-hover:text-green-700'
-            }`}>
-                {icon}
-            </span>
-            {label}
-        </Link>
-    )
+// ==========================================
+// 4. Main Sidebar Component
+// ==========================================
+
+export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
+  const pathname = usePathname();
+  const { user, logout } = useAuth();
+  const [fullProfile, setFullProfile] = useState<UserProfileData | null>(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // คำนวณ Role และเมนู
+  const roleKey = getRoleKey(user?.role_id);
+  const menuItems = MENU_CONFIG[roleKey] || [];
+
+  const isActive = (path: string) => {
+    return pathname === path || (path !== "/" && pathname.startsWith(path));
+  };
+
+  // Fetch Full Profile
+  useEffect(() => {
+    const fetchFullProfile = async () => {
+        if (!user) return;
+        
+        setLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+            
+            const response = await axios.get(`${apiUrl}/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if(response.data && response.data.user) {
+                setFullProfile(response.data.user);
+            }
+        } catch (error) {
+            console.error("Failed to fetch full profile:", error);
+            // @ts-ignore
+            setFullProfile(user); 
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    fetchFullProfile();
+  }, [user]);
+
+  const confirmLogout = () => {
+    Swal.fire({
+      title: 'ยืนยันการออกจากระบบ?',
+      text: "คุณต้องการออกจากระบบใช่หรือไม่",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#afafaf',
+      confirmButtonText: 'ออกจากระบบ',
+      cancelButtonText: 'ยกเลิก',
+      customClass: {
+         popup: 'rounded-3xl shadow-2xl font-sans',
+         title: 'text-xl font-bold text-gray-800',
+         confirmButton: 'rounded-xl px-6 py-3 font-bold shadow-lg shadow-red-200 hover:shadow-red-300 transition-all',
+         cancelButton: 'rounded-xl px-6 py-3 font-bold text-gray-600 hover:bg-gray-200 transition-all'
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        logout();
+      }
+    });
+  };
+
+  return (
+    <>
+      <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} data={fullProfile} />
+
+      <motion.aside
+        initial={false}
+        animate={{ width: isCollapsed ? 90 : 280 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30, mass: 0.8 }}
+        className="bg-white h-screen fixed left-0 top-0 flex flex-col z-50 border-r border-gray-100 shadow-[4px_0_40px_rgba(0,0,0,0.03)] overflow-hidden"
+      >
+        {/* Header Section */}
+        <div className="h-[90px] flex items-center justify-between px-6 shrink-0 relative bg-gradient-to-b from-white to-gray-50/50">
+          <AnimatePresence>
+            {!isCollapsed && (
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10, transition: { duration: 0.1 } }}
+                className="flex items-center gap-3 overflow-hidden whitespace-nowrap"
+              >
+                {/* Logo Icon */}
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-200">
+                   <svg width="24" height="24" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M20 0L37.3205 10V30L20 40L2.67949 30V10L20 0Z" fill="white" fillOpacity="0.2"/>
+                      <path d="M20 5L32.9904 12.5V27.5L20 35L7.00962 27.5V12.5L20 5Z" fill="white"/>
+                   </svg>
+                </div>
+                <div>
+                   <h1 className="font-black text-base text-gray-800 tracking-tight leading-none">ระบบนิสิตดีเด่น</h1>
+                   <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">มหาวิทยาลัยเกษตรศาสตร์</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <button
+            onClick={toggleSidebar}
+            className={`p-2.5 rounded-xl text-gray-400 hover:bg-white hover:text-emerald-600 hover:shadow-md transition-all absolute ${isCollapsed ? 'left-1/2 -translate-x-1/2' : 'right-4'}`}
+          >
+            {isCollapsed ? Icons.Menu : Icons.MenuClose}
+          </button>
+        </div>
+
+        {/* Navigation Menu */}
+        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
+          {menuItems.map((item, index) => (
+            <MenuItem
+              key={item.href}
+              index={index}
+              href={item.href}
+              label={item.label}
+              active={isActive(item.href)}
+              icon={item.icon}
+              collapsed={isCollapsed}
+              onClick={item.isAction ? (e: any) => { e.preventDefault(); setIsProfileOpen(true); } : undefined}
+            />
+          ))}
+        </nav>
+
+        {/* User Profile Footer */}
+        <div className="p-5 border-t border-gray-100 bg-gray-50/30 z-10 shrink-0">
+          <div
+            onClick={() => !loading && setIsProfileOpen(true)}
+            className={`
+                group relative flex items-center rounded-2xl cursor-pointer transition-all duration-300 border
+                ${isCollapsed 
+                    ? 'justify-center p-3 bg-white border-gray-200 hover:border-emerald-300' 
+                    : 'p-3 bg-white border-gray-200 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-100/50 hover:-translate-y-1'
+                }
+            `}
+          >
+            {loading ? (
+              <ProfileSkeleton isCollapsed={isCollapsed} />
+            ) : (
+              <>
+                <div className="relative shrink-0">
+                   <div className="w-10 h-10 rounded-full p-[2px] bg-gradient-to-br from-emerald-400 to-cyan-500 shadow-sm">
+                      <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
+                          {fullProfile?.image_path ? (
+                              <img src={fullProfile.image_path} alt="User" className="w-full h-full object-cover" />
+                          ) : (
+                              <span className="text-sm font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-500 to-cyan-600">
+                                {fullProfile?.firstname?.charAt(0) || 'U'}
+                              </span>
+                          )}
+                      </div>
+                   </div>
+                   <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
+                </div>
+
+                {!isCollapsed && (
+                  <motion.div 
+                    initial={{ opacity: 0, width: 0 }} 
+                    animate={{ opacity: 1, width: "auto" }} 
+                    className="ml-3 flex-1 min-w-0"
+                  >
+                    <p className="text-sm font-bold text-gray-700 truncate group-hover:text-emerald-700 transition-colors">
+                      {fullProfile?.firstname} {fullProfile?.lastname}
+                    </p>
+                    <p className="text-[10px] text-gray-400 truncate font-bold uppercase tracking-wider">
+                      {roleKey.replace(/_/g, ' ')}
+                    </p>
+                  </motion.div>
+                )}
+
+                {!isCollapsed && (
+                   <button 
+                      onClick={(e) => { e.stopPropagation(); confirmLogout(); }}
+                      className="ml-1 p-2 rounded-xl text-gray-300 hover:bg-red-50 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                      title="ออกจากระบบ"
+                   >
+                     {Icons.Logout}
+                   </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </motion.aside>
+    </>
+  );
 }

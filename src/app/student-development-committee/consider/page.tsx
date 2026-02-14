@@ -1,10 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import NominationDetailModal from "../../../components/nomination-detail-modal"; 
+import { useState, useEffect, useMemo } from "react";
+import NominationDetailModal from "@/components/nomination-detail-modal"; 
+import Swal from "sweetalert2"; 
+import axios from "axios";
 
-type VoteType = "approve" | "reject" | "abstain" | null;
+// ==========================================
+// 0. Configuration & Service Layer
+// ==========================================
 
+const USE_MOCK_DATA = true; // Set FALSE to use Real API
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+// --- Interfaces ---
 interface FileResponse {
   file_dir_id: number;
   file_name: string;
@@ -34,7 +42,9 @@ interface CreativityDetail {
   activity_category: string;
 }
 
-interface GoodBehaviorDetail {}
+interface GoodBehaviorDetail {
+   behavior_desc?: string;
+}
 
 interface Nomination {
   form_id: number;
@@ -48,7 +58,7 @@ interface Nomination {
   campus_id: number;
   academic_year: number;
   semester: number;
-  form_status_id: number;
+  form_status_id: number; 
   award_type_id: number;
   award_type_name: string;
   created_at: string;
@@ -61,7 +71,6 @@ interface Nomination {
   date_of_birth: string;
   detail?: ExtracurricularDetail | CreativityDetail | GoodBehaviorDetail;
   files?: FileResponse[];
-  my_vote?: VoteType; 
 }
 
 interface MasterFaculty {
@@ -75,454 +84,598 @@ interface MasterDepartment {
   faculty_id: number;
 }
 
-// Mockup
-const MOCK_FACULTIES: MasterFaculty[] = [
-    { faculty_id: 1, faculty_name: "คณะวิทยาศาสตร์" },
-    { faculty_id: 2, faculty_name: "คณะวิศวกรรมศาสตร์" },
-    { faculty_id: 3, faculty_name: "คณะบริหารธุรกิจ" },
-    { faculty_id: 4, faculty_name: "คณะสังคมศาสตร์" },
-    { faculty_id: 5, faculty_name: "คณะเกษตร" },
-    { faculty_id: 6, faculty_name: "คณะศึกษาศาสตร์" }
+// --- Mock Data ---
+const MOCK_NOMINATIONS: Nomination[] = [
+    { 
+        form_id: 1, student_id: 101, student_number: "6610400001", student_firstname: "สมชาย", student_lastname: "รักเรียน", 
+        student_year: 1, form_status_id: 1, created_at: "2026-02-10T09:00:00Z", latest_update: "2026-02-10T09:00:00Z",
+        award_type_id: 1, award_type_name: "ด้านความประพฤติดี", faculty_id: 1, department_id: 10, campus_id: 1, academic_year: 2569, semester: 1,
+        advisor_name: "ดร.วิชัย", gpa: 3.50, phone_number: "0812345678", email: "somchai@ku.th", address: "กทม.", date_of_birth: "2003-01-01",
+        detail: { behavior_desc: "เป็นจิตอาสาช่วยเหลืองานมหาวิทยาลัยอย่างสม่ำเสมอ..." } as GoodBehaviorDetail, files: []
+    },
+    { 
+        form_id: 2, student_id: 102, student_number: "6610400002", student_firstname: "กานดา", student_lastname: "มีสุข", 
+        student_year: 2, form_status_id: 1, created_at: "2026-02-09T14:30:00Z", latest_update: "2026-02-09T14:30:00Z",
+        award_type_id: 2, award_type_name: "ด้านความคิดสร้างสรรค์และนวัตกรรม", faculty_id: 2, department_id: 20, campus_id: 1, academic_year: 2569, semester: 1,
+        advisor_name: "ผศ.ดร.สมศรี", gpa: 3.85, phone_number: "0898765432", email: "kanda@ku.th", address: "นนทบุรี", date_of_birth: "2002-05-20",
+        detail: { project_title: "AI for Farmers", prize: "Gold Medal", organized_by: "NSTDA", competition_level: "National", date_received: "2025-12-01", team_name: "AgriTech", activity_category: "Innovation" } as CreativityDetail,
+        files: [{ file_dir_id: 1, file_name: "project_poster.pdf", file_type: "application/pdf", file_size: 2048, file_path: "#" }]
+    },
+    { 
+        form_id: 3, student_id: 103, student_number: "6610400003", student_firstname: "ปิติ", student_lastname: "ยินดี", 
+        student_year: 3, form_status_id: 1, created_at: "2026-02-08T11:15:00Z", latest_update: "2026-02-08T11:15:00Z",
+        award_type_id: 3, award_type_name: "ด้านกิจกรรมเสริมหลักสูตร", faculty_id: 3, department_id: 30, campus_id: 1, academic_year: 2569, semester: 1,
+        advisor_name: "อ.มานะ", gpa: 3.20, phone_number: "0811122233", email: "piti@ku.th", address: "ปทุมธานี", date_of_birth: "2001-11-15",
+        detail: { project_title: "KU Volunteer Camp", prize: "Outstanding", organized_by: "KU", competition_level: "University", date_received: "2025-10-20", team_name: "-", qualification_type: "Leader", activity_category: "Social" } as ExtracurricularDetail,
+        files: [{ file_dir_id: 2, file_name: "cert.pdf", file_type: "application/pdf", file_size: 1024, file_path: "#" }]
+    },
+    { 
+        form_id: 4, student_id: 104, student_number: "6610400004", student_firstname: "มานี", student_lastname: "ใจผ่อง", 
+        student_year: 4, form_status_id: 1, created_at: "2026-02-08T10:00:00Z", latest_update: "2026-02-08T10:00:00Z",
+        award_type_id: 1, award_type_name: "ด้านความประพฤติดี", faculty_id: 4, department_id: 40, campus_id: 1, academic_year: 2569, semester: 1,
+        advisor_name: "ดร.ชูใจ", gpa: 3.90, phone_number: "0855566677", email: "manee@ku.th", address: "กทม.", date_of_birth: "2000-08-08",
+        detail: { behavior_desc: "เป็นผู้นำเชียร์และช่วยงานคณะ..." } as GoodBehaviorDetail, files: []
+    },
+    { 
+        form_id: 5, student_id: 105, student_number: "6610400005", student_firstname: "วีระ", student_lastname: "กล้าหาญ", 
+        student_year: 2, form_status_id: 1, created_at: "2026-02-07T16:45:00Z", latest_update: "2026-02-07T16:45:00Z",
+        award_type_id: 2, award_type_name: "ด้านความคิดสร้างสรรค์และนวัตกรรม", faculty_id: 1, department_id: 10, campus_id: 1, academic_year: 2569, semester: 1,
+        advisor_name: "ผศ.ดร.วิชัย", gpa: 3.65, phone_number: "0899988877", email: "weera@ku.th", address: "นนทบุรี", date_of_birth: "2002-12-12",
+        detail: { project_title: "Smart Trash Bin", prize: "Silver Medal", organized_by: "Gov Tech", competition_level: "National", date_received: "2025-11-15", team_name: "EcoTeam", activity_category: "Environment" } as CreativityDetail,
+        files: []
+    },
+    { 
+        form_id: 6, student_id: 106, student_number: "6610400006", student_firstname: "สุดา", student_lastname: "งามตา", 
+        student_year: 1, form_status_id: 1, created_at: "2026-02-06T08:30:00Z", latest_update: "2026-02-06T08:30:00Z",
+        award_type_id: 3, award_type_name: "ด้านกิจกรรมเสริมหลักสูตร", faculty_id: 2, department_id: 20, campus_id: 1, academic_year: 2569, semester: 1,
+        advisor_name: "อ.สมยศ", gpa: 3.15, phone_number: "0877766655", email: "suda@ku.th", address: "ปทุมธานี", date_of_birth: "2003-03-03",
+        detail: { project_title: "Music Contest", prize: "Winner", organized_by: "Music Assoc", competition_level: "Regional", date_received: "2025-09-09", team_name: "The Band", qualification_type: "Contestant", activity_category: "Arts" } as ExtracurricularDetail,
+        files: [{ file_dir_id: 3, file_name: "award.jpg", file_type: "image/jpeg", file_size: 500, file_path: "#" }]
+    },
+    { 
+        form_id: 7, student_id: 107, student_number: "6610400007", student_firstname: "อำพล", student_lastname: "ลำพูน", 
+        student_year: 3, form_status_id: 1, created_at: "2026-02-05T13:20:00Z", latest_update: "2026-02-05T13:20:00Z",
+        award_type_id: 1, award_type_name: "ด้านความประพฤติดี", faculty_id: 3, department_id: 30, campus_id: 1, academic_year: 2569, semester: 1,
+        advisor_name: "ดร.นิภา", gpa: 3.40, phone_number: "0822233344", email: "ampol@ku.th", address: "กทม.", date_of_birth: "2001-07-07",
+        detail: { behavior_desc: "อุทิศตนเพื่อสังคม..." } as GoodBehaviorDetail, files: []
+    }
 ];
 
-const MOCK_DEPARTMENTS: MasterDepartment[] = [
-    { department_id: 10, department_name: "ภาควิชาวิทยาการคอมพิวเตอร์", faculty_id: 1 },
-    { department_id: 11, department_name: "ภาควิชาเคมี", faculty_id: 1 },
-    { department_id: 20, department_name: "ภาควิชาวิศวกรรมไฟฟ้า", faculty_id: 2 },
-    { department_id: 30, department_name: "ภาควิชาการตลาด", faculty_id: 3 },
-    { department_id: 40, department_name: "ภาควิชารัฐศาสตร์", faculty_id: 4 },
-    { department_id: 50, department_name: "ภาควิชาพืชไร่", faculty_id: 5 },
-    { department_id: 60, department_name: "ภาควิชาพลศึกษา", faculty_id: 6 }
+// --- Service Logic ---
+const committeeService = {
+  getNominations: async (token: string | null, params: Record<string, string>) => {
+    if (USE_MOCK_DATA) {
+      await new Promise(r => setTimeout(r, 800)); // Simulate Delay
+      
+      // Mock Filtering Logic
+      let filtered = MOCK_NOMINATIONS;
+      if (params.q) {
+        const lower = params.q.toLowerCase();
+        filtered = filtered.filter(i => 
+            i.student_firstname.toLowerCase().includes(lower) || 
+            i.student_lastname.toLowerCase().includes(lower) || 
+            i.student_number.includes(lower)
+        );
+      }
+      if (params.award_type) {
+        filtered = filtered.filter(i => i.award_type_name === params.award_type);
+      }
+      if (params.student_year) {
+        filtered = filtered.filter(i => i.student_year.toString() === params.student_year);
+      }
+      return filtered;
+
+    } else {
+      // Real API Call
+      try {
+        const response = await axios.get(`${API_BASE_URL}/api/committee/nominations`, {
+          params: { ...params, status_id: 1 },
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        return response.data.data || [];
+      } catch (error) {
+        throw error;
+      }
+    }
+  },
+
+  submitVote: async (token: string | null, payload: { votes: Array<{ form_id: number, vote_type: string, reason: string }> }) => {
+    if (USE_MOCK_DATA) {
+      await new Promise(r => setTimeout(r, 800)); // Simulate Delay
+      return { success: true, message: "Mock vote submitted" };
+    } else {
+      // Real API Call
+      const response = await axios.post(`${API_BASE_URL}/api/committee/vote`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    }
+  }
+};
+
+// ==========================================
+// 1. Static Data
+// ==========================================
+
+const ITEMS_PER_PAGE = 6;
+
+const STATIC_FACULTIES: MasterFaculty[] = [
+  { faculty_id: 1, faculty_name: "คณะวิทยาศาสตร์" },
+  { faculty_id: 2, faculty_name: "คณะวิศวกรรมศาสตร์" },
+  { faculty_id: 3, faculty_name: "คณะเกษตร" },
+  { faculty_id: 4, faculty_name: "คณะบริหารธุรกิจ" }
 ];
 
-// Main Component
+const STATIC_DEPARTMENTS: MasterDepartment[] = [
+  { department_id: 10, department_name: "วิทยาการคอมพิวเตอร์", faculty_id: 1 },
+  { department_id: 20, department_name: "วิศวกรรมไฟฟ้า", faculty_id: 2 },
+  { department_id: 30, department_name: "พืชไร่", faculty_id: 3 },
+  { department_id: 40, department_name: "การตลาด", faculty_id: 4 }
+];
+
+// ==========================================
+// 2. Components: Skeleton Loading
+// ==========================================
+
+const TableSkeleton = () => (
+  <>
+    {[1, 2, 3, 4, 5, 6].map((i) => (
+      <tr key={i} className="animate-pulse border-b border-gray-100">
+        <td className="p-4"><div className="h-4 bg-gray-200 rounded w-32"></div></td>
+        <td className="p-4"><div className="h-4 bg-gray-200 rounded w-24 mx-auto"></div></td>
+        <td className="p-4"><div className="h-4 bg-gray-200 rounded w-16 mx-auto"></div></td>
+        <td className="p-4"><div className="h-4 bg-gray-200 rounded w-40 mx-auto"></div></td>
+        <td className="p-4"><div className="h-4 bg-gray-200 rounded w-24 mx-auto"></div></td>
+        <td className="p-4"><div className="h-6 bg-gray-200 rounded-full w-20 mx-auto"></div></td>
+        <td className="p-4"><div className="h-8 w-8 bg-gray-200 rounded-full mx-auto"></div></td>
+      </tr>
+    ))}
+  </>
+);
+
+// ==========================================
+// 3. Main Component
+// ==========================================
+
 export default function CommitteeVotePage() {
-  const [nominations, setNominations] = useState<Nomination[]>([]);
-  const [candidates, setCandidates] = useState<Nomination[]>([]); // ใช้ state นี้เป็นหลัก
-  const [masterFaculties, setMasterFaculties] = useState<MasterFaculty[]>(MOCK_FACULTIES);
-  const [masterDepartments, setMasterDepartments] = useState<MasterDepartment[]>(MOCK_DEPARTMENTS);
-
+  
+  // --- UI & Data States ---
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [items, setItems] = useState<Nomination[]>([]);
+  
+  // --- Modal States ---
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [modalData, setModalData] = useState<Nomination | null>(null);
 
+  // --- Reject Modal States ---
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  
+  // --- Filter & Search States ---
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
-  const [filterDateText, setFilterDateText] = useState("");
+  const [filterDate, setFilterDate] = useState(""); 
   const [filterYear, setFilterYear] = useState("");
-  const [filterVoteStatus, setFilterVoteStatus] = useState<string>(""); 
 
-  const [sortConfig, setSortConfig] = useState<{ 
-      key: keyof Nomination | 'award_type_name' | 'my_vote' | null, 
-      direction: 'asc' | 'desc' | 'behavior' | 'innovation' | 'activity' | 'approve' | 'reject' | 'abstain' | null 
-  }>({ key: null, direction: null });
-
+  // --- Sort & Pagination States ---
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6; 
+  const [sortConfig, setSortConfig] = useState<{ 
+      key: keyof Nomination | 'award_type_name' | null, 
+      direction: 'asc' | 'desc' | null 
+  }>({ key: 'created_at', direction: 'desc' });
 
-  // Helpers
-  const formatDateAD = (isoDate: string) => {
-      if (!isoDate) return "-";
-      const date = new Date(isoDate);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${day}/${month}/${year}`;
+  // --- Reset Pagination ---
+  useEffect(() => { 
+      setCurrentPage(1); 
+      setSelectedId(null); 
+  }, [searchTerm, filterCategory, filterDate, filterYear]);
+
+  // --- Helpers ---
+  const formatDateTh = (isoDate: string) => {
+    if (!isoDate) return "-";
+    const date = new Date(isoDate);
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' });
   };
 
-  const getFacultyName = (id: number) => {
-      const f = masterFaculties.find(i => i.faculty_id === id);
-      return f ? f.faculty_name : id;
-  };
+  // ==========================================
+  // 4. Effects (Fetch Data using Service)
+  // ==========================================
 
-  useEffect(() => { setCurrentPage(1); }, [searchTerm, filterCategory, filterVoteStatus]);
-
-  // Fetch Data
   useEffect(() => {
+    let isMounted = true;
     const fetchData = async () => {
       setLoading(true);
+      
       try {
         const token = localStorage.getItem("accessToken");
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-        
-        const params = new URLSearchParams();
-        if (searchTerm) params.append("q", searchTerm);
-        if (filterCategory) params.append("award_type", filterCategory);
+        const params: Record<string, string> = {};
+        if (searchTerm) params.q = searchTerm;
+        if (filterCategory) params.award_type = filterCategory;
+        if (filterYear) params.student_year = filterYear;
 
-        // Try Fetching from API
-        const [resNominations, resFaculties, resDepartments] = await Promise.all([
-            fetch(`${apiUrl}/api/committee/nominations?${params.toString()}`, {
-                method: "GET",
-                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
-            }),
-            fetch(`${apiUrl}/api/master/faculties`, { headers: { "Authorization": `Bearer ${token}` } }),
-            fetch(`${apiUrl}/api/master/departments`, { headers: { "Authorization": `Bearer ${token}` } })
-        ]);
+        const data = await committeeService.getNominations(token, params);
 
-        if (resNominations.ok) {
-            const data = await resNominations.json();
-            setCandidates(data.data || []);
-        } else {
-            throw new Error("Nominations API Failed");
-        }
-
-        if (resFaculties.ok) {
-            const data = await resFaculties.json();
-            if (data.data?.length > 0) setMasterFaculties(data.data);
-        }
-        if (resDepartments.ok) {
-            const data = await resDepartments.json();
-            if (data.data?.length > 0) setMasterDepartments(data.data);
+        if (isMounted) {
+            setItems(data);
         }
 
       } catch (error) {
-        console.warn("Fetch Error (Using Mockup Data):", error);
-
-        // Mockup Data
-        setCandidates([
-            { 
-                form_id: 1, student_id: 101, student_number: "66104524665", 
-                student_firstname: "สมชาย", student_lastname: "ใจดี", 
-                student_year: 1, form_status_id: 1, created_at: "2026-01-15T10:00:00Z", latest_update: "2026-01-15T10:00:00Z",
-                award_type_id: 1, award_type_name: "ด้านความประพฤติดี", 
-                faculty_id: 1, department_id: 10, campus_id: 1, academic_year: 2026, semester: 1,
-                advisor_name: "ดร. สมหญิง", gpa: 3.75, phone_number: "0812345678", email: "somchai@ku.th", address: "หอพักใน", date_of_birth: "2002-01-01T00:00:00Z",
-                detail: {}, files: [{ file_dir_id: 1, file_name: "transcript.pdf", file_type: "application/pdf", file_size: 1024, file_path: "#" }],
-                my_vote: null
-            },
-            { 
-                form_id: 2, student_id: 102, student_number: "66104524885", 
-                student_firstname: "สมหญิง", student_lastname: "รักเรียน", 
-                student_year: 1, form_status_id: 1, created_at: "2026-01-16T09:00:00Z", latest_update: "2026-01-16T09:00:00Z",
-                award_type_id: 1, award_type_name: "ด้านความประพฤติดี", 
-                faculty_id: 2, department_id: 20, campus_id: 1, academic_year: 2026, semester: 1,
-                advisor_name: "อ. สมศรี", gpa: 3.80, phone_number: "0891234567", email: "ying@ku.th", address: "กทม.", date_of_birth: "2002-02-02T00:00:00Z",
-                detail: {}, files: [],
-                my_vote: 'approve'
-            },
-            { 
-                form_id: 3, student_id: 103, student_number: "6510409999", 
-                student_firstname: "เก่ง", student_lastname: "กล้า", 
-                student_year: 2, form_status_id: 1, created_at: "2026-01-15T14:30:00Z", latest_update: "2026-01-15T14:30:00Z",
-                award_type_id: 2, award_type_name: "ด้านความคิดสร้างสรรค์และนวัตกรรม", 
-                faculty_id: 2, department_id: 11, campus_id: 1, academic_year: 2026, semester: 1,
-                advisor_name: "ดร. สมชาย", gpa: 3.50, phone_number: "0811112222", email: "keng@ku.th", address: "นนทบุรี", date_of_birth: "2002-03-03T00:00:00Z",
-                detail: {
-                    project_title: "Smart Home AI", team_name: "AI Team", prize: "Gold Medal", 
-                    organized_by: "Google", competition_level: "International", activity_category: "Innovation",
-                    date_received: "2023-12-01T00:00:00Z"
-                } as CreativityDetail,
-                files: [{ file_dir_id: 2, file_name: "project.pdf", file_type: "application/pdf", file_size: 2048, file_path: "#" }],
-                my_vote: 'reject'
-            },
-            { 
-                form_id: 4, student_id: 104, student_number: "6710403333", 
-                student_firstname: "มานะ", student_lastname: "อดทน", 
-                student_year: 1, form_status_id: 1, created_at: "2026-01-10T11:00:00Z", latest_update: "2026-01-10T11:00:00Z",
-                award_type_id: 3, award_type_name: "ด้านกิจกรรมเสริมหลักสูตร", 
-                faculty_id: 3, department_id: 30, campus_id: 1, academic_year: 2026, semester: 1,
-                advisor_name: "อ. มานี", gpa: 3.20, phone_number: "0855556666", email: "mana@ku.th", address: "ปทุมธานี", date_of_birth: "2001-04-04T00:00:00Z",
-                detail: {
-                    qualification_type: "Competition", project_title: "Startup Pitching", team_name: "Biz Kids", prize: "Winner", 
-                    organized_by: "SET", competition_level: "National", activity_category: "Business",
-                    date_received: "2023-11-20T00:00:00Z"
-                } as ExtracurricularDetail,
-                files: [{ file_dir_id: 3, file_name: "cert.pdf", file_type: "application/pdf", file_size: 1500, file_path: "#" }],
-                my_vote: 'abstain'
-            }
-        ]);
-
+        console.warn("API Error:", error);
+        if (isMounted) {
+            Swal.fire({
+                icon: 'error',
+                title: 'ไม่สามารถดึงข้อมูลได้',
+                text: 'กรุณาลองใหม่อีกครั้ง',
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000
+            });
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     fetchData();
-  }, [searchTerm, filterCategory]);
+    return () => { isMounted = false; };
+  }, [searchTerm, filterCategory, filterYear]);
 
-  const handleVote = (id: number, voteType: VoteType) => {
-    setCandidates(prev => prev.map(item => 
-      item.form_id === id ? { ...item, my_vote: voteType } : item
-    ));
-  };
+  // ==========================================
+  // 5. Logic: Filter / Sort / Paginate
+  // ==========================================
 
-  const handleSubmitVotes = async () => {
-    const votedCandidates = candidates.filter(c => c.my_vote !== undefined && c.my_vote !== null);
-    if (votedCandidates.length === 0) {
-        alert("กรุณาเลือกผลการโหวตอย่างน้อย 1 รายการ");
-        return;
+  const processedData = useMemo(() => {
+    let filtered = items;
+
+    if (filterDate) {
+        const filterTime = new Date(filterDate).setHours(23, 59, 59, 999);
+        filtered = filtered.filter(item => new Date(item.created_at).getTime() <= filterTime);
     }
-
-    if (confirm(`ยืนยันการส่งผลคะแนนจำนวน ${votedCandidates.length} รายการ?`)) {
-        try {
-            console.log("Submitting votes:", votedCandidates.map(c => ({ id: c.form_id, vote: c.my_vote })));
-            alert("บันทึกผลการลงคะแนนเรียบร้อยแล้ว!");
-        } catch (error) {
-            console.error("Submit error:", error);
-            alert("เกิดข้อผิดพลาดในการส่งคะแนน");
-        }
-    }
-  };
-
-  const handleViewDetail = (item: Nomination) => {
-    setModalData(item);
-    setIsModalOpen(true);
-  };
-
-  const filteredData = candidates.filter(item => {
-    const fullName = `${item.student_firstname} ${item.student_lastname}`;
-    const matchSearch = fullName.includes(searchTerm) || item.student_number.includes(searchTerm);
     
-    // Filter Date (Text Search)
-    const thaiDate = formatDateAD(item.created_at);
-    const matchDate = filterDateText ? thaiDate.includes(filterDateText) : true;
+    // Sort Logic
+    if (sortConfig.key) {
+        filtered.sort((a, b) => {
+            let valA: any = sortConfig.key ? a[sortConfig.key] : '';
+            let valB: any = sortConfig.key ? b[sortConfig.key] : '';
 
-    const matchCategory = filterCategory ? item.award_type_name === filterCategory : true;
-    const matchYear = filterYear ? item.student_year.toString() === filterYear : true;
+            if (sortConfig.key === 'student_firstname') {
+                valA = `${a.student_firstname} ${a.student_lastname}`;
+                valB = `${b.student_firstname} ${b.student_lastname}`;
+            } else if (sortConfig.key === 'created_at') {
+                valA = new Date(a.created_at).getTime();
+                valB = new Date(b.created_at).getTime();
+            }
 
-    let matchVoteStatus = true;
-    if (filterVoteStatus) {
-        if (filterVoteStatus === 'pending') matchVoteStatus = item.my_vote === null || item.my_vote === undefined;
-        else matchVoteStatus = item.my_vote === filterVoteStatus;
+            if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
     }
 
-    return matchSearch && matchCategory && matchYear && matchVoteStatus && matchDate;
-  });
+    return filtered;
+  }, [items, filterDate, sortConfig]);
 
-  const sortedNominations = [...filteredData].sort((a, b) => {
-      if (!sortConfig.key || !sortConfig.direction) return 0;
+  const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
+  const currentItems = processedData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-      if (sortConfig.key === 'student_firstname') {
-          const nameA = `${a.student_firstname} ${a.student_lastname}`;
-          const nameB = `${b.student_firstname} ${b.student_lastname}`;
-          return sortConfig.direction === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
-      }
-      if (sortConfig.key === 'student_number') {
-          return sortConfig.direction === 'asc'
-              ? String(a.student_number).localeCompare(String(b.student_number))
-              : String(b.student_number).localeCompare(String(a.student_number));
-      }
-      if (sortConfig.key === 'academic_year') { 
-          return sortConfig.direction === 'asc' 
-              ? a.academic_year - b.academic_year 
-              : b.academic_year - a.academic_year;
-      }
-      if (sortConfig.key === 'award_type_name') {
-          const target = sortConfig.direction === 'behavior' ? 'ด้านความประพฤติดี'
-                       : sortConfig.direction === 'innovation' ? 'ด้านความคิดสร้างสรรค์และนวัตกรรม'
-                       : 'ด้านกิจกรรมเสริมหลักสูตร';
-          const isA = a.award_type_name === target;
-          const isB = b.award_type_name === target;
-          if (isA && !isB) return -1;
-          if (!isA && isB) return 1;
-          return 0;
-      }
-      if (sortConfig.key === 'my_vote') {
-          const statusOrder = { 'approve': 1, 'reject': 2, 'abstain': 3, null: 4 };
-          const valA = statusOrder[a.my_vote || 'null'] || 99;
-          const valB = statusOrder[b.my_vote || 'null'] || 99;
-          return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
-      }
-      return 0;
-  });
+  // ==========================================
+  // 6. Handlers
+  // ==========================================
 
-  const totalPages = Math.ceil(sortedNominations.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentItems = sortedNominations.slice(startIndex, startIndex + itemsPerPage);
-  const votedCount = candidates.filter(c => c.my_vote).length;
-
-  const handleSort = (key: any) => { 
-      setSortConfig((prev) => {
-          if (prev.key !== key) {
-              if (key === 'created_at') return { key, direction: 'desc' };
-              if (key === 'award_type_name') return { key, direction: 'behavior' };
-              if (key === 'my_vote') return { key, direction: 'asc' }; 
-              return { key, direction: 'asc' };
+  const handleSort = (key: keyof Nomination | 'award_type_name') => {
+      setSortConfig(prev => {
+          if (prev.key === key) {
+              return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
           }
-          if (key === 'created_at') {
-              if (prev.direction === 'desc') return { key, direction: 'asc' };
-              if (prev.direction === 'asc') return { key: null, direction: null };
-          }
-          else if (key === 'award_type_name') {
-              if (prev.direction === 'behavior') return { key, direction: 'innovation' };
-              if (prev.direction === 'innovation') return { key, direction: 'activity' };
-              if (prev.direction === 'activity') return { key: null, direction: null };
-          }
-          else {
-              if (prev.direction === 'asc') return { key, direction: 'desc' };
-              if (prev.direction === 'desc') return { key: null, direction: null };
-          }
-          return { key: null, direction: null };
+          return { key, direction: 'asc' };
       });
   };
 
   const renderSortIcon = (key: string) => {
-      if (sortConfig.key !== key || sortConfig.direction === null) return null;
-      if (key === 'award_type_name') {
-          const label = sortConfig.direction === 'behavior' ? '(ประพฤติดี)'
-                      : sortConfig.direction === 'innovation' ? '(นวัตกรรม)'
-                      : '(กิจกรรม)';
-          return <span className="text-xs text-blue-600 bg-blue-50 px-1 rounded ml-1 font-normal">{label}</span>;
-      }
-      return sortConfig.direction === 'asc' 
-        ? <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path></svg>
-        : <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>;
+    if (sortConfig.key !== key) return <span className="text-gray-300 ml-1">↕</span>;
+    return sortConfig.direction === 'asc' 
+        ? <span className="text-blue-500 ml-1">↑</span>
+        : <span className="text-blue-500 ml-1">↓</span>;
   };
 
+  // --- Approve Action ---
+  const handleApprove = async () => {
+    if (selectedId === null) {
+        Swal.fire({ icon: 'warning', title: 'กรุณาเลือกรายการ', text: 'โปรดคลิกเลือกรายชื่อนิสิตในตารางก่อน', confirmButtonColor: '#3B82F6' });
+        return;
+    }
+    const selectedItem = items.find(c => c.form_id === selectedId);
+    if (!selectedItem) return;
+
+    const result = await Swal.fire({
+        title: `ยืนยันการ "เห็นชอบ"?`,
+        html: `คุณต้องการลงความเห็น <b>"เห็นชอบ"</b> <br/>ให้กับ ${selectedItem.student_firstname} ${selectedItem.student_lastname} หรือไม่?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'ยืนยัน',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#10B981',
+        cancelButtonColor: '#9CA3AF'
+    });
+
+    if (result.isConfirmed) {
+        await submitVote(selectedId, 'approve', undefined, `${selectedItem.student_firstname} ${selectedItem.student_lastname}`);
+    }
+  };
+
+  // --- Reject Action ---
+  const handleOpenRejectModal = () => {
+    if (selectedId === null) {
+        Swal.fire({ icon: 'warning', title: 'กรุณาเลือกรายการ', text: 'โปรดคลิกเลือกรายชื่อนิสิตในตารางก่อน', confirmButtonColor: '#3B82F6' });
+        return;
+    }
+    setRejectReason("");
+    setIsRejectModalOpen(true);
+  };
+
+  const handleConfirmReject = async () => {
+    // Advanced Validation: Check empty reason
+    if (!rejectReason.trim()) {
+        Swal.fire({ icon: 'warning', title: 'กรุณาระบุเหตุผล', text: 'โปรดกรอกเหตุผลในการไม่เห็นชอบ', confirmButtonColor: '#F59E0B' });
+        return;
+    }
+    const selectedItem = items.find(c => c.form_id === selectedId);
+    if (selectedId && selectedItem) {
+        await submitVote(selectedId, 'reject', rejectReason, `${selectedItem.student_firstname} ${selectedItem.student_lastname}`);
+        setIsRejectModalOpen(false);
+    }
+  };
+
+  // --- API Submission with TOAST Notification ---
+  const submitVote = async (id: number, type: 'approve' | 'reject', reason?: string, studentName: string = "นิสิต") => {
+      try {
+        const token = localStorage.getItem("accessToken");
+        const payload = { 
+            votes: [{ form_id: id, vote_type: type, reason: reason || "" }] 
+        };
+
+        await committeeService.submitVote(token, payload);
+        
+        // Remove item from UI first
+        setItems(prev => prev.filter(c => c.form_id !== id));
+        setSelectedId(null);
+
+        // --- SHOW TOP-RIGHT TOAST ---
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true,
+            didOpen: (toast) => {
+              toast.addEventListener('mouseenter', Swal.stopTimer)
+              toast.addEventListener('mouseleave', Swal.resumeTimer)
+            }
+        });
+
+        const actionText = type === 'approve' ? 'เห็นชอบ' : 'ไม่เห็นชอบ';
+        const iconType = type === 'approve' ? 'success' : 'info';
+
+        Toast.fire({
+            icon: iconType,
+            title: 'บันทึกผลสำเร็จ',
+            text: `ได้ทำการ${actionText}นิสิต: ${studentName} เรียบร้อยแล้ว`
+        });
+
+      } catch (error) {
+        console.error("Submit Error:", error);
+        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ดำเนินการไม่สำเร็จ' });
+      }
+  };
+
+  // ==========================================
+  // 7. Render UI
+  // ==========================================
+
   return (
-    <div className="min-h-screen bg-gray-50 p-8 font-sans pb-24">
+    <div className="min-h-screen bg-gray-50/50 p-8 font-sans pb-24">
       
-      <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">พิจารณาคัดเลือกนิสิตดีเด่น</h1>
-        <p className="text-gray-400 text-sm mt-1">กรุณาพิจารณาข้อมูลและลงคะแนนเสียง (ผลการลงคะแนนจะเป็นความลับ)</p>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-          <div className="relative">
-            <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 pl-10 text-sm focus:ring-1 focus:ring-green-500" />
-            <svg className="w-4 h-4 absolute left-3 top-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+      {/* Inject Keyframes for Stagger Animation */}
+      <style jsx global>{`
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up {
+          animation: fadeInUp 0.4s ease-out forwards;
+        }
+      `}</style>
+      
+      <div className="max-w-7xl mx-auto">
+        
+        {/* Header Card (Glassmorphism) */}
+        <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-lg border border-white/50 p-8 mb-8 animate-fade-in-up">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
+                    พิจารณาคัดเลือกนิสิตดีเด่น
+                </h1>
+                <p className="text-gray-500 mt-1 font-medium">
+                    {USE_MOCK_DATA && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded mr-2">MOCK MODE</span>}
+                    กรุณาพิจารณาข้อมูลและลงความเห็น
+                </p>
+            </div>
+            {/* Decoration Icon */}
+            <div className="hidden md:block">
+                <div className="h-12 w-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 shadow-inner">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+            </div>
           </div>
+
+          {/* Filters Bar */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
+              {/* Search */}
+              <div className="relative group">
+                  <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 pl-10 text-sm focus:ring-4 focus:ring-blue-100 focus:border-blue-300 outline-none transition-all shadow-sm group-hover:shadow-md" />
+                  <svg className="w-5 h-5 absolute left-3 top-3 text-gray-400 group-focus-within:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              </div>
+              {/* Date */}
+              <div className="relative group">
+                  <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-300 transition-all shadow-sm group-hover:shadow-md cursor-pointer" />
+              </div>
+              {/* Category */}
+              <div className="relative group">
+                  <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 appearance-none cursor-pointer outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-300 transition-all shadow-sm group-hover:shadow-md">
+                      <option value="">ทุกประเภทรางวัล</option>
+                      <option value="ด้านความคิดสร้างสรรค์และนวัตกรรม">ด้านนวัตกรรม</option>
+                      <option value="ด้านความประพฤติดี">ด้านความประพฤติดี</option>
+                      <option value="ด้านกิจกรรมเสริมหลักสูตร">ด้านกิจกรรม</option>
+                  </select>
+                  <svg className="w-4 h-4 absolute right-4 top-3.5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+              {/* Year */}
+              <div className="relative group">
+                  <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 appearance-none cursor-pointer outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-300 transition-all shadow-sm group-hover:shadow-md">
+                      <option value="">ทุกระดับชั้น</option><option value="1">ชั้นปีที่ 1</option><option value="2">ชั้นปีที่ 2</option><option value="3">ชั้นปีที่ 3</option><option value="4">ชั้นปีที่ 4</option>
+                  </select>
+                  <svg className="w-4 h-4 absolute right-4 top-3.5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+          </div>
+        </div>
+
+        {/* Table Container */}
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden animate-fade-in-up" style={{ animationDelay: '100ms' }}>
           
-          {/* Text Input for Date Search */}
-          <div className="relative">
-            <input
-                type="text"
-                placeholder="ค้นหาวันที่ (วว/ดด/ปปปป)"
-                value={filterDateText}
-                onChange={(e) => setFilterDateText(e.target.value)}
-                className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 text-sm text-gray-500 placeholder-gray-400"
-            />
-            <svg className="w-4 h-4 absolute right-3 top-3 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+          <div className="overflow-x-auto min-h-[400px]">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50/80 text-gray-500 text-xs font-bold uppercase tracking-wider border-b border-gray-200">
+                  <th className="p-5 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('student_firstname')}><div className="flex items-center gap-1">ชื่อ-นามสกุล {renderSortIcon('student_firstname')}</div></th>
+                  <th className="p-5 text-center cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('student_number')}><div className="flex items-center justify-center gap-1">รหัสนิสิต {renderSortIcon('student_number')}</div></th>
+                  <th className="p-5 text-center cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('academic_year')}><div className="flex items-center justify-center gap-1">ปีการศึกษา {renderSortIcon('academic_year')}</div></th>
+                  <th className="p-5 text-center cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('award_type_name')}><div className="flex items-center justify-center gap-1">รางวัล {renderSortIcon('award_type_name')}</div></th>
+                  <th className="p-5 text-center cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('created_at')}><div className="flex items-center justify-center gap-1">วันที่ส่ง {renderSortIcon('created_at')}</div></th>
+                  <th className="p-5 text-center">สถานะ</th>
+                  <th className="p-5 text-center w-[10%]">รายละเอียด</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {loading ? (
+                  <TableSkeleton />
+                ) : currentItems.length === 0 ? (
+                  <tr><td colSpan={7} className="p-10 text-center text-gray-400 py-20 flex flex-col items-center justify-center gap-2">ไม่พบข้อมูล</td></tr>
+                ) : (
+                  currentItems.map((item, index) => (
+                    <tr 
+                      key={item.form_id} 
+                      onClick={() => setSelectedId(item.form_id)}
+                      className={`transition-all duration-300 cursor-pointer animate-fade-in-up hover:-translate-y-1 hover:shadow-lg
+                        ${selectedId === item.form_id ? "bg-blue-50 border-l-4 border-l-blue-500" : "hover:bg-blue-50/30 border-l-4 border-l-transparent"}`}
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                      <td className="p-5 text-sm font-bold text-gray-700">{item.student_firstname} {item.student_lastname}</td>
+                      <td className="p-5 text-sm text-center text-gray-600 font-mono">{item.student_number}</td>
+                      <td className="p-5 text-sm text-center text-gray-600">{item.academic_year}</td>
+                      <td className="p-5 text-sm text-center"><span className="px-3 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-medium border border-gray-200">{item.award_type_name}</span></td>
+                      <td className="p-5 text-sm text-center text-gray-500">{formatDateTh(item.created_at)}</td>
+                      <td className="p-5 text-center align-middle">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200 shadow-sm animate-pulse">รอพิจารณา</span>
+                      </td>
+                      <td className="p-5 text-center align-middle" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => { setModalData(item); setIsDetailModalOpen(true); }} className="text-gray-400 hover:text-blue-600 bg-transparent hover:bg-blue-50 p-2 rounded-full transition-all duration-200 transform hover:scale-110 active:scale-95 shadow-sm hover:shadow-md" title="ดูรายละเอียด">
+                              <svg className="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                          </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
 
-          <div className="relative">
-            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 text-sm text-gray-500 appearance-none cursor-pointer">
-                <option value="">ทุกประเภทรางวัล</option>
-                <option value="ด้านความคิดสร้างสรรค์และนวัตกรรม">ด้านความคิดสร้างสรรค์และนวัตกรรม</option>
-                <option value="ด้านความประพฤติดี">ด้านความประพฤติดี</option>
-                <option value="ด้านกิจกรรมเสริมหลักสูตร">ด้านกิจกรรมเสริมหลักสูตร</option>
-            </select>
-            <svg className="w-4 h-4 absolute right-3 top-3 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-          </div>
+          {/* Footer Pagination & Actions */}
+          <div className="flex justify-between items-center p-6 border-t border-gray-100 bg-gray-50/30">
+              {/* Pagination */}
+              <div className="flex items-center gap-2">
+                  <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm active:scale-95">{'<'}</button>
+                  <span className="text-xs font-semibold text-gray-500 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">หน้า {currentPage} จาก {totalPages || 1}</span>
+                  <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm active:scale-95">{'>'}</button>
+              </div>
 
-          <div className="relative">
-            <select value={filterVoteStatus} onChange={(e) => setFilterVoteStatus(e.target.value)} className="w-full bg-gray-100 border-none rounded-lg px-4 py-2.5 text-sm text-gray-500 appearance-none cursor-pointer">
-                <option value="">สถานะการโหวตทั้งหมด</option>
-                <option value="pending">ยังไม่ลงคะแนน</option>
-                <option value="approve">เห็นชอบ</option>
-                <option value="reject">ไม่เห็นชอบ</option>
-                <option value="abstain">งดออกเสียง</option>
-            </select>
-            <svg className="w-4 h-4 absolute right-3 top-3 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-          </div>
-        </div>
-
-        <div className="mt-6 overflow-hidden rounded-lg border border-gray-100">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-gray-100 text-gray-600 text-sm uppercase tracking-wider select-none">
-                
-                <th className="p-4 font-semibold cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleSort('student_firstname')}>
-                    <div className="flex items-center gap-1">ชื่อ-นามสกุล {renderSortIcon('student_firstname')}</div>
-                </th>
-
-                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleSort('student_number')}>
-                    <div className="flex items-center justify-center gap-1">รหัสนิสิต {renderSortIcon('student_number')}</div>
-                </th>
-
-                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleSort('academic_year')}>
-                    <div className="flex items-center justify-center gap-1">ปีการศึกษา {renderSortIcon('academic_year')}</div>
-                </th>
-
-                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleSort('award_type_name')}>
-                    <div className="flex items-center justify-center gap-1">ประเภทรางวัล {renderSortIcon('award_type_name')}</div>
-                </th>
-                
-                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleSort('created_at')}>
-                    <div className="flex items-center justify-center gap-1">วันที่ส่ง {renderSortIcon('created_at')}</div>
-                </th>
-
-                {/* ✅ ปรับ min-w เพื่อแก้ปัญหาสถานะโดนเบียด */}
-                <th className="p-4 font-semibold text-center cursor-pointer hover:bg-gray-200 transition-colors min-w-[140px]" onClick={() => handleSort('my_vote')}>
-                    <div className="flex items-center justify-center gap-1">สถานะการเลือก {renderSortIcon('my_vote')}</div>
-                </th>
-
-                <th className="p-4 font-semibold text-center w-[30%]">ลงคะแนน</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
-                <tr><td colSpan={7} className="p-8 text-center text-gray-400">กำลังโหลด...</td></tr>
-              ) : currentItems.length === 0 ? (
-                <tr><td colSpan={7} className="p-8 text-center text-gray-400">ไม่พบข้อมูลที่ค้นหา</td></tr>
-              ) : (
-                currentItems.map((item) => (
-                  <tr 
-                    key={item.form_id} 
-                    className={`transition-colors ${item.my_vote ? "bg-blue-50/20" : "hover:bg-gray-50 bg-white"}`}
+              {/* Action Buttons (Visible only when selected) */}
+              <div className="flex gap-4 items-center animate-fade-in">
+                  <span className="text-xs font-medium text-gray-400 mr-2 bg-gray-100 px-3 py-1 rounded-full">{selectedId ? `เลือกรายการ #${selectedId}` : "คลิกที่แถวเพื่อเลือก"}</span>
+                  
+                  {/* Reject Button */}
+                  <button 
+                      onClick={handleOpenRejectModal} 
+                      disabled={selectedId === null}
+                      className={`px-6 py-2.5 rounded-xl text-sm font-bold border-2 transition-all shadow-sm hover:shadow-md active:scale-95 flex items-center gap-2 
+                          ${selectedId === null ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed" : "bg-white border-red-100 text-red-600 hover:bg-red-50 hover:border-red-200"}`}
                   >
-                    <td className="p-4 text-sm font-medium text-gray-700">{item.student_firstname} {item.student_lastname}</td>
-                    <td className="p-4 text-sm text-center text-gray-600">{item.student_number}</td>
-                    <td className="p-4 text-sm text-center text-gray-600">{item.academic_year}</td>
-                    <td className="p-4 text-sm text-center text-gray-600 italic">{item.award_type_name}</td>
-                    <td className="p-4 text-sm text-center text-gray-500">{formatDateAD(item.created_at)}</td>
-                    
-                    <td className="p-4 text-center align-middle whitespace-nowrap">
-                        {item.my_vote ? (
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold border 
-                                ${item.my_vote === 'approve' ? 'bg-green-50 text-green-700 border-green-200' : 
-                                  item.my_vote === 'reject' ? 'bg-red-50 text-red-700 border-red-200' : 
-                                  'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                                {item.my_vote === 'approve' && 'เห็นชอบ'}
-                                {item.my_vote === 'reject' && 'ไม่เห็นชอบ'}
-                                {item.my_vote === 'abstain' && 'งดออกเสียง'}
-                            </span>
-                        ) : (
-                            <span className="text-xs text-gray-400 font-medium">- ยังไม่เลือก -</span>
-                        )}
-                    </td>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                      ไม่เห็นชอบ
+                  </button>
 
-                    <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-center gap-2">
-                            <button onClick={() => handleVote(item.form_id, 'approve')} className={`flex-1 px-2 py-1.5 rounded text-xs font-semibold border ${item.my_vote === 'approve' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-300 hover:border-green-500'}`}>เห็นชอบ</button>
-                            <button onClick={() => handleVote(item.form_id, 'reject')} className={`flex-1 px-2 py-1.5 rounded text-xs font-semibold border ${item.my_vote === 'reject' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-600 border-gray-300 hover:border-red-500'}`}>ไม่เห็นชอบ</button>
-                            <button onClick={() => handleVote(item.form_id, 'abstain')} className={`flex-1 px-2 py-1.5 rounded text-xs font-semibold border ${item.my_vote === 'abstain' ? 'bg-gray-600 text-white border-gray-600' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-500'}`}>งดออกเสียง</button>
-                            
-                            <button onClick={() => handleViewDetail(item)} className="ml-2 text-gray-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                            </button>
-                        </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                  {/* Approve Button */}
+                  <button 
+                      onClick={handleApprove} 
+                      disabled={selectedId === null} 
+                      className={`px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all shadow-md hover:shadow-lg transform active:scale-95 flex items-center gap-2 
+                          ${selectedId === null ? "bg-gray-300 cursor-not-allowed shadow-none" : "bg-emerald-500 hover:bg-emerald-600"}`}
+                  >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>
+                      เห็นชอบ
+                  </button>
+              </div>
+          </div>
         </div>
-
-        <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
-            <div className="flex items-center gap-2">
-                <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 text-gray-500 hover:bg-gray-200 text-sm disabled:opacity-50">{'<'}</button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <button key={page} onClick={() => setCurrentPage(page)} className={`w-8 h-8 flex items-center justify-center rounded text-sm font-bold ${currentPage === page ? "bg-blue-100 text-blue-600" : "bg-transparent text-gray-500 hover:bg-gray-100"}`}>{page}</button>
-                ))}
-                <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 text-gray-500 hover:bg-gray-200 text-sm disabled:opacity-50">{'>'}</button>
-            </div>
-
-            <div className="flex gap-3 items-center">
-                <div className="text-sm text-gray-500 mr-2">ลงคะแนนแล้ว <span className="font-bold text-black">{votedCount}</span> / {candidates.length}</div>
-                <button onClick={handleSubmitVotes} disabled={votedCount === 0} className={`px-6 py-2 rounded-lg text-sm font-bold text-white transition-all shadow-md ${votedCount > 0 ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-300 cursor-not-allowed"}`}>ยืนยันการลงคะแนน</button>
-            </div>
-        </div>
-
       </div>
 
+      {/* Nomination Detail Modal */}
       <NominationDetailModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
+        isOpen={isDetailModalOpen} 
+        onClose={() => setIsDetailModalOpen(false)} 
         data={modalData} 
-        faculties={masterFaculties}
-        departments={masterDepartments}
+        faculties={STATIC_FACULTIES}
+        departments={STATIC_DEPARTMENTS}
       />
+
+      {/* Reject Reason Modal (Popup for input) */}
+      {isRejectModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-md" onClick={() => setIsRejectModalOpen(false)}></div>
+            <div className="relative bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-scale-up border border-white/50">
+                <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-500">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    </div>
+                    ระบุเหตุผล "ไม่เห็นชอบ"
+                </h3>
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">เหตุผลที่ตีกลับเอกสาร / ไม่ผ่านการพิจารณา <span className="text-red-500">*</span></label>
+                    <textarea 
+                        className="w-full border border-gray-300 rounded-xl p-3 text-sm focus:ring-4 focus:ring-red-100 focus:border-red-400 outline-none transition-all h-32 resize-none bg-white"
+                        placeholder="กรุณาระบุเหตุผลอย่างละเอียด..."
+                        value={rejectReason}
+                        onChange={(e) => setRejectReason(e.target.value)}
+                    ></textarea>
+                </div>
+                <div className="flex justify-end gap-3">
+                    <button 
+                        onClick={() => setIsRejectModalOpen(false)} 
+                        className="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100 font-medium transition-colors active:scale-95"
+                    >
+                        ยกเลิก
+                    </button>
+                    <button 
+                        onClick={handleConfirmReject}
+                        className="px-6 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 shadow-md transition-all active:scale-95 hover:shadow-lg"
+                    >
+                        ยืนยันไม่เห็นชอบ
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
 
     </div>
   );
