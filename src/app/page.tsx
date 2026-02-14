@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Swal from "sweetalert2";
 import axios from "axios";
-import { useAuth } from "@/context/AuthContext"; // ✅ 1. Import useAuth
+import { useAuth } from "@/context/AuthContext"; //  1. Import useAuth
 
 // ==========================================
 // 0. Configuration & Service Layer
@@ -52,7 +52,7 @@ const authService = {
     } else {
       try {
         const response = await axios.post(
-          `/api-backend/auth/login`, 
+          `/api/auth/login`, 
           { email, password },
           { 
             withCredentials: true,
@@ -89,7 +89,7 @@ const authService = {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth(); // ✅ 2. ดึงฟังก์ชัน login จาก Context
+  const { login } = useAuth(); // 2. ดึงฟังก์ชัน login จาก Context
 
   // UI States
   const [email, setEmail] = useState("");
@@ -135,7 +135,7 @@ export default function LoginPage() {
       // 2. Call Service เพื่อยิง API
       const data = await authService.login(email, password);
 
-      // ✅ 3. ใช้ login() จาก Context แทนการ localStorage.setItem เอง
+      // 3. ใช้ login() จาก Context แทนการ localStorage.setItem เอง
       // (Context จะทำการ setItem และ update state ให้อัตโนมัติ)
       login(data.token, data.role, data.user);
 

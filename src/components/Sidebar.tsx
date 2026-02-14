@@ -186,7 +186,7 @@ const ProfileSkeleton = ({ isCollapsed }: { isCollapsed: boolean }) => (
   </div>
 );
 
-// ✅ Profile Modal: สวยงามขึ้น + Animation สมูท
+// Profile Modal: สวยงามขึ้น + Animation สมูท
 function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () => void; data: UserProfileData | null }) {
   if (!isOpen || !data) return null;
 
@@ -313,7 +313,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
             const token = localStorage.getItem("token");
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
             
-            const response = await axios.get(`/api-backend/auth/me`, {
+            const response = await axios.get(`/api/auth/me`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 

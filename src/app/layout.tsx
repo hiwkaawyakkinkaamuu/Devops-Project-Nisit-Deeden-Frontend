@@ -1,7 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { Sarabun, Geist, Geist_Mono } from "next/font/google";
-import { AuthProvider } from "@/context/AuthContext"; // ✅ เพิ่มการ Import
+import { AuthProvider } from "@/context/AuthContext"; // เพิ่มการ Import
 
 const sarabun = Sarabun({
   weight: ['300', '400', '500', '600', '700'],
@@ -39,7 +39,7 @@ export default function RootLayout({
           selection:bg-green-100 selection:text-green-800
         `}
       >
-        {/* ✅ ครอบ children ด้วย AuthProvider */}
+        {/* ครอบ children ด้วย AuthProvider */}
         <AuthProvider>
           <main className="relative flex flex-col min-h-screen">
               {children}

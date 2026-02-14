@@ -45,7 +45,6 @@ interface NominationTracking {
 
 // Helper: แปลงสถานะจาก Backend เป็น Step (1-8)
 const mapStatusToStep = (status: string): number => {
-    // ปรับแก้ string เหล่านี้ให้ตรงกับที่ Database คุณเก็บจริงๆ
     switch (status.toLowerCase()) {
         case "submitted": return 1;        // ส่งเสนอ
         case "department_check": return 2; // ภาควิชา
@@ -66,26 +65,24 @@ const mapBackendToFrontend = (backendData: any): NominationTracking => {
 
     return {
         form_id: backendData.id,
-        award_type_name: backendData.award_type?.name || "ไม่ระบุประเภท", // ต้อง Join ตารางมา หรือ map เอง
-        // แปลง Status String เป็น Code (1, 2, 3)
+        award_type_name: backendData.award_type?.name || "ไม่ระบุประเภท",
         status_code: isRejected ? 3 : isApproved ? 2 : 1,
         status_label: isRejected ? "ไม่ผ่านการคัดเลือก" : isApproved ? "อนุมัติเรียบร้อย" : "อยู่ระหว่างการพิจารณา",
         
-        // ข้อมูลนิสิต (ถ้า Backend ส่งมาไม่ครบ อาจต้องใช้ข้อมูลจาก Context หรือให้ Backend Join มา)
         student_firstname: backendData.student?.user?.firstname || "-",
         student_lastname: backendData.student?.user?.lastname || "-",
         student_number: backendData.student?.student_number || "-",
-        faculty_name: backendData.student?.faculty?.name || "-", // ต้องเช็คว่า Backend ส่ง structure ลึกแค่ไหน
+        faculty_name: backendData.student?.faculty?.name || "-",
         
         created_at: backendData.created_at,
         current_step: mapStatusToStep(backendData.status || "submitted"),
         
-        // Map Files
+        // แก้ไขจุดนี้: เปลี่ยน f.id เป็น f.file_dir_id ให้ตรงกับ Backend
         files: backendData.files ? backendData.files.map((f: any) => ({
-            file_id: f.id,
-            file_name: f.file_name || "Document.pdf", // ถ้า Backend ไม่ส่งชื่อไฟล์มา
+            file_id: f.file_dir_id, // <--- แก้ตรงนี้ครับ
+            file_name: f.file_name || "Document.pdf", // อาจต้องเช็คว่า Backend ส่ง file_name หรือชื่ออื่น (ใน Model คุณไม่มี field file_name อาจต้องใช้ file_path ตัดเอา)
             file_size: f.file_size || 0,
-            file_url: `${API_BASE_URL}/${f.file_path}` // สร้าง URL จริง
+            file_url: `${API_BASE_URL}/${f.file_path}`
         })) : [],
         
         reject_reason: backendData.reject_reason || "",
@@ -93,10 +90,17 @@ const mapBackendToFrontend = (backendData: any): NominationTracking => {
     };
 };
 
+const formatFileSize = (bytes: number) => {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+};
+
 const nominationTrackingService = {
   getLatestNomination: async (token: string | null): Promise<NominationTracking | null> => {
       try {
-        // ยิงไปที่ Endpoint ที่เราเพิ่งแก้ Route ไป
         const response = await axios.get(`/api/awards/my/submissions`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -105,16 +109,14 @@ const nominationTrackingService = {
         
         const submissions = response.data.data;
 
-        // ถ้ามีข้อมูล ให้เอาตัวล่าสุด (ตัวที่ 0) มาแสดง
         if (Array.isArray(submissions) && submissions.length > 0) {
-            // สมมติว่า Backend sort desc มาแล้ว (ถ้ายัง ให้ sort ที่นี่: submissions.sort(...))
             return mapBackendToFrontend(submissions[0]); 
         }
         
-        return null; // ยังไม่เคยส่ง
+        return null; 
 
       } catch (error: any) {
-        if (error.response?.status === 404) return null; // ไม่พบข้อมูล = ยังไม่เคยส่ง
+        if (error.response?.status === 404) return null;
         if (error.response?.status === 401) throw new Error("Unauthorized");
         console.error("API Error:", error);
         throw error;
@@ -137,14 +139,6 @@ const STEPS = [
   "อนุมัติ",
 ];
 
-const formatFileSize = (bytes: number) => {
-  if (!bytes) return "Unknown size";
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-};
-
 const formatDate = (isoDate: string) => {
   if (!isoDate) return "-";
   const date = new Date(isoDate);
@@ -165,9 +159,7 @@ const Timeline = ({ currentStep, statusCode }: { currentStep: number; statusCode
   return (
     <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
       <div className="relative min-w-[800px] flex items-center justify-between px-4 mt-6 mb-8">
-        {/* Background Line */}
         <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-200 -z-10 rounded-full transform -translate-y-1/2"></div>
-        {/* Progress Line */}
         <div
           className={`absolute top-1/2 left-0 h-1 z-0 rounded-full transform -translate-y-1/2 transition-all duration-1000 ease-out ${
             statusCode === 3 ? "bg-red-400" : "bg-green-500"
@@ -183,16 +175,16 @@ const Timeline = ({ currentStep, statusCode }: { currentStep: number; statusCode
           let circleClass = "bg-white border-2 border-gray-300 text-gray-400"; 
           let iconOrNum: React.ReactNode = stepNum;
 
-          if (statusCode === 2) { // Approved All
+          if (statusCode === 2) { 
             circleClass = "bg-green-500 border-green-500 text-white";
             iconOrNum = <CheckIcon />;
-          } else if (statusCode === 3 && isCurrent) { // Rejected at current
+          } else if (statusCode === 3 && isCurrent) { 
             circleClass = "bg-red-500 border-red-500 text-white shadow-lg shadow-red-200 scale-110";
             iconOrNum = <XIcon />;
-          } else if (isPast) { // Passed steps
+          } else if (isPast) { 
             circleClass = "bg-green-500 border-green-500 text-white";
             iconOrNum = <CheckIcon />;
-          } else if (isCurrent) { // Current processing
+          } else if (isCurrent) { 
             circleClass = "bg-white border-[3px] border-blue-500 text-blue-500 ring-4 ring-blue-100 animate-pulse";
           }
 
@@ -254,10 +246,9 @@ export default function TraceNominationPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem("token"); // ⚠️ เช็คชื่อ Key ให้ตรงกับที่ Login เก็บไว้ (token หรือ accessToken)
+        const token = localStorage.getItem("token"); 
         
         if (!token) {
-            // ถ้าไม่มี Token ให้ข้ามไปเลย หรือ Redirect
             setLoading(false);
             return;
         }
@@ -266,7 +257,6 @@ export default function TraceNominationPage() {
         setNomination(data);
 
       } catch (error: any) {
-        // ถ้าเป็น Unauthorized ให้ดีดไป Login (จัดการโดย AuthContext หรือ RoleGuard แล้ว แต่กันเหนียว)
         if (error.message === "Unauthorized") {
              localStorage.removeItem("token");
              window.location.href = "/";
@@ -291,10 +281,8 @@ export default function TraceNominationPage() {
     window.open(file.file_url, "_blank");
   };
 
-  // Render Loading
   if (loading) return <LoadingSkeleton />;
 
-  // Render Empty State (ยังไม่เคยส่ง)
   if (!nomination) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6">
@@ -320,7 +308,6 @@ export default function TraceNominationPage() {
       <style jsx global>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in-up { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        /* Custom Scrollbar for Timeline */
         .custom-scrollbar::-webkit-scrollbar { height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { bg-gray-100; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { bg-gray-300; border-radius: 4px; }
@@ -409,9 +396,12 @@ export default function TraceNominationPage() {
                   <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-red-500 shadow-sm group-hover:scale-110 transition-transform">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
                   </div>
-                  <div className="min-w-0">
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-gray-700 truncate group-hover:text-blue-700">{file.file_name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{formatFileSize(file.file_size)}</p>
+                    <p className="text-xs text-gray-400 mt-1">{formatFileSize(file.file_size)}</p>
+                  </div>
+                  <div className="text-gray-300 group-hover:text-blue-500 transition-colors">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                   </div>
                 </div>
               ))

@@ -13,7 +13,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const API_BASE_URL = "/api-backend";
+const API_BASE_URL = "/api";
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<any>(null);
@@ -27,12 +27,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (token) {
         try {
-          // ✅ ดึงข้อมูลสดจาก Backend เพื่อให้ได้โครงสร้างข้อมูลที่ถูกต้อง
+          // ดึงข้อมูลสดจาก Backend เพื่อให้ได้โครงสร้างข้อมูลที่ถูกต้อง
           const res = await axios.get(`${API_BASE_URL}/auth/me`, {
             headers: { Authorization: `Bearer ${token}` }
           });
 
-          // ✅ สำคัญ: แกะเอาแค่ res.data.user (ตัดชั้นนอกที่เป็น { user: ... } ออก)
+          // สำคัญ: แกะเอาแค่ res.data.user (ตัดชั้นนอกที่เป็น { user: ... } ออก)
           if (res.data && res.data.user) {
             setUser({ ...res.data.user, token }); 
           }

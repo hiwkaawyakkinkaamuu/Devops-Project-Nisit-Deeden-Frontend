@@ -76,7 +76,7 @@ const nominationService = {
 
   // ดึงปีการศึกษาปัจจุบัน
   getCurrentTerm: async (token: string) => {
-    const response = await axios.get(`/api-backend/academic-years/current/semester`, {
+    const response = await axios.get(`/api/academic-years/current/semester`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     return response.data.data;
@@ -85,7 +85,7 @@ const nominationService = {
   // เช็คประวัติการส่ง (เทียบกับปี/เทอมปัจจุบัน)
   checkSubmissionHistory: async (token: string, currentYear: number, currentSemester: number) => {
     try {
-      const response = await axios.get(`/api-backend/awards/my/submissions`, {
+      const response = await axios.get(`/api/awards/my/submissions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const submissions = response.data.data || [];
@@ -103,7 +103,7 @@ const nominationService = {
 
   // ส่งข้อมูล (Submit)
   submitNomination: async (token: string, formData: FormData) => {
-    const response = await axios.post(`/api-backend/awards/submit`, formData, {
+    const response = await axios.post(`/api/awards/submit`, formData, {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "multipart/form-data",
@@ -404,7 +404,7 @@ export default function StudentNominationForm() {
   // 5. Render Views
   // ==========================================
 
-  // ✅ View 1: Success (ส่งเสร็จแล้ว)
+  // View 1: Success (ส่งเสร็จแล้ว)
   if (hasNominated) {
     return (
       <div className="w-full h-screen flex items-center justify-center bg-gray-50 p-6">
@@ -414,7 +414,7 @@ export default function StudentNominationForm() {
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">บันทึกข้อมูลสำเร็จ</h2>
           <p className="text-gray-500 mb-8">ระบบได้รับข้อมูลของท่านเรียบร้อยแล้ว</p>
-          <Link href="/student/trace-nomination" className="block w-full py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 font-bold transition-all shadow-md">
+          <Link href="/student/main/trace-nomination" className="block w-full py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 font-bold transition-all shadow-md">
             ติดตามสถานะ
           </Link>
         </div>
@@ -422,7 +422,7 @@ export default function StudentNominationForm() {
     );
   }
 
-  // ✅ View 2: Already Submitted (ส่งไปแล้วก่อนหน้านี้) -> Block UI
+  // View 2: Already Submitted (ส่งไปแล้วก่อนหน้านี้) -> Block UI
   if (alreadySubmitted) {
     return (
       <div className="w-full h-screen flex items-center justify-center bg-gray-50 p-6">
@@ -441,7 +441,7 @@ export default function StudentNominationForm() {
                </p>
 
                <div className="flex flex-col gap-3">
-                   <Link href="/student/trace-nomination" className="w-full py-3 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition-all">
+                   <Link href="/student/main/trace-nomination" className="w-full py-3 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition-all">
                        ตรวจสอบสถานะ
                    </Link>
                    <Link href="/student/nomination-history" className="w-full py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold rounded-xl hover:opacity-90 transition-all shadow-lg shadow-orange-200">
@@ -454,7 +454,7 @@ export default function StudentNominationForm() {
     );
   }
 
-  // ✅ View 3: Normal Form (ยังไม่เคยส่ง)
+  //  View 3: Normal Form (ยังไม่เคยส่ง)
   return (
     <div className="w-full font-sans bg-[#F8F9FA] min-h-screen p-6 md:p-10 flex justify-center pb-24">
       {/* Animation Styles */}

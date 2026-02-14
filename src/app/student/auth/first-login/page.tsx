@@ -10,8 +10,11 @@ import { Skeleton } from "@/components/Skeleton";
 // 0. Configuration & Service Layer
 // ==========================================
 
-const USE_MOCK_DATA = false; // ปรับเป็น false ถ้าเชื่อม Backend แล้ว
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const USE_MOCK_DATA = false;
+
+// ✅ Config: ตัด /api ออกเพื่อให้ Proxy จัดการ (ถ้าตั้ง Proxy ไว้แล้ว)
+// หรือถ้าไม่ได้ตั้ง Proxy ก็ใส่ URL เต็มๆ เช่น "http://localhost:8080"
+const API_BASE_URL = ""; 
 
 // --- Interfaces ---
 interface UserProfile {
@@ -31,9 +34,26 @@ interface MasterCampus {
   campus_code?: string;
 }
 
+// --- Hardcoded Data (ใช้แก้ขัดไปก่อน) ---
+const HARDCODED_CAMPUSES: MasterCampus[] = [
+  { campus_id: 1, campus_name: "บางเขน", campus_code: "KU" },
+  { campus_id: 2, campus_name: "กำแพงแสน", campus_code: "KU-KPS" },
+  { campus_id: 3, campus_name: "ศรีราชา", campus_code: "KU-SR" },
+  { campus_id: 4, campus_name: "เฉลิมพระเกียรติ จังหวัดสกลนคร", campus_code: "KU-CSC" },
+  { campus_id: 5, campus_name: "สุพรรณบุรี", campus_code: "KU-SLA" }
+];
+
 // --- Service Object ---
 const firstLoginService = {
-  // ดึงข้อมูลเริ่มต้น
+  getUrl: (path: string) => {
+    let cleanPath = path.startsWith('/') ? path.substring(1) : path;
+    // เติม api/ นำหน้าเพื่อให้เข้าเงื่อนไข Proxy (ถ้าใช้ Proxy)
+    if (!cleanPath.startsWith('api/')) {
+        cleanPath = `api/${cleanPath}`;
+    }
+    return `/${cleanPath}`; 
+  },
+
   getInitialData: async (token: string | null) => {
     if (USE_MOCK_DATA) {
       await new Promise(r => setTimeout(r, 800));
@@ -48,45 +68,40 @@ const firstLoginService = {
             campus_id: 0,
             image_url: ""
         }, 
-        // ✅ อัปเดตข้อมูลวิทยาเขตให้ตรงกับ DB ของคุณ
-        campuses: [
-            { campus_id: 1, campus_name: "บางเขน", campus_code: "KU" },
-            { campus_id: 2, campus_name: "กำแพงแสน", campus_code: "KU-KPS" },
-            { campus_id: 3, campus_name: "ศรีราชา", campus_code: "KU-SR" },
-            { campus_id: 4, campus_name: "เฉลิมพระเกียรติ จังหวัดสกลนคร", campus_code: "KU-CSC" },
-            { campus_id: 5, campus_name: "สุพรรณบุรี", campus_code: "KU-SLA" }
-        ] 
+        campuses: HARDCODED_CAMPUSES
       };
     } else {
       try {
         const headers = { Authorization: `Bearer ${token}` };
         
-        // 1. ดึงข้อมูล User (ผ่าน /auth/me) เพื่อเอาชื่อ-นามสกุลเดิม
-        const resMe = await axios.get(`/api/auth/me`, { headers });
+        // 1. ดึงข้อมูล User (ยังคงใช้ API)
+        const resMe = await axios.get(firstLoginService.getUrl('auth/me'), { headers });
         const userData = resMe.data.user;
 
-        // 2. ดึงข้อมูล Student (เผื่อมีอยู่แล้ว)
+        // 2. ดึงข้อมูล Student (ยังคงใช้ API)
         let studentData = { student_number: "", prefix: "ไม่ระบุ" };
         try {
-            const resStudent = await axios.get(`/api/students/me`, { headers });
-            // เช็ค structure ให้ดีว่า backend ส่งมาเป็น data.data หรือ data เฉยๆ
+            const resStudent = await axios.get(firstLoginService.getUrl('students/me'), { headers });
             if(resStudent.data && resStudent.data.data) {
                 studentData = resStudent.data.data;
             } else if (resStudent.data) {
                 studentData = resStudent.data;
             }
         } catch (e) {
-            // ถ้ายังไม่มีข้อมูล Student ให้ข้ามไป (ใช้ค่า default)
             console.log("No existing student data found, using defaults.");
         }
 
         // 3. ดึง Master Campuses
-        const resCampuses = await axios.get(`/api/master/campuses`, { headers });
-        const campusesList = resCampuses.data.data || resCampuses.data || [];
+        // ❌ ปิดการเรียก API ที่พังอยู่
+        // const resCampuses = await axios.get(firstLoginService.getUrl('master/campuses'), { headers });
+        // const campusesList = resCampuses.data.data || resCampuses.data || [];
+
+        // ✅ ใช้ Hardcode แทน
+        const campusesList = HARDCODED_CAMPUSES;
 
         return {
           profile: {
-            user_id: userData.user_id || userData.ID, // รองรับทั้ง Snake/Pascal case
+            user_id: userData.user_id || userData.ID, 
             student_firstname: userData.firstname,
             student_lastname: userData.lastname,
             email: userData.email,
@@ -103,23 +118,20 @@ const firstLoginService = {
     }
   },
 
-  // ฟังก์ชันอัปเดตข้อมูล (ยิง 2 API: User + Student)
   updateFirstLogin: async (token: string | null, data: UserProfile) => {
     const headers = { 
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json" 
     };
 
-    // 1. อัปเดตตาราง User (ชื่อ, นามสกุล, วิทยาเขต, สถานะ First Login)
-    await axios.put(`/api/auth/me`, {
+    await axios.put(firstLoginService.getUrl('auth/me'), {
         firstname: data.student_firstname,
         lastname: data.student_lastname,
         campus_id: Number(data.campus_id),
-        is_first_login: false // ปลดล็อค
+        is_first_login: false
     }, { headers });
 
-    // 2. อัปเดตตาราง Student (รหัสนิสิต, คำนำหน้า)
-    await axios.put(`/api/students/me`, {
+    await axios.put(firstLoginService.getUrl('students/me'), {
         student_number: data.student_number,
         prefix: data.prefix,
     }, { headers });
@@ -134,12 +146,9 @@ const firstLoginService = {
 
 export default function FirstLoginPage() {
   const router = useRouter();
-  
-  // UI States
   const [loading, setLoading] = useState(false);
   const [isPageLoaded, setIsPageLoaded] = useState(false);
 
-  // Data States
   const [formData, setFormData] = useState<UserProfile>({
     user_id: 0,
     student_number: "",
@@ -151,22 +160,16 @@ export default function FirstLoginPage() {
     image_url: ""
   });
   const [masterCampuses, setMasterCampuses] = useState<MasterCampus[]>([]);
-
-  // Image Upload States
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // ==========================================
-  // 2. Effects
-  // ==========================================
 
   useEffect(() => {
     const initData = async () => {
       try {
         const token = localStorage.getItem("token");
         if (!token) {
-            router.push("/");
+            router.push("/"); 
             return;
         }
 
@@ -182,23 +185,16 @@ export default function FirstLoginPage() {
 
       } catch (error) {
         console.error("Initialization Error:", error);
-        // ถ้าโหลดไม่สำเร็จ อาจจะลองใช้ Mock เพื่อดูหน้าตาก่อนได้
-        // หรือแจ้งเตือนให้ Login ใหม่
         Swal.fire({ 
             icon: 'error', 
             title: 'โหลดข้อมูลไม่สำเร็จ', 
-            text: 'กรุณา Login ใหม่อีกครั้ง' 
+            text: 'กรุณา Login ใหม่อีกครั้ง หรือตรวจสอบการเชื่อมต่อ Server' 
         });
-        // router.push("/"); // Uncomment เพื่อบังคับกลับหน้าแรก
       }
     };
 
     initData();
   }, [router]);
-
-  // ==========================================
-  // 3. Handlers
-  // ==========================================
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -208,19 +204,16 @@ export default function FirstLoginPage() {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      
       if (!file.type.startsWith("image/")) {
           Swal.fire({ icon: 'warning', title: 'ไฟล์ไม่ถูกต้อง', text: 'กรุณาอัปโหลดเฉพาะไฟล์รูปภาพเท่านั้น' });
           if (fileInputRef.current) fileInputRef.current.value = "";
           return;
       }
-
       if (file.size > 5 * 1024 * 1024) {
         Swal.fire({ icon: 'error', title: 'ไฟล์มีขนาดใหญ่เกินไป', text: 'รูปภาพต้องมีขนาดไม่เกิน 5MB' });
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
-
       setSelectedImage(file);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -232,13 +225,10 @@ export default function FirstLoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validation
     if (!formData.student_number || !formData.student_firstname || !formData.student_lastname) {
         Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบถ้วน', text: 'กรุณากรอกรหัสนิสิตและชื่อ-นามสกุล' });
         return;
     }
-
     if (!formData.campus_id || Number(formData.campus_id) === 0) {
         Swal.fire({ icon: 'warning', title: 'กรุณาเลือกวิทยาเขต', text: 'โปรดระบุวิทยาเขตของท่านเพื่อดำเนินการต่อ' });
         return;
@@ -247,12 +237,7 @@ export default function FirstLoginPage() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      
-      // เรียก Service อัปเดตข้อมูล
       await firstLoginService.updateFirstLogin(token, formData);
-
-      // TODO: อัปโหลดรูปภาพถ้ามี selectedImage
-
       await Swal.fire({
         icon: 'success',
         title: 'บันทึกข้อมูลสำเร็จ',
@@ -260,10 +245,7 @@ export default function FirstLoginPage() {
         timer: 1500,
         showConfirmButton: false
       });
-
-      // Redirect ไปหน้าฟอร์มเสนอชื่อ
-      router.push("/student/student-nomination-form"); 
-
+      router.push("/student/main/student-nomination-form"); 
     } catch (error: any) {
       console.error("Submit Error:", error);
       let errorMsg = 'ไม่สามารถบันทึกข้อมูลได้';
@@ -275,10 +257,6 @@ export default function FirstLoginPage() {
       setLoading(false);
     }
   };
-
-  // ==========================================
-  // 4. Render
-  // ==========================================
 
   if (!isPageLoaded) return (
     <div className="w-full font-sans bg-[#F8F9FA] min-h-screen p-8 flex justify-center">
@@ -310,32 +288,25 @@ export default function FirstLoginPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4 font-sans">
       <div className="bg-white max-w-5xl w-full rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row animate-fade-in-up transform transition-all hover:scale-[1.01] duration-500">
-        
-        {/* Left Side: Banner */}
         <div className="bg-gradient-to-br from-emerald-600 to-teal-800 md:w-1/3 p-10 text-white flex flex-col justify-between relative overflow-hidden group">
           <div className="relative z-10">
             <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mb-8 backdrop-blur-md shadow-inner border border-white/10 group-hover:rotate-12 transition-transform duration-500">
               <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
             </div>
             <h2 className="text-4xl font-extrabold mb-4 tracking-tight">ยินดีต้อนรับ</h2>
-            <p className="text-emerald-50 text-sm leading-relaxed font-light opacity-90">
-              ระบบเสนอรายชื่อนิสิตดีเด่น<br/>มหาวิทยาลัยเกษตรศาสตร์
-            </p>
+            <p className="text-emerald-50 text-sm leading-relaxed font-light opacity-90">ระบบเสนอรายชื่อนิสิตดีเด่น<br/>มหาวิทยาลัยเกษตรศาสตร์</p>
             <div className="mt-8 w-12 h-1 bg-emerald-400 rounded-full group-hover:w-24 transition-all duration-500"></div>
           </div>
-          
           <div className="relative z-10 mt-10">
              <div className="flex items-center gap-2 text-xs text-emerald-200">
                 {USE_MOCK_DATA && <span className="bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded font-bold">MOCK MODE</span>}
                 <span>กรุณาตรวจสอบข้อมูลและระบุวิทยาเขตของท่าน</span>
              </div>
           </div>
-
           <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl animate-pulse"></div>
           <div className="absolute top-10 -left-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
         </div>
 
-        {/* Right Side: Form */}
         <div className="md:w-2/3 p-8 md:p-12 overflow-y-auto max-h-[90vh] custom-scrollbar">
           <div className="mb-8 border-b border-gray-100 pb-4">
              <h3 className="text-2xl font-bold text-gray-800">ยืนยันตัวตน</h3>
@@ -343,8 +314,6 @@ export default function FirstLoginPage() {
           </div>
           
           <form onSubmit={handleSubmit} className="space-y-8">
-            
-            {/* Image Upload Section */}
             <div className="flex flex-col items-center justify-center mb-6 animate-fade-in">
                 <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
                     <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-emerald-50 shadow-lg bg-gray-100 flex items-center justify-center group-hover:border-emerald-200 transition-all duration-300 transform group-hover:scale-105">
@@ -362,43 +331,24 @@ export default function FirstLoginPage() {
                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageChange} />
             </div>
 
-            {/* Read-Only Info Section (Email Only) */}
             <div className="space-y-5 animate-fade-in delay-100">
                 <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider border-l-4 border-emerald-500 pl-3">ข้อมูลบัญชี</h4>
-                
                 <div className="group">
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 group-hover:text-emerald-600 transition-colors">อีเมล (ใช้ระบุตัวตน)</label>
                     <input type="text" value={formData.email} readOnly className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-500 cursor-not-allowed focus:outline-none transition-colors group-hover:bg-gray-100"/>
                 </div>
             </div>
 
-            {/* Editable Info Section */}
             <div className="space-y-5 animate-fade-in delay-200">
               <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider border-l-4 border-emerald-500 pl-3">ข้อมูลส่วนตัว</h4>
-              
-              {/* Student Number */}
               <div className="group">
                   <label className="block text-xs font-bold text-gray-700 mb-1.5">รหัสนิสิต <span className="text-red-500">*</span></label>
-                  <input 
-                    type="text" 
-                    name="student_number" 
-                    value={formData.student_number} 
-                    onChange={handleChange} 
-                    placeholder="กรอกรหัสนิสิต"
-                    className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-800 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all placeholder-gray-400"
-                  />
+                  <input type="text" name="student_number" value={formData.student_number} onChange={handleChange} placeholder="กรอกรหัสนิสิต" className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-800 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all placeholder-gray-400" />
               </div>
-
-              {/* Name Fields */}
               <div className="grid grid-cols-12 gap-4">
                   <div className="col-span-12 md:col-span-3 group">
                       <label className="block text-xs font-bold text-gray-700 mb-1.5">คำนำหน้า</label>
-                      <select 
-                        name="prefix" 
-                        value={formData.prefix} 
-                        onChange={handleChange} 
-                        className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all cursor-pointer"
-                      >
+                      <select name="prefix" value={formData.prefix} onChange={handleChange} className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all cursor-pointer">
                         <option value="ไม่ระบุ">ไม่ระบุ</option>
                         <option value="นาย">นาย</option>
                         <option value="นาง">นาง</option>
@@ -407,39 +357,17 @@ export default function FirstLoginPage() {
                   </div>
                   <div className="col-span-12 md:col-span-4 group">
                       <label className="block text-xs font-bold text-gray-700 mb-1.5">ชื่อจริง <span className="text-red-500">*</span></label>
-                      <input 
-                        type="text" 
-                        name="student_firstname" 
-                        value={formData.student_firstname} 
-                        onChange={handleChange}
-                        placeholder="ชื่อภาษาไทย" 
-                        className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-800 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all placeholder-gray-400"
-                      />
+                      <input type="text" name="student_firstname" value={formData.student_firstname} onChange={handleChange} placeholder="ชื่อภาษาไทย" className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-800 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all placeholder-gray-400" />
                   </div>
                   <div className="col-span-12 md:col-span-5 group">
                       <label className="block text-xs font-bold text-gray-700 mb-1.5">นามสกุล <span className="text-red-500">*</span></label>
-                      <input 
-                        type="text" 
-                        name="student_lastname" 
-                        value={formData.student_lastname} 
-                        onChange={handleChange}
-                        placeholder="นามสกุลภาษาไทย" 
-                        className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-800 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all placeholder-gray-400"
-                      />
+                      <input type="text" name="student_lastname" value={formData.student_lastname} onChange={handleChange} placeholder="นามสกุลภาษาไทย" className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-800 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all placeholder-gray-400" />
                   </div>
               </div>
-
-              {/* Campus */}
               <div className="grid grid-cols-1 gap-5">
                 <div className="col-span-1">
                     <label className="block text-xs font-bold text-gray-700 mb-1.5">วิทยาเขต <span className="text-red-500">*</span></label>
-                    <select 
-                        name="campus_id" 
-                        value={formData.campus_id} 
-                        onChange={handleChange} 
-                        required 
-                        className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-800 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none cursor-pointer transition-all hover:border-emerald-400 shadow-sm"
-                    >
+                    <select name="campus_id" value={formData.campus_id} onChange={handleChange} required className="w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-800 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none cursor-pointer transition-all hover:border-emerald-400 shadow-sm">
                         <option value={0}>-- กรุณาเลือกวิทยาเขต --</option>
                         {masterCampuses.map(camp => (
                             <option key={camp.campus_id} value={camp.campus_id}>{camp.campus_name} {camp.campus_code ? `(${camp.campus_code})` : ''}</option>
@@ -449,15 +377,8 @@ export default function FirstLoginPage() {
               </div>
             </div>
 
-            {/* Submit Button */}
             <div className="pt-8 flex justify-end animate-fade-in delay-300">
-              <button 
-                type="submit" 
-                disabled={loading}
-                className={`w-full md:w-auto px-10 py-3.5 rounded-xl font-bold text-white shadow-lg shadow-emerald-200 transition-all transform active:scale-95 flex items-center justify-center gap-2 hover:shadow-xl
-                  ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:to-teal-700'}
-                `}
-              >
+              <button type="submit" disabled={loading} className={`w-full md:w-auto px-10 py-3.5 rounded-xl font-bold text-white shadow-lg shadow-emerald-200 transition-all transform active:scale-95 flex items-center justify-center gap-2 hover:shadow-xl ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:to-teal-700'}`}>
                 {loading ? (
                     <>
                         <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -471,7 +392,6 @@ export default function FirstLoginPage() {
                 )}
               </button>
             </div>
-
           </form>
         </div>
       </div>
