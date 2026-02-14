@@ -24,7 +24,7 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
       // 🔍 DEBUG: ขอดูไส้ในของ User หน่อยซิ ว่าหน้าตาเป็นยังไงแน่?
       console.log("🔍 [RoleGuard] User Data Loaded:", user);
 
-      // ✅ แก้ไข: รองรับชื่อตัวแปรหลายรูปแบบ (กันพลาดเรื่องตัวพิมพ์เล็ก/ใหญ่)
+      // แก้ไข: รองรับชื่อตัวแปรหลายรูปแบบ (กันพลาดเรื่องตัวพิมพ์เล็ก/ใหญ่)
       // @ts-ignore
       const userRoleId = user.role_id ?? user.roleId ?? user.RoleId ?? user.RoleID;
 
@@ -37,7 +37,7 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
       }
 
       const userRoleStr = getRoleString(Number(userRoleId)); // แปลงเป็นตัวเลขให้ชัวร์
-      console.log(`✅ [RoleGuard] Checking Role: ${userRoleStr} (ID: ${userRoleId})`);
+      console.log(`[RoleGuard] Checking Role: ${userRoleStr} (ID: ${userRoleId})`);
 
       if (!allowedRoles.includes(userRoleStr)) {
         Swal.fire({
@@ -59,10 +59,14 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
 
   const getRoleString = (id: number) => {
      switch(id) {
-         case 1: return "student";
-         case 2: return "admin";
-         case 3: return "head_of_department"; 
-         default: return "guest";
+        case 1: return "student";
+        case 2: return "head_of_department";
+        case 3: return "dean";
+        case 4: return "associate_dean";
+        case 5: return "student_development";
+        case 6: return "student_development_committee";
+        case 7: return "chairman_of_student_development_committee";
+        default: return "student";
      }
   };
 

@@ -18,7 +18,7 @@ const authService = {
   register: async (email: string, password: string) => {
     try {
       // ยิง POST Request ไปที่ Backend Go Fiber
-      const response = await axios.post(`${API_BASE_URL}/auth/register`, {
+      const response = await axios.post(`/api-backend/auth/register`, {
         email: email,
         password: password,
         confirmPassword: password

@@ -22,20 +22,19 @@ interface LoginResponse {
     firstname: string;
     lastname: string;
     role_id: number;
-    first_login: boolean; 
+    is_first_login: boolean; 
   };
 }
 
 const mapRoleIdToRoleName = (roleId: number): string => {
   switch (roleId) {
     case 1: return "student";
-    case 2: return "admin";
-    case 3: return "head_of_department";
-    case 4: return "dean";
-    case 5: return "associate_dean";
-    case 6: return "student_development";
-    case 7: return "student_development_committee";
-    case 8: return "chairman_of_student_development_committee";
+    case 2: return "head_of_department";
+    case 3: return "dean";
+    case 4: return "associate_dean";
+    case 5: return "student_development";
+    case 6: return "student_development_committee";
+    case 7: return "chairman_of_student_development_committee";
     default: return "student";
   }
 };
@@ -48,12 +47,12 @@ const authService = {
       return { 
         token: "mock_token", 
         role: "student", 
-        user: { firstname: "Mock", lastname: "User", role_id: 1, first_login: true } // ลองแก้เป็น true เพื่อเทส Mock
+        user: { firstname: "Mock", lastname: "User", role_id: 1, is_first_login: true } // ลองแก้เป็น true เพื่อเทส Mock
       };
     } else {
       try {
         const response = await axios.post(
-          `${API_BASE_URL}/auth/login`, 
+          `/api-backend/auth/login`, 
           { email, password },
           { 
             withCredentials: true,
@@ -103,7 +102,7 @@ export default function LoginPage() {
     
     // 1. ดักจับเงื่อนไข First Login สำหรับนิสิตก่อน
     if (role === "student" && firstLogin) {
-      router.push("/student/first-login");
+      router.push("/student/auth/first-login");
       return; // จบฟังก์ชันทันที ไม่ต้องไปเช็ค role อื่น
     }
 
@@ -115,8 +114,7 @@ export default function LoginPage() {
       chairman_of_student_development_committee: "/chairman-of-student-development-committee/consider",
       student_development_committee: "/student-development-committee/consider",
       student_development: "/student-development/verify-submit",
-      student: "/student/student-nomination-form",
-      admin: "/admin/users",
+      student: "/student/main/student-nomination-form",
     };
     
     router.push(routes[role] || "/");
@@ -150,7 +148,7 @@ export default function LoginPage() {
       });
 
       // ส่งค่า first_login ไปเช็คเพื่อ Redirect
-      handleRedirect(data.role, data.user.first_login);
+      handleRedirect(data.role, data.user.is_first_login);
 
     } catch (err: any) {
       console.error("Login Error:", err);

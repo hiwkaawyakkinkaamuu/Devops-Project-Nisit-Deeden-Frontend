@@ -97,7 +97,7 @@ const nominationTrackingService = {
   getLatestNomination: async (token: string | null): Promise<NominationTracking | null> => {
       try {
         // ยิงไปที่ Endpoint ที่เราเพิ่งแก้ Route ไป
-        const response = await axios.get(`${API_BASE_URL}/awards/my/submissions`, {
+        const response = await axios.get(`/api/awards/my/submissions`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

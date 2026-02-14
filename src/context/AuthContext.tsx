@@ -13,7 +13,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_BASE_URL = "/api-backend";
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<any>(null);
@@ -57,7 +57,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     localStorage.setItem("token", token);
     localStorage.setItem("role", role);
     
-    // ✅ ถ้าตอน Login หลังบ้านส่ง user ซ้อนมา ให้แกะก่อนเก็บ
+    // ถ้าตอน Login หลังบ้านส่ง user ซ้อนมา ให้แกะก่อนเก็บ
     const actualUser = userData.user ? userData.user : userData;
     setUser({ ...actualUser, token, role });
   };

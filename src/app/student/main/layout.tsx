@@ -1,5 +1,5 @@
 import RoleGuard from "@/components/auth/RoleGuard"; // Import เข้ามา
-import StudentFormLayout from "@/components/layouts/StudentFormLayout"; // Layout ความสวยงามเดิมของคุณ
+import StudentFormLayout from "@/components/layouts/Layout"; // Layout ความสวยงามเดิมของคุณ
 
 export default function StudentRootLayout({ children }: { children: React.ReactNode }) {
   return (

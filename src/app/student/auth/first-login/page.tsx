@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/Skeleton";
 // 0. Configuration & Service Layer
 // ==========================================
 
-const USE_MOCK_DATA = false;
+const USE_MOCK_DATA = false; // ปรับเป็น false ถ้าเชื่อม Backend แล้ว
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 // --- Interfaces ---
@@ -28,6 +28,7 @@ interface UserProfile {
 interface MasterCampus {
   campus_id: number;
   campus_name: string;
+  campus_code?: string;
 }
 
 // --- Service Object ---
@@ -47,11 +48,13 @@ const firstLoginService = {
             campus_id: 0,
             image_url: ""
         }, 
+        // ✅ อัปเดตข้อมูลวิทยาเขตให้ตรงกับ DB ของคุณ
         campuses: [
-            { campus_id: 1, campus_name: "วิทยาเขตบางเขน" },
-            { campus_id: 2, campus_name: "วิทยาเขตกำแพงแสน" },
-            { campus_id: 3, campus_name: "วิทยาเขตศรีราชา" },
-            { campus_id: 4, campus_name: "วิทยาเขตเฉลิมพระเกียรติ จังหวัดสกลนคร" }
+            { campus_id: 1, campus_name: "บางเขน", campus_code: "KU" },
+            { campus_id: 2, campus_name: "กำแพงแสน", campus_code: "KU-KPS" },
+            { campus_id: 3, campus_name: "ศรีราชา", campus_code: "KU-SR" },
+            { campus_id: 4, campus_name: "เฉลิมพระเกียรติ จังหวัดสกลนคร", campus_code: "KU-CSC" },
+            { campus_id: 5, campus_name: "สุพรรณบุรี", campus_code: "KU-SLA" }
         ] 
       };
     } else {
@@ -59,33 +62,31 @@ const firstLoginService = {
         const headers = { Authorization: `Bearer ${token}` };
         
         // 1. ดึงข้อมูล User (ผ่าน /auth/me) เพื่อเอาชื่อ-นามสกุลเดิม
-        const resMe = await axios.get(`${API_BASE_URL}/auth/me`, { headers });
+        const resMe = await axios.get(`/api/auth/me`, { headers });
         const userData = resMe.data.user;
 
         // 2. ดึงข้อมูล Student (เผื่อมีอยู่แล้ว)
         let studentData = { student_number: "", prefix: "ไม่ระบุ" };
         try {
-            const resStudent = await axios.get(`${API_BASE_URL}/students/me`, { headers });
-            if(resStudent.data.data) {
+            const resStudent = await axios.get(`/api/students/me`, { headers });
+            // เช็ค structure ให้ดีว่า backend ส่งมาเป็น data.data หรือ data เฉยๆ
+            if(resStudent.data && resStudent.data.data) {
                 studentData = resStudent.data.data;
+            } else if (resStudent.data) {
+                studentData = resStudent.data;
             }
         } catch (e) {
             // ถ้ายังไม่มีข้อมูล Student ให้ข้ามไป (ใช้ค่า default)
+            console.log("No existing student data found, using defaults.");
         }
 
-        // 3. ดึงข้อมูล Campuses (ถ้ามี API นี้ ถ้าไม่มีให้ Hardcode)
-        // const resCampuses = await axios.get(`${API_BASE_URL}/master/campuses`, { headers });
-        const mockCampuses = [
-            { campus_id: 1, campus_name: "วิทยาเขตบางเขน" },
-            { campus_id: 2, campus_name: "วิทยาเขตกำแพงแสน" },
-            { campus_id: 3, campus_name: "วิทยาเขตศรีราชา" },
-            { campus_id: 4, campus_name: "วิทยาเขตเฉลิมพระเกียรติ จังหวัดสกลนคร" },
-            { campus_id: 5, campus_name: "โครงการจัดตั้งวิทยาเขตสุพรรณบุรี" }
-        ];
+        // 3. ดึง Master Campuses
+        const resCampuses = await axios.get(`/api/master/campuses`, { headers });
+        const campusesList = resCampuses.data.data || resCampuses.data || [];
 
         return {
           profile: {
-            user_id: userData.user_id,
+            user_id: userData.user_id || userData.ID, // รองรับทั้ง Snake/Pascal case
             student_firstname: userData.firstname,
             student_lastname: userData.lastname,
             email: userData.email,
@@ -94,7 +95,7 @@ const firstLoginService = {
             student_number: studentData.student_number || "",
             prefix: studentData.prefix || "ไม่ระบุ"
           },
-          campuses: mockCampuses // หรือใช้ resCampuses.data.data
+          campuses: campusesList
         };
       } catch (error) {
         throw error;
@@ -110,8 +111,7 @@ const firstLoginService = {
     };
 
     // 1. อัปเดตตาราง User (ชื่อ, นามสกุล, วิทยาเขต, สถานะ First Login)
-    // เรียกไปที่ /auth/me (UpdateMe)
-    await axios.put(`${API_BASE_URL}/auth/me`, {
+    await axios.put(`/api/auth/me`, {
         firstname: data.student_firstname,
         lastname: data.student_lastname,
         campus_id: Number(data.campus_id),
@@ -119,13 +119,9 @@ const firstLoginService = {
     }, { headers });
 
     // 2. อัปเดตตาราง Student (รหัสนิสิต, คำนำหน้า)
-    // เรียกไปที่ /students/me (UpdateMyStudent)
-    // Backend ต้องมี Route นี้ที่เรียก studentHandler.UpdateMyStudent
-    await axios.put(`${API_BASE_URL}/students/me`, {
+    await axios.put(`/api/students/me`, {
         student_number: data.student_number,
         prefix: data.prefix,
-        // faculty_id: ... (ถ้ามีในฟอร์ม)
-        // department_id: ... (ถ้ามีในฟอร์ม)
     }, { headers });
 
     return { success: true };
@@ -170,7 +166,6 @@ export default function FirstLoginPage() {
       try {
         const token = localStorage.getItem("token");
         if (!token) {
-            // ถ้าไม่มี Token ให้ดีดกลับหน้า Login
             router.push("/");
             return;
         }
@@ -180,7 +175,6 @@ export default function FirstLoginPage() {
         setFormData(prev => ({ 
             ...prev, 
             ...data.profile,
-            // ถ้าค่าว่าง ให้ใส่ Default
             prefix: data.profile.prefix || "ไม่ระบุ"
         }));
         setMasterCampuses(data.campuses);
@@ -188,8 +182,14 @@ export default function FirstLoginPage() {
 
       } catch (error) {
         console.error("Initialization Error:", error);
-        Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: 'กรุณา Login ใหม่อีกครั้ง' });
-        router.push("/");
+        // ถ้าโหลดไม่สำเร็จ อาจจะลองใช้ Mock เพื่อดูหน้าตาก่อนได้
+        // หรือแจ้งเตือนให้ Login ใหม่
+        Swal.fire({ 
+            icon: 'error', 
+            title: 'โหลดข้อมูลไม่สำเร็จ', 
+            text: 'กรุณา Login ใหม่อีกครั้ง' 
+        });
+        // router.push("/"); // Uncomment เพื่อบังคับกลับหน้าแรก
       }
     };
 
@@ -248,13 +248,10 @@ export default function FirstLoginPage() {
     try {
       const token = localStorage.getItem("token");
       
-      // เรียก Service ที่เราเขียน Logic ยิง 2 API ไว้
+      // เรียก Service อัปเดตข้อมูล
       await firstLoginService.updateFirstLogin(token, formData);
 
-      /* Note: ถ้าต้องการอัปโหลดรูปด้วย ต้องสร้าง API Upload แยกที่หลังบ้าน 
-         เช่น POST /users/upload-image ที่รับ MultipartForm 
-         แล้วค่อยเรียกเพิ่มตรงนี้
-      */
+      // TODO: อัปโหลดรูปภาพถ้ามี selectedImage
 
       await Swal.fire({
         icon: 'success',
@@ -264,6 +261,7 @@ export default function FirstLoginPage() {
         showConfirmButton: false
       });
 
+      // Redirect ไปหน้าฟอร์มเสนอชื่อ
       router.push("/student/student-nomination-form"); 
 
     } catch (error: any) {
@@ -444,7 +442,7 @@ export default function FirstLoginPage() {
                     >
                         <option value={0}>-- กรุณาเลือกวิทยาเขต --</option>
                         {masterCampuses.map(camp => (
-                            <option key={camp.campus_id} value={camp.campus_id}>{camp.campus_name}</option>
+                            <option key={camp.campus_id} value={camp.campus_id}>{camp.campus_name} {camp.campus_code ? `(${camp.campus_code})` : ''}</option>
                         ))}
                     </select>
                 </div>

@@ -99,7 +99,7 @@ const nominationHistoryService = {
   getHistory: async (token: string | null): Promise<NominationHistory[]> => {
       try {
         // ยิงไปที่ Endpoint เดียวกัน แต่ดึงทั้งหมดมาแสดง
-        const response = await axios.get(`${API_BASE_URL}/awards/my/submissions`, {
+        const response = await axios.get(`/api/awards/my/submissions`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         

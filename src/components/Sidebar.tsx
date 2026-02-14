@@ -49,13 +49,12 @@ interface SidebarProps {
 const getRoleKey = (roleId: number | undefined): UserRole => {
   switch (roleId) {
     case 1: return "student";
-    case 2: return "admin";
-    case 3: return "head_of_department";
-    case 4: return "dean";
-    case 5: return "associate_dean";
-    case 6: return "student_development";
-    case 7: return "student_development_committee";
-    case 8: return "chairman_of_student_development_committee";
+    case 2: return "head_of_department";
+    case 3: return "dean";
+    case 4: return "associate_dean";
+    case 5: return "student_development";
+    case 6: return "student_development_committee";
+    case 7: return "chairman_of_student_development_committee";
     default: return "student";
   }
 };
@@ -88,9 +87,9 @@ const Icons = {
 
 const MENU_CONFIG: Record<string, MenuItemType[]> = {
   student: [
-    { href: "/student/student-nomination-form", label: "เสนอรายชื่อนิสิตดีเด่น", icon: Icons.Badge },
-    { href: "/student/trace-nomination", label: "ติดตามสถานะ", icon: Icons.Track },
-    { href: "/student/nomination-history", label: "ประวัติการเสนอ", icon: Icons.History },
+    { href: "/student/main/student-nomination-form", label: "เสนอรายชื่อนิสิตดีเด่น", icon: Icons.Badge },
+    { href: "/student/main/trace-nomination", label: "ติดตามสถานะ", icon: Icons.Track },
+    { href: "/student/main/nomination-history", label: "ประวัติการเสนอ", icon: Icons.History },
   ],
   head_of_department: [
     { href: "/head-of-department/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
@@ -118,10 +117,6 @@ const MENU_CONFIG: Record<string, MenuItemType[]> = {
     { href: "/student-development/manage-account", label: "จัดการบัญชีผู้ใช้", icon: Icons.DocumentCheck },
     { href: "/student-development/master-data", label: "จัดการคณะเเละสาขา", icon: Icons.UsersGroup },
     { href: "/student-development/setting", label: "ตั้งค่าช่วงเวลารับสมัคร", icon: Icons.History },
-  ],
-  admin: [
-    { href: "/admin/users", label: "จัดการผู้ใช้งานทั้งหมด", icon: Icons.UsersGroup },
-    { href: "/admin/system-log", label: "Log การทำงาน", icon: Icons.History },
   ]
 };
 
@@ -318,7 +313,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
             const token = localStorage.getItem("token");
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
             
-            const response = await axios.get(`${apiUrl}/auth/me`, {
+            const response = await axios.get(`/api-backend/auth/me`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 

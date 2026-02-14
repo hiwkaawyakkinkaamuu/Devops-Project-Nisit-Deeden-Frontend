@@ -35,22 +35,38 @@ const nominationService = {
   // ดึงข้อมูล User Profile
   getProfile: async (token: string) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/auth/me`, {
+      const response = await axios.get(`/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 10000,
       });
-      const u = response.data.user;
+
+      // 🔍 DEBUG: ดูว่า Backend ส่งอะไรมาแน่
+      console.log("Debug Auth/Me:", response.data); 
+
+      // 1. หา Object User (บางทีอาจซ้อนอยู่ใน data.data หรือ data.user)
+      const u = response.data.user || response.data.data || response.data;
+
+      // 2. หา Object Student (รองรับทั้งตัวเล็ก ตัวใหญ่ และ student_data)
+      const st = u.Student || u.student || u.student_data || {};
+
+      // 3. หา Faculty / Department (ถ้ามี)
+      const fac = st.Faculty || st.faculty || {};
+      const dept = st.Department || st.department || {};
+
       return {
-        student_firstname: u.firstname,
-        student_lastname: u.lastname,
-        student_number: u.student_data?.student_number || "",
-        email: u.email,
-        student_year: u.student_data?.year ? String(u.student_data.year) : "",
-        faculty_id: String(u.student_data?.faculty_id || ""),
-        department_id: String(u.student_data?.department_id || ""),
-        advisor_name: "", // ให้ User กรอกเพิ่ม
-        gpa: "",          // ให้ User กรอกเพิ่ม
-        phone_number: ""  // ให้ User กรอกเพิ่ม
+        student_firstname: u.firstname || "",
+        student_lastname: u.lastname || "",
+        student_number: st.student_number || "", // ดึงจาก st ที่เราหามาตะกี้
+        email: u.email || "",
+        student_year: st.year ? String(st.year) : "",
+        
+        // ลองดึงชื่อคณะ/ภาควิชา ถ้าไม่มีให้ส่งค่าว่าง หรือ ID ไปก่อน
+        faculty_id: fac.faculty_name || String(st.faculty_id || ""), 
+        department_id: dept.department_name || String(st.department_id || ""),
+        
+        advisor_name: "", 
+        gpa: "",          
+        phone_number: ""  
       };
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -60,16 +76,16 @@ const nominationService = {
 
   // ดึงปีการศึกษาปัจจุบัน
   getCurrentTerm: async (token: string) => {
-    const response = await axios.get(`${API_BASE_URL}/academic-years/current/semester`, {
+    const response = await axios.get(`/api-backend/academic-years/current/semester`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    return response.data.data; // { year: 2569, semester: 1 }
+    return response.data.data;
   },
 
   // เช็คประวัติการส่ง (เทียบกับปี/เทอมปัจจุบัน)
   checkSubmissionHistory: async (token: string, currentYear: number, currentSemester: number) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/awards/my/submissions`, {
+      const response = await axios.get(`/api-backend/awards/my/submissions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const submissions = response.data.data || [];
@@ -87,7 +103,7 @@ const nominationService = {
 
   // ส่งข้อมูล (Submit)
   submitNomination: async (token: string, formData: FormData) => {
-    const response = await axios.post(`${API_BASE_URL}/awards/submit`, formData, {
+    const response = await axios.post(`/api-backend/awards/submit`, formData, {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "multipart/form-data",
