@@ -11,14 +11,14 @@ import axios from "axios";
 // ==========================================
 
 // ชี้ไปที่ Backend Go Fiber ของคุณ (Port 8080)
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_BASE_URL = "/api";
 
 // --- Service Layer ---
 const authService = {
   register: async (email: string, password: string) => {
     try {
       // ยิง POST Request ไปที่ Backend Go Fiber
-      const response = await axios.post(`/api/auth/register`, {
+      const response = await axios.post(`${API_BASE_URL}/auth/register`, {
         email: email,
         password: password,
         confirmPassword: password

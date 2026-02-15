@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import NominationDetailModal from "@/components/nomination-detail-modal"; 
+import NominationDetailModal from "@/components/Nomination-detail-modal"; 
 import Swal from "sweetalert2"; 
 import axios from "axios";
 
@@ -10,7 +10,7 @@ import axios from "axios";
 // ==========================================
 
 const USE_MOCK_DATA = false; 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"; 
+const API_BASE_URL = "/api"; 
 
 // --- Interfaces ---
 export interface FileResponse {
@@ -99,7 +99,7 @@ const approvalService = {
         // [แก้ไขจุดที่ 1] เปลี่ยน Endpoint ให้ตรงกับ Backend
         // ใช้ /api/awards/search เพื่อดึงรายการทั้งหมด
         // เพิ่ม limit=100 เพื่อดึงมาให้ครบแล้วค่อยกรองหน้าบ้าน
-        const response = await axios.get(`/api/awards/search`, {
+        const response = await axios.get(`${API_BASE_URL}/awards/search`, {
           params: { 
             ...params, 
             limit: 100 
@@ -107,6 +107,8 @@ const approvalService = {
           headers: { Authorization: `Bearer ${token}` }
         });
         
+        console.log("Raw Data from API:", response.data.data);
+
         const rawData = response.data.data || [];
 
         // [แก้ไขจุดที่ 2] กรองเฉพาะสถานะที่ต้องพิจารณา 
@@ -125,20 +127,23 @@ const approvalService = {
     }
   },
 
-  submitVote: async (token: string | null, payload: { votes: Array<{ form_id: number, vote_type: string, reason: string }> }) => {
-    // ... (ส่วน submitVote ของเดิม ถ้า API vote ยังไม่แก้ให้ใช้ logic เดิมไปก่อน หรือปรับตาม Backend ใหม่)
-     if (USE_MOCK_DATA) {
-        await new Promise(r => setTimeout(r, 800));
-        return { success: true, message: "Mock vote submitted" };
-      } else {
-        // [ข้อควรระวัง] เช็ค Endpoint Vote ของ Backend ด้วยว่าใช้ url ไหน
-        // ถ้า Backend ใช้ PUT /api/awards/:id/form-status ก็ต้องแก้ตรงนี้ด้วย
-        // แต่เบื้องต้นแก้ get ให้ข้อมูลขึ้นก่อนครับ
-        const response = await axios.post(`/api/approvals/head-of-department/vote`, payload, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        return response.data;
-      }
+  submitVote: async (token: string | null, formId: number, statusId: number, reason: string) => {
+    if (USE_MOCK_DATA) {
+      await new Promise(r => setTimeout(r, 800));
+      return { success: true, message: "Mock vote submitted" };
+    } else {
+      // API จริง: เปลี่ยนไปใช้ PUT /api/awards/:id/form-status ให้ตรงกับ Backend
+      const payload = { 
+          form_status_id: statusId
+          // หมายเหตุ: Backend ปัจจุบันรับแค่ form_status_id 
+          // (ถ้าต้องการเก็บ reason ต้องไปเพิ่ม Logic ที่ Backend ครับ)
+      };
+
+      const response = await axios.put(`${API_BASE_URL}/awards/${formId}/form-status`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    }
   }
 };
 
@@ -352,44 +357,30 @@ export default function HeadOfDepartmentApprovalPage() {
   };
 
   const submitVote = async (id: number, statusId: number, reason: string, studentName: string) => {
-      try {
-        const token = localStorage.getItem("token");
-        
-        // Payload สำหรับ update status
-        const voteType = reason ? "rejected" : "approved";
-        const payload = { 
-            votes: [
-                {
-                    form_id: id,
-                    vote_type: voteType,
-                    reason: reason || ""
-                }
-            ]
-        };
+    try {
+      const token = localStorage.getItem("token");
+      
+      // แก้ไขการส่ง Parameter ให้ตรงกับ service ใหม่
+      await approvalService.submitVote(token, id, statusId, reason);
+      
+      // Remove from UI
+      setItems(prev => prev.filter(c => c.form_id !== id));
+      setSelectedId(null);
 
-        // ถ้ามีเหตุผล (กรณี Reject) อาจต้องส่งแยกหรือรวม ขึ้นอยู่กับ Backend รองรับ
-        // แต่ในตัวอย่างนี้ส่งแค่ status_id ตาม Handler UpdateFormStatus ของ Backend เดิม
-        
-        await approvalService.submitVote(token, payload);
-        
-        // Remove from UI
-        setItems(prev => prev.filter(c => c.form_id !== id));
-        setSelectedId(null);
+      const isReject = reason.length > 0;
 
-        const isReject = reason.length > 0;
-
-        const Toast = Swal.mixin({
-            toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true
-        });
-        Toast.fire({
-            icon: isReject ? 'info' : 'success',
-            title: 'บันทึกผลสำเร็จ',
-            text: `ได้ทำการ${isReject ? 'ไม่เห็นชอบ' : 'เห็นชอบ'}นิสิต: ${studentName} เรียบร้อยแล้ว`
-        });
-      } catch (error) {
-        console.error("Submit Error:", error);
-        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ดำเนินการไม่สำเร็จ' });
-      }
+      const Toast = Swal.mixin({
+          toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true
+      });
+      Toast.fire({
+          icon: isReject ? 'info' : 'success',
+          title: 'บันทึกผลสำเร็จ',
+          text: `ได้ทำการ${isReject ? 'ไม่เห็นชอบ' : 'เห็นชอบ'}นิสิต: ${studentName} เรียบร้อยแล้ว`
+      });
+    } catch (error) {
+      console.error("Submit Error:", error);
+      Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ดำเนินการไม่สำเร็จ' });
+    }
   };
 
   // ... (Render Part เหมือนเดิมทุกประการ) ...

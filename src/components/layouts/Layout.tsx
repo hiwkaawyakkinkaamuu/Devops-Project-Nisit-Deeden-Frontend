@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { z } from "zod"; 
 import Swal from "sweetalert2";
-import Sidebar from "@/components/sidebar"; 
+import Sidebar from "@/components/Sidebar"; 
 
 // ==========================================
 // 1. Validation Schema (Zod)
@@ -39,9 +39,9 @@ export default function StudentFormLayout({
       
       try {
         const token = localStorage.getItem("token");
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+        const apiUrl = "/api";
 
-        const response = await axios.get(`/api/academic-years/current/semester`, {
+        const response = await axios.get(`${apiUrl}/academic-years/current/semester`, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",

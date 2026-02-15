@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import NominationDetailModal from "@/components/nomination-detail-modal"; 
+import NominationDetailModal from "@/components/Nomination-detail-modal"; 
 import Swal from "sweetalert2"; 
 import axios from "axios";
 

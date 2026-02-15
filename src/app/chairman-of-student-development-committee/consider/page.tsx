@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Swal from "sweetalert2"; 
 import axios from "axios";
-import NominationDetailModal from "@/components/nomination-detail-modal"; 
+import NominationDetailModal from "@/components/Nomination-detail-modal"; 
 
 // ==========================================
 // 0. Configuration & Service Layer

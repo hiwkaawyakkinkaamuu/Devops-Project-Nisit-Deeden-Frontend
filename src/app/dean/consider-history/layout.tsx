@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { z } from "zod"; 
 import Swal from "sweetalert2";
-import Sidebar from "@/components/sidebar"; 
+import Sidebar from "@/components/Sidebar"; 
 
 // ==========================================
 // 1. Validation Schema (Zod)

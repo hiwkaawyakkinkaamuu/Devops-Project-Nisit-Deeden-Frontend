@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Swal from "sweetalert2";
 import axios from "axios";
-import { useAuth } from "@/context/AuthContext"; //  1. Import useAuth
+import { useAuth } from "@/context/AuthContext";
 
 // ==========================================
 // 0. Configuration & Service Layer
 // ==========================================
 
 const USE_MOCK_DATA = false;
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_BASE_URL = "/api";
 
 // Interface
 interface LoginResponse {
@@ -52,7 +52,7 @@ const authService = {
     } else {
       try {
         const response = await axios.post(
-          `/api/auth/login`, 
+          `${API_BASE_URL}/auth/login`, 
           { email, password },
           { 
             withCredentials: true,

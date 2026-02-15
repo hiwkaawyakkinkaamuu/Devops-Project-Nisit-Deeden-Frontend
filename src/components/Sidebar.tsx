@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { ReactNode, useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import axios from "axios";
-import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
 

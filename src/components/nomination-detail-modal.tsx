@@ -110,6 +110,7 @@ export default function NominationDetailModal({ isOpen, onClose, data, faculties
   // --- Effects ---
   useEffect(() => {
     if (isOpen && data) {
+        console.log("Current Award Type ID:", data.award_type_id)
         setIsVisible(true);
         // Map ID to Name (Static/Prop Data)
         const fac = faculties.find(f => f.faculty_id === data.faculty_id);
@@ -222,7 +223,7 @@ export default function NominationDetailModal({ isOpen, onClose, data, faculties
             </section>
 
             {/* 2. รายละเอียดผลงาน (ซ่อนถ้าเป็น Behavior */}
-            {!isBehavior && (
+            {isBehavior && (
                 <section className="animate-fade-in-up" style={{ animationDelay: '100ms' }}>
                     <div className="flex items-center gap-3 mb-6">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white shadow-sm

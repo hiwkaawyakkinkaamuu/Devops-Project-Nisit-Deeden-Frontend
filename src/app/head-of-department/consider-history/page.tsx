@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import NominationDetailModal from "@/components/nomination-detail-modal"; 
+import NominationDetailModal from "@/components/Nomination-detail-modal"; 
 import Swal from "sweetalert2"; 
 import axios from "axios";
 
@@ -10,7 +10,7 @@ import axios from "axios";
 // ==========================================
 
 const USE_MOCK_DATA = true; // Set FALSE to use Real API
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE_URL = "/api";
 
 // --- Interfaces ---
 interface FileResponse {
@@ -183,7 +183,7 @@ const associateDeanService = {
           apiParams.status_id_in = "2,3"; // Default fetch Approved & Rejected
       }
 
-      const response = await axios.get(`${API_BASE_URL}/api/associate-dean/nominations/history`, {
+      const response = await axios.get(`${API_BASE_URL}/associate-dean/nominations/history`, {
         params: apiParams,
         headers: { Authorization: `Bearer ${token}` }
       });

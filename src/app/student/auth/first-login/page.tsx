@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
 import axios from "axios";
-import { Skeleton } from "@/components/Skeleton";
+import { skeleton as Skeleton } from "@/components/Skeleton";
 
 // ==========================================
 // 0. Configuration & Service Layer
@@ -12,9 +12,9 @@ import { Skeleton } from "@/components/Skeleton";
 
 const USE_MOCK_DATA = false;
 
-// ✅ Config: ตัด /api ออกเพื่อให้ Proxy จัดการ (ถ้าตั้ง Proxy ไว้แล้ว)
+// Config: ตัด /api ออกเพื่อให้ Proxy จัดการ (ถ้าตั้ง Proxy ไว้แล้ว)
 // หรือถ้าไม่ได้ตั้ง Proxy ก็ใส่ URL เต็มๆ เช่น "http://localhost:8080"
-const API_BASE_URL = ""; 
+const API_BASE_URL = "/api"; 
 
 // --- Interfaces ---
 interface UserProfile {

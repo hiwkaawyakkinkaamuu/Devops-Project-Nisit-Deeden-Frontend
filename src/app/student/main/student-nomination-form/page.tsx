@@ -10,7 +10,7 @@ import axios from "axios";
 // 0. Configuration
 // ==========================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_BASE_URL = "/api";
 const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 const MAX_TOTAL_FILE_SIZE_MB = 10;
 
@@ -35,7 +35,7 @@ const nominationService = {
   // ดึงข้อมูล User Profile
   getProfile: async (token: string) => {
     try {
-      const response = await axios.get(`/api/auth/me`, {
+      const response = await axios.get(`${API_BASE_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 10000,
       });
@@ -76,7 +76,7 @@ const nominationService = {
 
   // ดึงปีการศึกษาปัจจุบัน
   getCurrentTerm: async (token: string) => {
-    const response = await axios.get(`/api/academic-years/current/semester`, {
+    const response = await axios.get(`${API_BASE_URL}/academic-years/current/semester`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     return response.data.data;
@@ -85,7 +85,7 @@ const nominationService = {
   // เช็คประวัติการส่ง (เทียบกับปี/เทอมปัจจุบัน)
   checkSubmissionHistory: async (token: string, currentYear: number, currentSemester: number) => {
     try {
-      const response = await axios.get(`/api/awards/my/submissions`, {
+      const response = await axios.get(`${API_BASE_URL}/awards/my/submissions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const submissions = response.data.data || [];
@@ -103,7 +103,7 @@ const nominationService = {
 
   // ส่งข้อมูล (Submit)
   submitNomination: async (token: string, formData: FormData) => {
-    const response = await axios.post(`/api/awards/submit`, formData, {
+    const response = await axios.post(`${API_BASE_URL}/awards/submit`, formData, {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "multipart/form-data",

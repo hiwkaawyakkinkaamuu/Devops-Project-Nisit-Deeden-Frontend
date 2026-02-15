@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
+import { s } from "framer-motion/client";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import Swal from "sweetalert2";
@@ -49,8 +50,13 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
         });
         
         const dashboardMap: Record<string, string> = {
-            student: "/student/student-nomination-form",
-            admin: "/admin/users",
+            student: "/student/main/student-nomination-form",
+            student_development: "/student-development/setting",
+            student_development_committee: "/student-development-committee/consider",
+            chairman_of_student_development_committee: "/chairman-of-student-development-committee/consider",
+            head_of_department: "/head-of-department/consider",
+            dean: "/dean/consider",
+            associate_dean: "/associate-dean/consider"
         };
         router.replace(dashboardMap[userRoleStr] || "/");
       }

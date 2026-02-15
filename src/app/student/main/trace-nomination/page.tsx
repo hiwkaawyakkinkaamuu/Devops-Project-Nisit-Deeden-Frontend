@@ -9,7 +9,7 @@ import Swal from "sweetalert2";
 // 0. Configuration
 // ==========================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_BASE_URL = "/api";
 
 // ==========================================
 // 1. Interfaces
@@ -60,7 +60,7 @@ const mapStatusToStep = (status: string): number => {
 };
 
 const mapBackendToFrontend = (backendData: any): NominationTracking => {
-  
+
     const hasRejectReason = !!backendData.reject_reason;
     const isApproved = backendData.form_status_id === 8; // สมมติว่าสถานะ 8 คืออนุมัติ
 
@@ -122,7 +122,7 @@ const formatFileSize = (bytes: number) => {
 const nominationTrackingService = {
   getLatestNomination: async (token: string | null): Promise<NominationTracking | null> => {
       try {
-        const response = await axios.get(`/api/awards/my/submissions`, {
+        const response = await axios.get(`${API_BASE_URL}/awards/my/submissions`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
