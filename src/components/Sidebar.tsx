@@ -22,11 +22,10 @@ interface UserProfileData {
   role_id: number;
   campus_id: number;
   image_path?: string;
-  student_data?: {
-    student_number: string;
-    faculty_id?: string;
-    department_id?: string;
-  };
+  // รองรับโครงสร้างข้อมูลจาก Backend (อาจเป็น Student, student หรือ student_data)
+  Student?: any;
+  student?: any;
+  student_data?: any;
 }
 
 interface MenuItemType {
@@ -81,7 +80,9 @@ const Icons = {
     Menu: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>,
     MenuClose: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>,
     Logout: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>,
-    Close: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+    Close: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>,
+    School: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>,
+    BookOpen: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
 };
 
 const MENU_CONFIG: Record<string, MenuItemType[]> = {
@@ -185,12 +186,19 @@ const ProfileSkeleton = ({ isCollapsed }: { isCollapsed: boolean }) => (
   </div>
 );
 
-// Profile Modal: สวยงามขึ้น + Animation สมูท
+// Profile Modal: แสดงข้อมูลครบถ้วน
 function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () => void; data: UserProfileData | null }) {
   if (!isOpen || !data) return null;
 
   const roleName = getRoleKey(data.role_id).replace(/_/g, ' ').toUpperCase();
   const campusName = getCampusName(data.campus_id);
+
+  // ดึงข้อมูลนิสิต (รองรับหลาย Case ที่ Backend อาจส่งมา)
+  const student = data.Student || data.student || data.student_data;
+  const studentNumber = student?.student_number;
+  // ดึงชื่อคณะ/สาขา (รองรับทั้ง Object และ String)
+  const facultyName = student?.Faculty?.faculty_name || student?.faculty?.faculty_name || student?.faculty_id;
+  const departmentName = student?.Department?.department_name || student?.department?.department_name || student?.department_id;
 
   return (
     <AnimatePresence>
@@ -251,10 +259,10 @@ function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () 
                     </div>
 
                     {/* Info Card List */}
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         {/* Email */}
-                        <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
-                            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100">
+                        <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
+                            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                             </div>
                             <div className="overflow-hidden">
@@ -264,14 +272,40 @@ function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () 
                         </div>
                         
                         {/* Student ID */}
-                        {data.student_data?.student_number && (
-                            <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
-                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100">
+                        {studentNumber && (
+                            <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
+                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
                                     {Icons.User}
                                 </div>
-                                <div>
+                                <div className="overflow-hidden">
                                     <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wide">รหัสนิสิต</p>
-                                    <p className="text-sm text-gray-800 font-mono font-bold tracking-wider">{data.student_data.student_number}</p>
+                                    <p className="text-sm text-gray-800 font-mono font-bold tracking-wider">{studentNumber}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Faculty */}
+                        {facultyName && (
+                            <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
+                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
+                                    {Icons.School}
+                                </div>
+                                <div className="overflow-hidden">
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wide">คณะ</p>
+                                    <p className="text-sm text-gray-800 font-bold truncate">{facultyName}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Department */}
+                        {departmentName && (
+                            <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
+                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
+                                    {Icons.BookOpen}
+                                </div>
+                                <div className="overflow-hidden">
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wide">สาขาวิชา</p>
+                                    <p className="text-sm text-gray-800 font-bold truncate">{departmentName}</p>
                                 </div>
                             </div>
                         )}

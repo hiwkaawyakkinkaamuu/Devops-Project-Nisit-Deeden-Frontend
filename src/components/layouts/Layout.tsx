@@ -32,6 +32,8 @@ export default function FormLayout({
   const [isLoading, setIsLoading] = useState(true);
   const [termData, setTermData] = useState<TermResponse | null>(null);
 
+  const displayYear = termData ? (parseInt(termData.year) + 543) : "N/A";
+
   // --- API Handling ---
   useEffect(() => {
     const fetchTermData = async () => {
@@ -143,7 +145,7 @@ export default function FormLayout({
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-gray-400 font-medium text-xs uppercase tracking-wider">ปีการศึกษา/เทอม:</span>
                     <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 text-base">
-                      {termData ? `${termData.year} / ${termData.semester}` : "N/A"}
+                      {termData ? `${displayYear} / ${termData.semester}` : "N/A"}
                     </span>
                   </div>
                 </motion.div>

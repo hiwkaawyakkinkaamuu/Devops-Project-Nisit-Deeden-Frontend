@@ -6,9 +6,9 @@ import Swal from "sweetalert2";
 
 // ==========================================
 // 0. Configuration
-
 // ==========================================
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 // ==========================================
 // 1. Interfaces & Types
@@ -20,7 +20,7 @@ interface NominationHistory {
   semester: number;
   award_type_name: string;
   nomination_status: string;
-  status_code: 2 | 3 | 4; // 2=Approved, 3=Rejected, 4=Pending/Other
+  status_code: 2 | 3 | 4; 
   created_at: string;
   completed_date: string;
   reject_reason?: string;
@@ -61,20 +61,16 @@ const Icons = {
 // 3. Service Layer (Axios)
 // ==========================================
 
-// Helper: แปลงข้อมูลจาก Backend เป็นรูปแบบที่หน้าบ้านต้องการ
-// StudentHistoryPage.tsx
+// Check if date is Zero time from Go (0001-01-01...)
+const isZeroDate = (dateStr: string) => {
+    return !dateStr || dateStr.startsWith("0001") || dateStr.includes("0001-01-01");
+};
 
 const mapBackendToHistory = (data: any[]): NominationHistory[] => {
     return data.map((item: any) => {
-        // 1. เช็คสถานะ:
-        // หมายเหตุ: DTO ของ Backend ปัจจุบันยังไม่ได้ส่ง field reject_reason มาให้ (ต้องไปแก้ Backend เพิ่ม)
-        // แต่ถ้าแก้แล้ว หรือใช้ form_status_id ในการเช็ค ให้ใช้ logic นี้:
-        const hasRejectReason = !!item.reject_reason; // ถ้า Backend ส่งมา
+        const hasRejectReason = !!item.reject_reason;
+        const isApproved = item.form_status_id === 8; // Adjust based on your DB
         
-        // สมมติว่าสถานะ 8 = อนุมัติ (ปรับเลขตาม Database ของคุณ)
-        const isApproved = item.form_status_id === 8; 
-        
-        // ตีความสถานะสำหรับ Frontend (4 = Pending ใน Interface ของคุณ)
         let statusCode: 2 | 3 | 4 = 4;
         let statusLabel = "อยู่ระหว่างพิจารณา";
 
@@ -86,24 +82,21 @@ const mapBackendToHistory = (data: any[]): NominationHistory[] => {
             statusLabel = "ไม่ผ่านการคัดเลือก";
         }
 
+        // [แก้ไข] Logic วันที่อัปเดต: ถ้าไม่มีวันอัปเดต หรือเป็นวันเริ่มต้น (Zero Time) ให้ใช้วันที่ส่งแทน
+        let completedDate = item.latest_update;
+        if (isZeroDate(completedDate)) {
+            completedDate = item.created_at;
+        }
+
         return {
-            // [แก้จุดที่ 1] Backend ส่งมาเป็น form_id
             form_id: item.form_id, 
-            
             academic_year: item.academic_year || 0,
             semester: item.semester || 0,
-            
-            // [แก้จุดที่ 2] Backend ส่ง award_type_name มาเป็น string เลย (ไม่ต้อง .name)
             award_type_name: item.award_type_name || "ไม่ระบุประเภท",
-            
             nomination_status: statusLabel,
             status_code: statusCode,
-            
             created_at: item.created_at,
-            
-            // [แก้จุดที่ 3] Backend ใช้ latest_update ไม่ใช่ updated_at
-            completed_date: item.latest_update || item.created_at, 
-            
+            completed_date: completedDate, // ใช้วันที่ที่ผ่านการเช็คแล้ว
             reject_reason: item.reject_reason || "",
         };
     });
@@ -112,8 +105,7 @@ const mapBackendToHistory = (data: any[]): NominationHistory[] => {
 const nominationHistoryService = {
   getHistory: async (token: string | null): Promise<NominationHistory[]> => {
       try {
-        // ยิงไปที่ Endpoint เดียวกัน แต่ดึงทั้งหมดมาแสดง
-        const response = await axios.get(`${API_BASE_URL}/awards/my/submissions`, {
+        const response = await axios.get(`/api/awards/my/submissions`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         
@@ -123,7 +115,7 @@ const nominationHistoryService = {
         return mapBackendToHistory(rawData);
 
       } catch (error: any) {
-        if (error.response?.form_status_id === 404) return []; // ไม่เคยส่ง = ว่าง
+        if (error.response?.form_status_id === 404) return []; 
         console.error("API Error:", error);
         return [];
       }
@@ -137,6 +129,7 @@ const nominationHistoryService = {
 const formatDate = (isoDate: string) => {
   if (!isoDate) return "-";
   const date = new Date(isoDate);
+  // ใช้ 'th-TH' เพื่อให้แสดงปี พ.ศ. โดยอัตโนมัติ
   return date.toLocaleDateString("th-TH", {
     year: "numeric",
     month: "short",
@@ -146,29 +139,29 @@ const formatDate = (isoDate: string) => {
 
 const getStatusConfig = (code: number) => {
   switch (code) {
-    case 2: // Approved
+    case 2: 
       return {
         label: "ผ่านการคัดเลือก",
         color: "bg-green-50 text-green-700 border-green-200",
         icon: <Icons.CheckCircle />,
       };
-    case 3: // Rejected
+    case 3: 
       return {
         label: "ไม่ผ่านการคัดเลือก",
         color: "bg-red-50 text-red-700 border-red-200",
         icon: <Icons.XCircle />,
       };
-    default: // Pending / Other
+    default: 
       return {
         label: "อยู่ระหว่างพิจารณา",
-        color: "bg-blue-50 text-blue-600 border-blue-200", // เปลี่ยนสี Pending เป็นน้ำเงินให้ดู active
-        icon: <Icons.Flag />, // ใช้รูปธงสื่อถึงกำลังดำเนินงาน
+        color: "bg-blue-50 text-blue-600 border-blue-200", 
+        icon: <Icons.Flag />, 
       };
   }
 };
 
 // ==========================================
-// 5. Sub-Components
+// 5. Sub-Components (Same as before)
 // ==========================================
 
 const StatCard = ({ title, count, colorClass, icon }: any) => (
@@ -217,11 +210,10 @@ export default function StudentHistoryPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem("token"); // ใช้ key 'token' ให้ตรงกับระบบ
+        const token = localStorage.getItem("token"); 
         if(!token) return;
 
         const data = await nominationHistoryService.getHistory(token);
-        // เรียงลำดับจากล่าสุดไปเก่าสุด
         data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         
         setHistoryList(data);
@@ -247,20 +239,18 @@ export default function StudentHistoryPage() {
     };
   }, [historyList]);
 
-  // ดึงปีการศึกษาที่มีอยู่มาทำตัวเลือก Filter
   const availableYears = Array.from(new Set(historyList.map((i) => i.academic_year))).sort((a, b) => b - a);
 
-  // --- Handlers (SweetAlert with SVG Icons) ---
+  // --- Handlers ---
   const handleViewDetail = (item: NominationHistory) => {
     const statusConfig = getStatusConfig(item.status_code);
     
-    // SVG strings for SweetAlert
+    // Icons for Swal
     const iconSuccess = `<svg class="w-16 h-16 text-green-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
     const iconFail = `<svg class="w-16 h-16 text-red-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
     const iconInfo = `<svg class="w-16 h-16 text-blue-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
     const iconAlert = `<svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>`;
 
-    // เลือก Icon ตามสถานะ
     let mainIcon = iconInfo;
     if (item.status_code === 2) mainIcon = iconSuccess;
     else if (item.status_code === 3) mainIcon = iconFail;
@@ -317,11 +307,6 @@ export default function StudentHistoryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50/50 p-6 md:p-10 font-sans pb-24">
-      <style jsx global>{`
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in-up { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-      `}</style>
-
       <div className="max-w-[1200px] mx-auto space-y-8 animate-fade-in-up">
         {/* 1. Header & Stats */}
         <div>

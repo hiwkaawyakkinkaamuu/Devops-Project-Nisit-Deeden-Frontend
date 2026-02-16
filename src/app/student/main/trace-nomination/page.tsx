@@ -161,14 +161,12 @@ const STEPS = [
 ];
 
 const formatDate = (isoDate: string) => {
-  if (!isoDate) return "-";
+  if (!isoDate || isoDate.startsWith("0001")) return "-"; // ดักจับ Zero Date ของ Go
   const date = new Date(isoDate);
   return date.toLocaleDateString("th-TH", {
-    year: "numeric",
-    month: "long",
+    year: "numeric", // จะแสดง 2567
+    month: "short",
     day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 };
 

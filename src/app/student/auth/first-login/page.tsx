@@ -23,14 +23,15 @@ interface Department {
   department_name: string;
 }
 
+// [แก้ไข] ปรับ Interface ให้ตรงกับ JSON ที่ Backend ส่งมา (camelCase)
 interface Campus {
-  campus_id: number;
-  campus_name: string;
-  campus_code?: string;
+  campusID: number;     // แก้จาก campus_id
+  campusName: string;   // แก้จาก campus_name
+  campusCode?: string;  // แก้จาก campus_code
 }
 
 interface UserProfile {
-  title: string;      // เพิ่มคำนำหน้า
+  title: string;      
   firstname: string;
   lastname: string;
   student_number: string;
@@ -38,17 +39,18 @@ interface UserProfile {
   faculty_id: string;
   department_id: string;
   campus_id: string;
-  email: string;      // Read only
-  image_url?: string; // สำหรับแสดง Preview เดิม
+  email: string;      
+  image_url?: string; 
 }
 
-// --- Mockup Data (ใช้กรณี Backend ยังไม่พร้อม) ---
+// --- Mockup Data (ใช้กรณี Backend ยังไม่มี API /campus) ---
+// [แก้ไข] ปรับ Mockup ให้ Key ตรงกันด้วย เผื่อกรณี Fallback
 const MOCK_CAMPUSES: Campus[] = [
-  { campus_id: 1, campus_name: "วิทยาเขตบางเขน", campus_code: "KU" },
-  { campus_id: 2, campus_name: "วิทยาเขตกำแพงแสน", campus_code: "KU-KPS" },
-  { campus_id: 3, campus_name: "วิทยาเขตศรีราชา", campus_code: "KU-SR" },
-  { campus_id: 4, campus_name: "วิทยาเขตเฉลิมพระเกียรติ จังหวัดสกลนคร", campus_code: "KU-CSC" },
-  { campus_id: 5, campus_name: "โครงการจัดตั้งวิทยาเขตสุพรรณบุรี", campus_code: "KU-SLA" }
+  { campusID: 1, campusName: "วิทยาเขตบางเขน", campusCode: "KU" },
+  { campusID: 2, campusName: "วิทยาเขตกำแพงแสน", campusCode: "KU-KPS" },
+  { campusID: 3, campusName: "วิทยาเขตศรีราชา", campusCode: "KU-SR" },
+  { campusID: 4, campusName: "วิทยาเขตเฉลิมพระเกียรติ จังหวัดสกลนคร", campusCode: "KU-CSC" },
+  { campusID: 5, campusName: "โครงการจัดตั้งวิทยาเขตสุพรรณบุรี", campusCode: "KU-SLA" }
 ];
 
 const PREFIXES = ["นาย", "นาง", "นางสาว"];
@@ -81,14 +83,13 @@ export default function FirstLoginPage() {
 
   // Image Upload Refs
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null); // เก็บไฟล์จริงเพื่อส่ง Backend
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ==========================================
   // 1. Effects (Data Fetching)
   // ==========================================
 
-  // 1.1 Load Initial Data (User, Faculties, Campuses)
   useEffect(() => {
     const initData = async () => {
       const token = localStorage.getItem("token");
@@ -109,8 +110,7 @@ export default function FirstLoginPage() {
             email: user.email || "",
             firstname: user.firstname || "",
             lastname: user.lastname || "",
-            image_url: user.image_path || "", // รูปเดิมจากระบบ (ถ้ามี)
-            // ถ้า User เคยมีข้อมูลเก่าให้ใส่ไปเลย
+            image_url: user.image_path || "",
             campus_id: user.campus_id ? String(user.campus_id) : "",
             student_number: user.student_number || "",
         }));
@@ -118,7 +118,6 @@ export default function FirstLoginPage() {
         // --- 2. Fetch Faculties ---
         try {
             const resFac = await axios.get(`${API_BASE_URL}/faculty`, { headers });
-            // รองรับ Structure หลายแบบเพื่อความชัวร์
             const facData = resFac.data.data || resFac.data;
             if (Array.isArray(facData)) {
                 setFaculties(facData);
@@ -129,7 +128,7 @@ export default function FirstLoginPage() {
 
         // --- 3. Fetch Campuses (Hybrid: API -> Mock) ---
         try {
-            const resCam = await axios.get(`${API_BASE_URL}/campus`, { headers }); // ลองยิง API
+            const resCam = await axios.get(`${API_BASE_URL}/campus`, { headers }); 
             const camData = resCam.data.data || resCam.data;
             if (Array.isArray(camData) && camData.length > 0) {
                 setCampuses(camData);
@@ -138,7 +137,7 @@ export default function FirstLoginPage() {
                 throw new Error("Empty API data");
             }
         } catch (err) {
-            console.warn("Campus API not ready, using Mockup data.");
+            console.warn("Campus API not ready/error, using Mockup data.");
             setCampuses(MOCK_CAMPUSES);
         }
 
@@ -154,7 +153,7 @@ export default function FirstLoginPage() {
     initData();
   }, [router]);
 
-  // 1.2 Fetch Departments when Faculty changes
+  // Fetch Departments when Faculty changes
   useEffect(() => {
     const fetchDepartments = async () => {
       if (!formData.faculty_id) {
@@ -167,7 +166,6 @@ export default function FirstLoginPage() {
             headers: { Authorization: `Bearer ${token}` }
         });
         
-        // รองรับ Response Structure
         const deptData = res.data.data || res.data;
         if (Array.isArray(deptData)) {
             setDepartments(deptData);
@@ -199,24 +197,17 @@ export default function FirstLoginPage() {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      
-      // Validation
       if (!file.type.startsWith("image/")) {
           Swal.fire({ icon: 'warning', title: 'ไฟล์ไม่ถูกต้อง', text: 'กรุณาอัปโหลดไฟล์รูปภาพเท่านั้น' });
           return;
       }
-      if (file.size > 5 * 1024 * 1024) { // 5MB
+      if (file.size > 5 * 1024 * 1024) { 
         Swal.fire({ icon: 'error', title: 'ขนาดใหญ่เกินไป', text: 'รูปภาพต้องไม่เกิน 5MB' });
         return;
       }
-
-      setSelectedFile(file); // เก็บไฟล์ไว้ส่ง Backend
-
-      // Preview
+      setSelectedFile(file); 
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
+      reader.onloadend = () => setImagePreview(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
@@ -233,11 +224,15 @@ export default function FirstLoginPage() {
     if (!formData.campus_id) return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณาเลือกวิทยาเขต' });
     if (!formData.faculty_id || !formData.department_id) return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณาเลือกคณะและสาขาวิชา' });
 
+    // [เพิ่ม] บังคับอัปโหลดรูปภาพ
+    if (!selectedFile) {
+        return Swal.fire({ icon: 'warning', title: 'กรุณาอัปโหลดรูปภาพ', text: 'จำเป็นต้องใช้รูปภาพโปรไฟล์เพื่อยืนยันตัวตน' });
+    }
+
     setLoading(true);
     try {
-        // --- ใช้ FormData เพื่อรองรับ File Upload ---
         const payload = new FormData();
-        payload.append("title", formData.title);
+        payload.append("prefix", formData.title);
         payload.append("firstname", formData.firstname);
         payload.append("lastname", formData.lastname);
         payload.append("student_number", formData.student_number);
@@ -246,18 +241,18 @@ export default function FirstLoginPage() {
         payload.append("faculty_id", formData.faculty_id);
         payload.append("department_id", formData.department_id);
         
-        if (selectedFile) {
-            payload.append("image", selectedFile); // ชื่อ field ต้องตรงกับที่ Backend รอรับ (เช่น 'image' หรือ 'file')
-        }
+        // ส่งไฟล์ด้วยชื่อ key "image"
+        payload.append("profile_image", selectedFile); 
 
-        // ส่งข้อมูลไปยัง Backend
-        await axios.put(`${API_BASE_URL}/auth/update-first-login`, payload, {
+        // [แก้ไข] เปลี่ยน URL เป็น /auth/first-login และลบ Content-Type ออก
+        await axios.put(`${API_BASE_URL}/auth/first-login`, payload, {
              headers: { 
                  Authorization: `Bearer ${token}`,
-                 "Content-Type": "multipart/form-data" // สำคัญมากสำหรับ Upload File
+                 // "Content-Type": "multipart/form-data" <--- ลบบรรทัดนี้ทิ้งเลยครับ ห้ามใส่
              }
         });
         
+        // ... (ส่วน Success เหมือนเดิม)
         await Swal.fire({
             icon: 'success',
             title: 'บันทึกข้อมูลสำเร็จ',
@@ -265,13 +260,12 @@ export default function FirstLoginPage() {
             timer: 1500,
             showConfirmButton: false
         });
-        
         window.location.href = "/student/main/student-nomination-form"; 
 
     } catch (error: any) {
         console.error("Submit Error:", error);
+        // ... (Error handling เหมือนเดิม)
         const errorMsg = error.response?.data?.message || error.response?.data?.error || "เกิดข้อผิดพลาด";
-
         if (errorMsg.includes("phone")) Swal.fire({ icon: 'error', title: 'ข้อมูลซ้ำ', text: 'เบอร์โทรศัพท์นี้มีผู้ใช้งานแล้ว' });
         else if (errorMsg.includes("student number")) Swal.fire({ icon: 'error', title: 'ข้อมูลซ้ำ', text: 'รหัสนิสิตนี้มีอยู่ในระบบแล้ว' });
         else Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: errorMsg });
@@ -385,9 +379,10 @@ export default function FirstLoginPage() {
                     <label className="block text-xs font-bold text-gray-700 mb-1.5">วิทยาเขต <span className="text-red-500">*</span></label>
                     <select name="campus_id" value={formData.campus_id} onChange={handleChange} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none cursor-pointer">
                         <option value="" className="text-gray-400">-- เลือกวิทยาเขต --</option>
-                        {campuses.map(c => (
-                            <option key={c.campus_id} value={c.campus_id} className="text-gray-900">
-                                {c.campus_name} {c.campus_code ? `(${c.campus_code})` : ''}
+                        {campuses.map((c, index) => (
+                            // [แก้ไข] ใส่ Index ใน Key เพื่อป้องกัน Key ซ้ำ
+                            <option key={`${c.campusID}-${index}`} value={c.campusID} className="text-gray-900">
+                                {c.campusName} {c.campusCode ? `(${c.campusCode})` : ''}
                             </option>
                         ))}
                     </select>
@@ -407,7 +402,6 @@ export default function FirstLoginPage() {
                 </div>
                 <div className="group">
                     <label className="block text-xs font-bold text-gray-700 mb-1.5">ภาควิชา/สาขา <span className="text-red-500">*</span></label>
-                    {/* แก้ไข CSS ให้พื้นหลังขาว และตัวหนังสือเข้ม ป้องกันปัญหา Font ล่องหน */}
                     <select 
                         name="department_id" 
                         value={formData.department_id} 

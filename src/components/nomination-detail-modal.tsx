@@ -308,40 +308,41 @@ export default function NominationDetailModal({ isOpen, onClose, data, faculties
             {/* 3. เอกสารประกอบ */}
             <section className="animate-fade-in-up" style={{ animationDelay: '200ms' }}>
                 <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 rounded-full bg-red-100 text-red-500 flex items-center justify-center shadow-sm">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    </div>
+                    {/* ... Header ... */}
                     <h4 className="text-lg font-bold text-gray-800">เอกสารประกอบ</h4>
                 </div>
 
                 {data.files && data.files.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {data.files.map((file, idx) => (
-                            <a 
-                                key={idx} 
-                                href={file.file_path} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="group flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:border-red-200 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 cursor-pointer"
-                            >
-                                <div className="flex items-center gap-4 overflow-hidden">
-                                     <div className="w-12 h-12 bg-red-50 rounded-lg flex items-center justify-center text-red-500 shrink-0 font-bold text-xs group-hover:scale-110 transition-transform">PDF</div>
-                                     <div className="min-w-0">
-                                         <p className="text-sm font-bold text-gray-700 truncate group-hover:text-red-600 transition-colors">{file.file_name}</p>
-                                         <p className="text-xs text-gray-400">{(file.file_size / 1024).toFixed(2)} KB</p>
-                                     </div>
-                                </div>
-                                <div className="p-2 bg-gray-50 rounded-full text-gray-400 group-hover:bg-red-50 group-hover:text-red-500 transition-colors">
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0L8 8m4-4v12" /></svg>
-                                </div>
-                            </a>
-                        ))}
+                        {data.files.map((file, idx) => {
+                            // [แก้ไข] ตัด /api ออก ถ้ามี และใส่ / ข้างหน้าเพื่อให้เป็น Absolute Path จาก Root
+                            // สมมติ file.file_path มาเป็น "api/uploads/..." หรือ "uploads/..."
+                            let safePath = file.file_path;
+                            if (safePath.startsWith("api/")) safePath = safePath.replace("api/", "");
+                            if (safePath.startsWith("/api/")) safePath = safePath.replace("/api/", "");
+                            if (!safePath.startsWith("/")) safePath = "/" + safePath;
+
+                            return (
+                                <a 
+                                    key={idx} 
+                                    href={safePath} // ใช้ path ที่แก้แล้ว
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    className="group flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:border-red-200 hover:shadow-md transition-all duration-300"
+                                >
+                                    <div className="flex items-center gap-4 overflow-hidden">
+                                         <div className="w-12 h-12 bg-red-50 rounded-lg flex items-center justify-center text-red-500 font-bold text-xs">PDF</div>
+                                         <div className="min-w-0">
+                                             <p className="text-sm font-bold text-gray-700 truncate">{file.file_name}</p>
+                                             <p className="text-xs text-gray-400">{(file.file_size / 1024).toFixed(2)} KB</p>
+                                         </div>
+                                    </div>
+                                </a>
+                            );
+                        })}
                     </div>
                 ) : (
-                    <div className="p-10 text-center bg-gray-50 border border-dashed border-gray-300 rounded-2xl text-gray-400 flex flex-col items-center gap-2">
-                        <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                        ไม่พบเอกสารแนบ
-                    </div>
+                    <div className="p-10 text-center bg-gray-50 border border-dashed border-gray-300 rounded-2xl text-gray-400">ไม่พบเอกสารแนบ</div>
                 )}
             </section>
 
