@@ -6,9 +6,9 @@ import Swal from "sweetalert2";
 
 // ==========================================
 // 0. Configuration
-// ==========================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+// ==========================================
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 // ==========================================
 // 1. Interfaces & Types
@@ -113,7 +113,7 @@ const nominationHistoryService = {
   getHistory: async (token: string | null): Promise<NominationHistory[]> => {
       try {
         // ยิงไปที่ Endpoint เดียวกัน แต่ดึงทั้งหมดมาแสดง
-        const response = await axios.get(`/api/awards/my/submissions`, {
+        const response = await axios.get(`${API_BASE_URL}/awards/my/submissions`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         

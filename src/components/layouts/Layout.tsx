@@ -22,7 +22,7 @@ type TermResponse = z.infer<typeof TermSchema>;
 // 2. Main Layout Component
 // ==========================================
 
-export default function StudentFormLayout({
+export default function FormLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -39,7 +39,7 @@ export default function StudentFormLayout({
       
       try {
         const token = localStorage.getItem("token");
-        const apiUrl = "/api";
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api";
 
         const response = await axios.get(`${apiUrl}/academic-years/current/semester`, {
           headers: {

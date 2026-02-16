@@ -10,7 +10,7 @@ import axios from "axios";
 // ==========================================
 
 const USE_MOCK_DATA = false; 
-const API_BASE_URL = "/api"; 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 // --- Interfaces ---
 export interface FileResponse {
@@ -397,7 +397,7 @@ export default function HeadOfDepartmentApprovalPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                         <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
-                            พิจารณาคัดเลือกนิสิตดีเด่น (หัวหน้าภาค)
+                            พิจารณาคัดเลือกนิสิตดีเด่น
                         </h1>
                         <p className="text-gray-500 mt-1 font-medium">
                             {USE_MOCK_DATA && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded mr-2">MOCK MODE</span>}

@@ -310,9 +310,9 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
         setLoading(true);
         try {
             const token = localStorage.getItem("token");
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api";
             
-            const response = await axios.get(`/api/auth/me`, {
+            const response = await axios.get(`${apiUrl}/auth/me`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 

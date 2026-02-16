@@ -9,7 +9,7 @@ import Swal from "sweetalert2";
 // 0. Configuration
 // ==========================================
 
-const API_BASE_URL = "/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 // ==========================================
 // 1. Interfaces
@@ -313,7 +313,7 @@ export default function TraceNominationPage() {
           </div>
           <h2 className="text-xl font-bold text-gray-800 mb-2">ยังไม่มีประวัติการเสนอชื่อ</h2>
           <p className="text-gray-500 mb-8">คุณยังไม่ได้ทำการเสนอชื่อนิสิตดีเด่นในปีการศึกษานี้</p>
-          <Link href="/student/student-nomination-form" className="px-8 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all shadow-lg shadow-blue-200">
+          <Link href="/student/main/student-nomination-form" className="px-8 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold transition-all shadow-lg shadow-blue-200">
             ไปที่แบบฟอร์มเสนอชื่อ
           </Link>
         </div>

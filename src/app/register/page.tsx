@@ -9,9 +9,7 @@ import axios from "axios";
 // ==========================================
 // 0. Configuration & Service Layer
 // ==========================================
-
-// ชี้ไปที่ Backend Go Fiber ของคุณ (Port 8080)
-const API_BASE_URL = "/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 // --- Service Layer ---
 const authService = {

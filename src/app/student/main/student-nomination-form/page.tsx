@@ -9,8 +9,7 @@ import axios from "axios";
 // ==========================================
 // 0. Configuration
 // ==========================================
-
-const API_BASE_URL = "/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 const MAX_TOTAL_FILE_SIZE_MB = 10;
 
@@ -113,12 +112,76 @@ const nominationService = {
   },
 };
 
+const PdfIcon = () => (
+  <svg className="w-8 h-8 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-6h2v6zm-1-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm5 7h-2v-6h2v6zm-1-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z" opacity="0.3"></path>
+    <path d="M7 19h10V5H7v14zm3-9h2v6h-2v-6zm3 0h2v6h-2v-6zM9 7c0-.55.45-1 1-1s1 .45 1 1-.45 1-1 1-.45-1-1-1zm4 0c0-.55.45-1 1-1s1 .45 1 1-.45 1-1 1-.45-1-1-1z"></path>
+    {/* หรือใช้ Path ของรูปไฟล์ PDF แบบเรียบง่าย */}
+    <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+  </svg>
+);
+
 // ==========================================
 // 2. Main Component
 // ==========================================
 
 export default function StudentNominationForm() {
   const router = useRouter();
+
+  // เพิ่มฟังก์ชัน Validate แยกออกมา เพื่อความอ่านง่าย
+  const validateForm = () => {
+    // 1.1 เช็คข้อมูลพื้นฐาน
+    if (!userProfile.student_year) return "กรุณาเลือกชั้นปี";
+    if (!userProfile.advisor_name.trim()) return "กรุณากรอกชื่ออาจารย์ที่ปรึกษา";
+    
+    // Validate Required Fields
+    if (!userProfile.student_year || !userProfile.advisor_name || !dateOfBirth || !address) {
+        Swal.fire({ icon: "warning", title: "ข้อมูลไม่ครบถ้วน", text: "กรุณากรอกข้อมูลส่วนตัวให้ครบทุกช่องที่มี *" });
+        return;
+    }
+
+    // เช็คเบอร์โทร (Format)
+    if (!/^0\d{9}$/.test(userProfile.phone_number)) {
+        return "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลักและขึ้นต้นด้วย 0";
+    }
+    
+      // Validate รหัสนิสิต (10 หลัก)
+    if (!/^\d{10}$/.test(userProfile.student_number)) {
+        Swal.fire({ icon: "warning", title: "ข้อมูลไม่ถูกต้อง", text: "รหัสนิสิตต้องเป็นตัวเลข 10 หลักเท่านั้น" });
+        return;
+    }
+
+    if (!address.trim()) return "กรุณากรอกที่อยู่ปัจจุบัน";
+    if (!dateOfBirth) return "กรุณาระบุวันเกิด";
+    
+    const gpaNum = parseFloat(userProfile.gpa);
+    if (isNaN(gpaNum) || gpaNum < 0 || gpaNum > 4.00) return "เกรดเฉลี่ยไม่ถูกต้อง";
+
+    // 1.2 เช็คประเภทรางวัล
+    if (!awardType) return "กรุณาเลือกประเภทรางวัล";
+
+    // 1.3 เช็คข้อมูลจำเพาะของแต่ละด้าน (ที่มีดอกจัน *)
+    if (awardType === "activity") {
+        if (!activityCriteria) return "กรุณาเลือกประเภทกิจกรรม (ผู้นำองค์กร/แข่งขัน/สร้างชื่อเสียง)";
+        if (!projectTitle.trim()) return "กรุณากรอกชื่อโครงการ/กิจกรรม";
+        if (!dateReceived) return "กรุณาระบุวันที่เข้าร่วมกิจกรรม";
+        if (!prize.trim()) return "กรุณากรอกบทบาท/หน้าที่ หรือรางวัลที่ได้รับ";
+        // organizedBy อาจจะไม่บังคับ หรือถ้าบังคับก็ใส่เพิ่ม
+    } 
+    else if (awardType === "innovation") {
+        if (!innovationQual) return "กรุณายืนยันว่าผลงานได้รับรางวัลระดับชาติ/นานาชาติ"; 
+        if (!projectTitle.trim()) return "กรุณากรอกชื่อผลงานนวัตกรรม";
+        if (!dateReceived) return "กรุณาระบุวันที่ได้รับรางวัล";
+        if (!prize.trim()) return "กรุณากรอกรางวัลที่ได้รับ";
+        if (!organizedBy.trim()) return "กรุณาระบุเวทีการประกวด";
+    }
+    // ด้านความประพฤติ (behavior) อาจไม่มีฟิลด์เพิ่มเติม
+
+    // 1.4 เช็คไฟล์แนบ
+    if (selectedFiles.length === 0) return "กรุณาอัปโหลดเอกสารประกอบ (PDF) อย่างน้อย 1 ไฟล์";
+
+    return null; // ผ่านทุกเงื่อนไข
+  };
 
   // --- UI States ---
   const [loading, setLoading] = useState(true);
@@ -287,36 +350,14 @@ export default function StudentNominationForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 🛑 1. Validate รหัสนิสิต (10 หลัก)
-    if (!/^\d{10}$/.test(userProfile.student_number)) {
-        Swal.fire({ icon: "warning", title: "ข้อมูลไม่ถูกต้อง", text: "รหัสนิสิตต้องเป็นตัวเลข 10 หลักเท่านั้น" });
-        return;
-    }
-
-    // 🛑 2. Validate เบอร์โทร (ขึ้นต้น 0, 10 หลัก)
-    if (!/^0\d{9}$/.test(userProfile.phone_number)) {
-        Swal.fire({ icon: "warning", title: "ข้อมูลไม่ถูกต้อง", text: "เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมีครบ 10 หลัก" });
-        return;
-    }
-
-    // 🛑 3. Validate GPA (0.00 - 4.00)
-    const gpaNum = parseFloat(userProfile.gpa);
-    if (isNaN(gpaNum) || gpaNum < 0 || gpaNum > 4.00) {
-        Swal.fire({ icon: "warning", title: "ข้อมูลไม่ถูกต้อง", text: "เกรดเฉลี่ยต้องอยู่ระหว่าง 0.00 - 4.00" });
-        return;
-    }
-
-    // 🛑 4. Check Required Fields
-    if (!userProfile.student_year || !userProfile.advisor_name || !dateOfBirth || !address) {
-        Swal.fire({ icon: "warning", title: "ข้อมูลไม่ครบถ้วน", text: "กรุณากรอกข้อมูลส่วนตัวให้ครบทุกช่องที่มี *" });
-        return;
-    }
-    if (!awardType) {
-        Swal.fire({ icon: "warning", title: "ข้อมูลไม่ครบถ้วน", text: "กรุณาเลือกประเภทรางวัล" });
-        return;
-    }
-    if (selectedFiles.length === 0) {
-        Swal.fire({ icon: "warning", title: "ขาดเอกสารแนบ", text: "กรุณาอัปโหลดเอกสาร PDF อย่างน้อย 1 ไฟล์" });
+    const errorMsg = validateForm();
+    if (errorMsg) {
+        Swal.fire({
+            icon: "warning",
+            title: "ข้อมูลไม่ครบถ้วน",
+            text: errorMsg,
+            confirmButtonColor: "#F59E0B"
+        });
         return;
     }
 
@@ -326,8 +367,8 @@ export default function StudentNominationForm() {
 
     let awardTypeId = 0;
     if (awardType === "activity") awardTypeId = 1;
-    else if (awardType === "behavior") awardTypeId = 2;
-    else if (awardType === "innovation") awardTypeId = 3;
+    else if (awardType === "innovation") awardTypeId = 2;
+    else if (awardType === "behavior") awardTypeId = 3;
 
     const result = await Swal.fire({
       title: "ยืนยันการส่งข้อมูล?",
@@ -351,7 +392,7 @@ export default function StudentNominationForm() {
       formData.append("phone_number", userProfile.phone_number);
       formData.append("address", address);
       formData.append("gpa", userProfile.gpa);
-      formData.append("date_of_birth", dateOfBirth); // format: YYYY-MM-DD
+      formData.append("date_of_birth", dateOfBirth);
 
       // Specific Fields
       if (awardTypeId === 1) { // Extracurricular
@@ -362,7 +403,7 @@ export default function StudentNominationForm() {
           formData.append("prize", prize);
           formData.append("organized_by", organizedBy);
           formData.append("team_name", teamName);
-      } else if (awardTypeId === 3) { // Creativity
+      } else if (awardTypeId === 2) { // Creativity
           formData.append("team_name", teamName);
           formData.append("project_title", projectTitle);
           formData.append("prize", prize);
@@ -414,8 +455,9 @@ export default function StudentNominationForm() {
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">บันทึกข้อมูลสำเร็จ</h2>
           <p className="text-gray-500 mb-8">ระบบได้รับข้อมูลของท่านเรียบร้อยแล้ว</p>
+          <div className="flex flex-col gap-3"></div>
           <Link href="/student/main/trace-nomination" className="block w-full py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 font-bold transition-all shadow-md">
-            ติดตามสถานะ
+            ตรวจสอบสถานะ
           </Link>
         </div>
       </div>
@@ -428,15 +470,15 @@ export default function StudentNominationForm() {
       <div className="w-full h-screen flex items-center justify-center bg-gray-50 p-6">
         <div className="bg-white rounded-3xl shadow-2xl p-10 max-w-lg w-full text-center border border-orange-100 relative overflow-hidden">
            {/* Decorative Background */}
-           <div className="absolute top-0 right-0 w-32 h-32 bg-orange-50 rounded-bl-full opacity-50"></div>
+           <div className="absolute top-0 right-0 w-32 h-32 bg-green-50 rounded-bl-full opacity-50"></div>
            <div className="relative z-10">
-               <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                   <svg className="w-10 h-10 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+               <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                   <svg className="w-10 h-10 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                </div>
                
                <h2 className="text-2xl font-bold text-gray-800 mb-3">ท่านได้ดำเนินการเสนอชื่อไปแล้ว</h2>
                <p className="text-gray-500 mb-6 leading-relaxed">
-                   ระบบพบว่าท่านได้ยื่นเสนอชื่อในปีการศึกษา <span className="font-bold text-orange-600">{currentTermInfo?.year}/{currentTermInfo?.semester}</span> แล้ว<br/>
+                   ระบบพบว่าท่านได้ยื่นเสนอชื่อในปีการศึกษา <span className="font-bold text-green-600">{currentTermInfo?.year}/{currentTermInfo?.semester}</span> แล้ว<br/>
                    <span className="text-xs text-gray-400 block mt-2">(จำกัด 1 ครั้งต่อภาคเรียน)</span>
                </p>
 
@@ -444,7 +486,7 @@ export default function StudentNominationForm() {
                    <Link href="/student/main/trace-nomination" className="w-full py-3 bg-white border border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition-all">
                        ตรวจสอบสถานะ
                    </Link>
-                   <Link href="/student/main/nomination-history" className="w-full py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold rounded-xl hover:opacity-90 transition-all shadow-lg shadow-orange-200">
+                   <Link href="/student/main/nomination-history" className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold rounded-xl hover:opacity-90 transition-all shadow-lg shadow-green-200">
                        ดูประวัติการส่ง
                    </Link>
                </div>
@@ -480,45 +522,42 @@ export default function StudentNominationForm() {
               <p className="text-gray-500 mt-2 text-base">กรุณากรอกข้อมูลและแนบเอกสารหลักฐานให้ครบถ้วน</p>
             </div>
 
-            {/* 1. Award Type */}
-            <div className="animate-fade-in-up animate-delay-100">
-              <label className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">1</span>
-                ประเภทรางวัล <span className="text-red-500">*</span>
-              </label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Card: Behavior */}
-                <div onClick={() => setAwardType("behavior")} className={`cursor-pointer rounded-2xl border-2 p-6 flex flex-col items-center justify-center gap-4 transition-all duration-300 hover:shadow-lg ${awardType === "behavior" ? "border-blue-500 bg-blue-50 text-blue-700 ring-4 ring-blue-100/50" : "border-gray-100 bg-white text-gray-500 hover:border-blue-200"}`}>
-                  <span className={`p-4 rounded-full ${awardType === 'behavior' ? 'bg-blue-200 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
-                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  </span>
-                  <div className="text-center">
-                    <span className="block text-lg font-bold">ด้านความประพฤติดี</span>
-                    <span className="block text-xs opacity-70 mt-1">จิตอาสา คุณธรรม</span>
-                  </div>
-                </div>
-                {/* Card: Innovation */}
-                <div onClick={() => setAwardType("innovation")} className={`cursor-pointer rounded-2xl border-2 p-6 flex flex-col items-center justify-center gap-4 transition-all duration-300 hover:shadow-lg ${awardType === "innovation" ? "border-purple-500 bg-purple-50 text-purple-700 ring-4 ring-purple-100/50" : "border-gray-100 bg-white text-gray-500 hover:border-purple-200"}`}>
-                   <span className={`p-4 rounded-full ${awardType === 'innovation' ? 'bg-purple-200 text-purple-700' : 'bg-gray-100 text-gray-400'}`}>
-                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-                   </span>
-                   <div className="text-center">
-                    <span className="block text-lg font-bold">ด้านนวัตกรรม</span>
-                    <span className="block text-xs opacity-70 mt-1">สิ่งประดิษฐ์ งานวิจัย</span>
-                   </div>
-                </div>
-                {/* Card: Activity */}
-                <div onClick={() => setAwardType("activity")} className={`cursor-pointer rounded-2xl border-2 p-6 flex flex-col items-center justify-center gap-4 transition-all duration-300 hover:shadow-lg ${awardType === "activity" ? "border-orange-500 bg-orange-50 text-orange-700 ring-4 ring-orange-100/50" : "border-gray-100 bg-white text-gray-500 hover:border-orange-200"}`}>
-                   <span className={`p-4 rounded-full ${awardType === 'activity' ? 'bg-orange-200 text-orange-700' : 'bg-gray-100 text-gray-400'}`}>
-                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" /></svg>
-                   </span>
-                   <div className="text-center">
-                    <span className="block text-lg font-bold">ด้านกิจกรรม</span>
-                    <span className="block text-xs opacity-70 mt-1">ผู้นำกิจกรรม แข่งขันวิชาการ</span>
-                   </div>
-                </div>
-              </div>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+  
+      {/* Card: Activity (ด้านกิจกรรม) */}
+      <div onClick={() => setAwardType("activity")} className={`cursor-pointer rounded-2xl border-2 p-6 flex flex-col items-center justify-center gap-4 transition-all duration-300 hover:shadow-lg ${awardType === "activity" ? "border-orange-500 bg-orange-50 text-orange-700 ring-4 ring-orange-100/50" : "border-gray-100 bg-white text-gray-500 hover:border-orange-200"}`}>
+          <span className={`p-4 rounded-full ${awardType === 'activity' ? 'bg-orange-200 text-orange-700' : 'bg-gray-100 text-gray-400'}`}>
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" /></svg>
+          </span>
+          <div className="text-center">
+          <span className="block text-lg font-bold">ด้านกิจกรรม</span>
+          <span className="block text-xs opacity-70 mt-1">ผู้นำกิจกรรม แข่งขันวิชาการ</span>
+          </div>
+      </div>
+
+      {/* Card: Innovation (ด้านนวัตกรรม) */}
+      <div onClick={() => setAwardType("innovation")} className={`cursor-pointer rounded-2xl border-2 p-6 flex flex-col items-center justify-center gap-4 transition-all duration-300 hover:shadow-lg ${awardType === "innovation" ? "border-purple-500 bg-purple-50 text-purple-700 ring-4 ring-purple-100/50" : "border-gray-100 bg-white text-gray-500 hover:border-purple-200"}`}>
+          <span className={`p-4 rounded-full ${awardType === 'innovation' ? 'bg-purple-200 text-purple-700' : 'bg-gray-100 text-gray-400'}`}>
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+          </span>
+          <div className="text-center">
+          <span className="block text-lg font-bold">ด้านนวัตกรรม</span>
+          <span className="block text-xs opacity-70 mt-1">สิ่งประดิษฐ์ งานวิจัย</span>
+          </div>
+      </div>
+
+      {/* Card: Behavior (ด้านความประพฤติดี) */}
+      <div onClick={() => setAwardType("behavior")} className={`cursor-pointer rounded-2xl border-2 p-6 flex flex-col items-center justify-center gap-4 transition-all duration-300 hover:shadow-lg ${awardType === "behavior" ? "border-blue-500 bg-blue-50 text-blue-700 ring-4 ring-blue-100/50" : "border-gray-100 bg-white text-gray-500 hover:border-blue-200"}`}>
+        <span className={`p-4 rounded-full ${awardType === 'behavior' ? 'bg-blue-200 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        </span>
+        <div className="text-center">
+          <span className="block text-lg font-bold">ด้านความประพฤติดี</span>
+          <span className="block text-xs opacity-70 mt-1">จิตอาสา คุณธรรม</span>
+        </div>
+      </div>
+
+    </div>
 
             {/* Form Fields (Show only if type selected) */}
             {awardType && (
@@ -675,21 +714,34 @@ export default function StudentNominationForm() {
                         <input type="file" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf" />
                     </div>
 
-                    {/* File List */}
-                    {selectedFiles.length > 0 && (
-                        <div className="mt-4 space-y-2">
-                            {selectedFiles.map((file, idx) => (
-                                <div key={idx} className="flex justify-between items-center p-3 bg-white border border-gray-200 rounded-xl">
-                                    <div className="flex items-center gap-3 overflow-hidden">
-                                        <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded">PDF</span>
-                                        <span className="text-sm text-gray-700 truncate">{file.name}</span>
-                                        <span className="text-xs text-gray-400">({formatFileSize(file.size)})</span>
-                                    </div>
-                                    <button type="button" onClick={() => handleRemoveFile(idx)} className="text-red-400 hover:text-red-600">
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                                    </button>
-                                </div>
-                            ))}
+                    {/* File List Section */}
+                  {selectedFiles.length > 0 && (
+                        <div className="mt-4 space-y-3">
+                          {selectedFiles.map((file, idx) => (
+                              <div key={idx} className="flex justify-between items-center p-3 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all mb-2">
+                                  <div className="flex items-center gap-4 overflow-hidden">
+                                      {/* [แก้ไข] ใช้ style แบบ inline เพื่อบังคับสี (แก้ปัญหา Tailwind ไม่ติด) */}
+                                      <div style={{ backgroundColor: '#FEF2F2', color: '#EF4444' }} className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0">
+                                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                              <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                              <path d="M14 2V8H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                              <path d="M16 13H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                              <path d="M16 17H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                              <path d="M10 9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                          </svg>
+                                      </div>
+                                      
+                                      <div className="flex flex-col min-w-0">
+                                          <span className="text-sm font-bold text-gray-700 truncate">{file.name}</span>
+                                          <span className="text-xs text-gray-400">ขนาด: {formatFileSize(file.size)}</span>
+                                      </div>
+                                  </div>
+                                  
+                                  <button type="button" onClick={() => handleRemoveFile(idx)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all">
+                                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                  </button>
+                              </div>
+                          ))}
                         </div>
                     )}
                 </div>

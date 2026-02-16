@@ -12,7 +12,7 @@ import { useAuth } from "@/context/AuthContext";
 // ==========================================
 
 const USE_MOCK_DATA = false;
-const API_BASE_URL = "/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 // Interface
 interface LoginResponse {
