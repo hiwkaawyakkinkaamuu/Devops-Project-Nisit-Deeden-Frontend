@@ -248,7 +248,7 @@ export default function FirstLoginPage() {
         await axios.put(`${API_BASE_URL}/auth/first-login`, payload, {
              headers: { 
                  Authorization: `Bearer ${token}`,
-                 // "Content-Type": "multipart/form-data" <--- ลบบรรทัดนี้ทิ้งเลยครับ ห้ามใส่
+                 "Content-Type": "multipart/form-data" <--- ลบบรรทัดนี้ทิ้งเลยครับ ห้ามใส่
              }
         });
         

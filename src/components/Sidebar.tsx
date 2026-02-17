@@ -14,6 +14,16 @@ import { useAuth } from "@/context/AuthContext";
 
 type UserRole = "student" | "head_of_department" | "dean" | "associate_dean" | "chairman_of_student_development_committee" | "student_development_committee" | "student_development" | "admin";
 
+interface Faculty {
+  faculty_id: number;
+  faculty_name: string;
+}
+
+interface Department {
+  department_id: number;
+  department_name: string;
+}
+
 interface UserProfileData {
   user_id: number;
   firstname: string;
@@ -22,7 +32,7 @@ interface UserProfileData {
   role_id: number;
   campus_id: number;
   image_path?: string;
-  // รองรับโครงสร้างข้อมูลจาก Backend (อาจเป็น Student, student หรือ student_data)
+  // รองรับโครงสร้างข้อมูลจาก Backend
   Student?: any;
   student?: any;
   student_data?: any;
@@ -43,6 +53,17 @@ interface SidebarProps {
 // ==========================================
 // 2. Constants & Helpers
 // ==========================================
+
+// ✅ ฟังก์ชันจัดการ URL รูปภาพ
+const getProfileImageUrl = (imagePath: string | undefined | null) => {
+  if (!imagePath) return null;
+  if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+    return imagePath;
+  }
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"; 
+  const cleanPath = imagePath.startsWith("/") ? imagePath : `/${imagePath}`;
+  return `${API_URL}${cleanPath}`;
+};
 
 const getRoleKey = (roleId: number | undefined): UserRole => {
   switch (roleId) {
@@ -141,7 +162,6 @@ function MenuItem({ href, label, icon, active, collapsed, onClick, index }: any)
         `}
         title={collapsed ? label : ""}
       >
-        {/* Active Indicator Background (Floating Effect) */}
         {active && (
           <motion.div
             layoutId="active-menu-bg"
@@ -152,7 +172,6 @@ function MenuItem({ href, label, icon, active, collapsed, onClick, index }: any)
           />
         )}
 
-        {/* Active Left Pill */}
         {active && (
             <motion.div 
                 layoutId="active-pill"
@@ -160,12 +179,10 @@ function MenuItem({ href, label, icon, active, collapsed, onClick, index }: any)
             />
         )}
 
-        {/* Icon with Hover Effect */}
         <span className={`relative z-10 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 ${active ? 'text-emerald-600' : 'text-gray-400 group-hover:text-emerald-600'}`}>
           {icon}
         </span>
 
-        {/* Label */}
         {!collapsed && (
           <span className="relative z-10 truncate tracking-wide">{label}</span>
         )}
@@ -186,24 +203,39 @@ const ProfileSkeleton = ({ isCollapsed }: { isCollapsed: boolean }) => (
   </div>
 );
 
-// Profile Modal: แสดงข้อมูลครบถ้วน
-function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () => void; data: UserProfileData | null }) {
+// ✅ Profile Modal: รับ props faculties และ departments เพิ่ม
+function ProfileModal({ isOpen, onClose, data, faculties, departments }: { isOpen: boolean; onClose: () => void; data: UserProfileData | null; faculties: Faculty[]; departments: Department[] }) {
   if (!isOpen || !data) return null;
 
   const roleName = getRoleKey(data.role_id).replace(/_/g, ' ').toUpperCase();
   const campusName = getCampusName(data.campus_id);
 
-  // ดึงข้อมูลนิสิต (รองรับหลาย Case ที่ Backend อาจส่งมา)
+  // ดึงข้อมูลนิสิต
   const student = data.Student || data.student || data.student_data;
   const studentNumber = student?.student_number;
-  // ดึงชื่อคณะ/สาขา (รองรับทั้ง Object และ String)
-  const facultyName = student?.Faculty?.faculty_name || student?.faculty?.faculty_name || student?.faculty_id;
-  const departmentName = student?.Department?.department_name || student?.department?.department_name || student?.department_id;
+
+  // ✅ Logic การดึงชื่อคณะและสาขา
+  // 1. ถ้ามี object ชื่อ (เช่น student.Faculty.faculty_name) ให้ใช้เลย
+  // 2. ถ้าไม่มี ให้เอา ID ไปค้นใน List (faculties/departments)
+  // 3. ถ้าหาไม่เจอ ให้แสดง ID เดิม
+  
+  let facultyName = student?.Faculty?.faculty_name || student?.faculty?.faculty_name;
+  if (!facultyName && student?.faculty_id) {
+      const found = faculties.find(f => f.faculty_id === Number(student.faculty_id));
+      facultyName = found ? found.faculty_name : student.faculty_id;
+  }
+
+  let departmentName = student?.Department?.department_name || student?.department?.department_name;
+  if (!departmentName && student?.department_id) {
+      const found = departments.find(d => d.department_id === Number(student.department_id));
+      departmentName = found ? found.department_name : student.department_id;
+  }
+
+  const imageUrl = getProfileImageUrl(data.image_path);
 
   return (
     <AnimatePresence>
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            {/* Backdrop Blur */}
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -212,7 +244,6 @@ function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () 
                 onClick={onClose}
             />
             
-            {/* Modal Card */}
             <motion.div
                 initial={{ scale: 0.85, opacity: 0, y: 20 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -220,7 +251,6 @@ function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () 
                 transition={{ type: "spring", stiffness: 350, damping: 25 }}
                 className="relative bg-white rounded-[32px] shadow-2xl w-full max-w-sm overflow-hidden z-10 border border-white/50"
             >
-                {/* Header with Pattern */}
                 <div className="h-32 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-full opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
                     <button 
@@ -232,22 +262,24 @@ function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () 
                 </div>
 
                 <div className="px-8 pb-8 relative">
-                    {/* Avatar with Ring */}
                     <div className="-mt-14 mb-5 flex justify-center">
                         <div className="w-28 h-28 rounded-full p-1.5 bg-white shadow-xl">
                             <div className="w-full h-full rounded-full bg-gray-50 overflow-hidden relative border border-gray-100">
-                                {data.image_path ? (
-                                    <img src={data.image_path} alt="Profile" className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-emerald-50 text-emerald-600 text-4xl font-bold">
-                                        {data.firstname ? data.firstname.charAt(0) : "U"}
-                                    </div>
-                                )}
+                                {imageUrl ? (
+                                    <img 
+                                        src={imageUrl} 
+                                        alt="Profile" 
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
+                                    />
+                                ) : null}
+                                <div className={`w-full h-full flex items-center justify-center bg-emerald-50 text-emerald-600 text-4xl font-bold ${imageUrl ? 'hidden' : ''}`}>
+                                    {data.firstname ? data.firstname.charAt(0) : "U"}
+                                </div>
                             </div>
                         </div>
                     </div>
                     
-                    {/* Main Info */}
                     <div className="text-center mb-8">
                         <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">{data.firstname} {data.lastname}</h2>
                         <div className="flex justify-center gap-2 mt-2">
@@ -258,9 +290,7 @@ function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () 
                         <p className="mt-3 text-sm text-gray-500 font-medium">{campusName}</p>
                     </div>
 
-                    {/* Info Card List */}
                     <div className="space-y-3">
-                        {/* Email */}
                         <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
                             <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
@@ -271,7 +301,6 @@ function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () 
                             </div>
                         </div>
                         
-                        {/* Student ID */}
                         {studentNumber && (
                             <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
                                 <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
@@ -284,7 +313,7 @@ function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () 
                             </div>
                         )}
 
-                        {/* Faculty */}
+                        {/* แสดงชื่อคณะ (หรือ ID ถ้าหาไม่เจอ) */}
                         {facultyName && (
                             <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
                                 <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
@@ -297,7 +326,7 @@ function ProfileModal({ isOpen, onClose, data }: { isOpen: boolean; onClose: () 
                             </div>
                         )}
 
-                        {/* Department */}
+                        {/* แสดงชื่อสาขา (หรือ ID ถ้าหาไม่เจอ) */}
                         {departmentName && (
                             <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
                                 <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
@@ -328,6 +357,10 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // ✅ เพิ่ม State สำหรับเก็บ Master Data
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+
   // คำนวณ Role และเมนู
   const roleKey = getRoleKey(user?.role_id);
   const menuItems = MENU_CONFIG[roleKey] || [];
@@ -336,25 +369,34 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
     return pathname === path || (path !== "/" && pathname.startsWith(path));
   };
 
-  // Fetch Full Profile
+  const footerImageUrl = getProfileImageUrl(fullProfile?.image_path);
+
+  // Fetch Full Profile & Master Data
   useEffect(() => {
-    const fetchFullProfile = async () => {
+    const fetchData = async () => {
         if (!user) return;
         
         setLoading(true);
         try {
             const token = localStorage.getItem("token");
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api";
+            const headers = { Authorization: `Bearer ${token}` };
             
-            const response = await axios.get(`${apiUrl}/auth/me`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            // ✅ ดึง Profile, คณะ, สาขา พร้อมกัน
+            const [resMe, resFac, resDept] = await Promise.all([
+                axios.get(`${apiUrl}/auth/me`, { headers }),
+                axios.get(`${apiUrl}/faculty`, { headers }),
+                axios.get(`${apiUrl}/department`, { headers })
+            ]);
 
-            if(response.data && response.data.user) {
-                setFullProfile(response.data.user);
+            if(resMe.data && resMe.data.user) {
+                setFullProfile(resMe.data.user);
             }
+            if(resFac.data) setFaculties(resFac.data.data || resFac.data);
+            if(resDept.data) setDepartments(resDept.data.data || resDept.data);
+
         } catch (error) {
-            console.error("Failed to fetch full profile:", error);
+            console.error("Failed to fetch data:", error);
             // @ts-ignore
             setFullProfile(user); 
         } finally {
@@ -362,7 +404,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
         }
     };
 
-    fetchFullProfile();
+    fetchData();
   }, [user]);
 
   const confirmLogout = () => {
@@ -390,7 +432,13 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
 
   return (
     <>
-      <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} data={fullProfile} />
+      <ProfileModal 
+        isOpen={isProfileOpen} 
+        onClose={() => setIsProfileOpen(false)} 
+        data={fullProfile} 
+        faculties={faculties} // ส่งรายชื่อคณะไปให้ Modal ใช้
+        departments={departments} // ส่งรายชื่อสาขาไปให้ Modal ใช้
+      />
 
       <motion.aside
         initial={false}
@@ -466,13 +514,18 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
                 <div className="relative shrink-0">
                    <div className="w-10 h-10 rounded-full p-[2px] bg-gradient-to-br from-emerald-400 to-cyan-500 shadow-sm">
                       <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
-                          {fullProfile?.image_path ? (
-                              <img src={fullProfile.image_path} alt="User" className="w-full h-full object-cover" />
-                          ) : (
-                              <span className="text-sm font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-500 to-cyan-600">
-                                {fullProfile?.firstname?.charAt(0) || 'U'}
-                              </span>
-                          )}
+                          {footerImageUrl ? (
+                              <img 
+                                src={footerImageUrl} 
+                                alt="User" 
+                                className="w-full h-full object-cover" 
+                                onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
+                              />
+                          ) : null}
+                          
+                          <span className={`text-sm font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-500 to-cyan-600 ${footerImageUrl ? 'hidden' : ''}`}>
+                            {fullProfile?.firstname?.charAt(0) || 'U'}
+                          </span>
                       </div>
                    </div>
                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
@@ -499,7 +552,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
                       className="ml-1 p-2 rounded-xl text-gray-300 hover:bg-red-50 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
                       title="ออกจากระบบ"
                    >
-                     {Icons.Logout}
+                      {Icons.Logout}
                    </button>
                 )}
               </>

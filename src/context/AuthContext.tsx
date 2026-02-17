@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import axios from "axios";
+import { api } from "@/lib/axios"; 
 
 interface AuthContextType {
   user: any;
@@ -13,18 +13,23 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const API_BASE_URL = "/api"; // ตรวจสอบให้แน่ใจว่า next.config.ts ทำ rewrite ไว้แล้ว
-
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
-  // ฟังก์ชัน Logout แยกออกมาเพื่อให้เรียกใช้ได้ง่าย
   const logout = () => {
+    api.post("/auth/logout").catch(() => {}); 
+
     localStorage.removeItem("token");
     localStorage.removeItem("role");
+    
+    // ล้าง Cookie ฝั่ง Client (Clean up)
+    document.cookie.split(";").forEach((c) => {
+      document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+
     setUser(null);
     router.push("/");
   };
@@ -32,17 +37,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const login = (token: string, role: string, userData: any) => {
     localStorage.setItem("token", token);
     localStorage.setItem("role", role);
-    
-    // จัดการ user data ให้ format ตรงกันเสมอ
     const actualUser = userData.user ? userData.user : userData;
     setUser({ ...actualUser, token, role });
   };
 
   useEffect(() => {
     const initAuth = async () => {
-      // 1. 🔥 ยุบรวมดักทางหน้า Google Callback: 
-      // ถ้ากำลังอยู่ในหน้า Callback ให้ล้าง User ทิ้ง และหยุด Loading ทันที 
-      // เพื่อรอให้หน้า Callback Page เป็นคนจัดการ Token ใหม่เอง
+      // 1. ดักหน้า Google Callback
       const urlParams = new URLSearchParams(window.location.search);
       if (
         window.location.pathname.includes("/google-callback") || 
@@ -66,15 +67,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return;
       }
 
-      // 3. ถ้ามี Token ให้ลองตรวจสอบกับ Backend
+      // 3. ใช้ api instance ยิง request
       try {
-        const res = await axios.get(`${API_BASE_URL}/auth/me`, {
+        // ✅ ใช้ api.get แทน axios.get (ไม่ต้องใส่ URL เต็ม)
+        // ✅ Header Authorization ยังใส่ไว้เพื่อความชัวร์ (Backend เช็ค Header เป็น Priority แรก)
+        const res = await api.get("/auth/me", {
           headers: { Authorization: `Bearer ${token}` }
         });
 
         if (res.data) {
           const userData = res.data.user || res.data;
-          // มั่นใจว่าได้ Token กลับไปด้วยใน State
           setUser({ ...userData, token });
         }
       } catch (error: any) {
@@ -88,7 +90,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     initAuth();
-  }, [pathname]); // เช็คทุกครั้งที่เปลี่ยนหน้า
+  }, [pathname]);
 
   return (
     <AuthContext.Provider value={{ user, login, logout, isLoading }}>
