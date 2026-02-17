@@ -40,9 +40,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initAuth = async () => {
+      // 1. 🔥 ยุบรวมดักทางหน้า Google Callback: 
+      // ถ้ากำลังอยู่ในหน้า Callback ให้ล้าง User ทิ้ง และหยุด Loading ทันที 
+      // เพื่อรอให้หน้า Callback Page เป็นคนจัดการ Token ใหม่เอง
+      const urlParams = new URLSearchParams(window.location.search);
+      if (
+        window.location.pathname.includes("/google-callback") || 
+        urlParams.has("token") || 
+        urlParams.has("code")
+      ) {
+        console.log("🛠️ AuthContext: Google process detected, skipping init...");
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+      
       const token = localStorage.getItem("token");
 
-      // 1. ถ้าไม่มี Token และไม่ได้อยู่หน้า Login/Register ให้เด้งออกทันที
+      // 2. ถ้าไม่มี Token และไม่ได้อยู่หน้า Login/Register ให้เด้งออก
       if (!token) {
         if (pathname !== "/" && pathname !== "/register") {
           router.push("/");
@@ -51,26 +66,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return;
       }
 
-      // 2. ถ้ามี Token ให้ลองตรวจสอบกับ Backend
+      // 3. ถ้ามี Token ให้ลองตรวจสอบกับ Backend
       try {
-        // Optimization: ถ้ามี User State อยู่แล้ว ไม่ต้อง Fetch ใหม่ทุกครั้งที่เปลี่ยนหน้า (Optional)
-        // แต่ถ้าต้องการความชัวร์ (Security) ให้ Fetch ทุกครั้งแบบเดิมดีแล้วครับ
-        
         const res = await axios.get(`${API_BASE_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
-        if (res.data && res.data.user) {
-           // update state ด้วยข้อมูลล่าสุดจาก server
-           setUser((prev: any) => ({ ...res.data.user, token })); 
-        } else if (res.data) {
-           setUser((prev: any) => ({ ...res.data, token }));
+        if (res.data) {
+          const userData = res.data.user || res.data;
+          // มั่นใจว่าได้ Token กลับไปด้วยใน State
+          setUser({ ...userData, token });
         }
-
       } catch (error: any) {
-        console.warn("Session expired or invalid token:", error.message);
-        
-        // ถ้าเป็น 401 (Unauthorized) แสดงว่า Token ใช้ไม่ได้แล้ว -> บังคับ Logout
+        console.warn("Session expired or invalid token");
         if (error.response?.status === 401) {
            logout(); 
         }

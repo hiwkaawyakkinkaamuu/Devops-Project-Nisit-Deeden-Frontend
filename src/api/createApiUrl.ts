@@ -1,5 +1,5 @@
 export const API_CONFIG = {
-  // ตรงนี้คือที่อยู่ของ Backend Go (ถ้าเปลี่ยน Port ก็มาแก้ตรงนี้ได้เลย)
+  // อ่านค่าจาก .env ถ้าไม่มีให้ใช้ localhost:8080
   baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080",
 };
 

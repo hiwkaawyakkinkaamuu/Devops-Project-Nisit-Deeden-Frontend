@@ -12,7 +12,8 @@ import { useAuth } from "@/context/AuthContext";
 // ==========================================
 
 const USE_MOCK_DATA = false;
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
+// ปรับให้ดึงจาก Env หรือ Default ตามความเหมาะสม
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 // Interface
 interface LoginResponse {
@@ -39,57 +40,13 @@ const mapRoleIdToRoleName = (roleId: number): string => {
   }
 };
 
-// --- Service Logic ---
-const authService = {
-  login: async (email: string, password: string): Promise<LoginResponse> => {
-    if (USE_MOCK_DATA) {
-      await new Promise((r) => setTimeout(r, 1000));
-      return { 
-        token: "mock_token", 
-        role: "student", 
-        user: { firstname: "Mock", lastname: "User", role_id: 1, is_first_login: true } // ลองแก้เป็น true เพื่อเทส Mock
-      };
-    } else {
-      try {
-        const response = await axios.post(
-          `${API_BASE_URL}/auth/login`, 
-          { email, password },
-          { 
-            withCredentials: true,
-            headers: { "Content-Type": "application/json" }
-          }
-        );
-        
-        const backendData = response.data;
-        const roleName = mapRoleIdToRoleName(backendData.user.role_id);
-
-        return {
-          token: backendData.token,
-          role: roleName,
-          user: {
-            ...backendData.user,
-            // Map จาก 'is_first_login' (Go) -> 'first_login' (React)
-            first_login: backendData.user.is_first_login 
-          }
-        };
-      } catch (error: any) {
-        throw error.response?.data?.error || error.response?.data?.message || error.message || "การเชื่อมต่อล้มเหลว";
-      }
-    }
-  },
-
-  googleLogin: () => {
-    window.location.href = `${API_BASE_URL}/auth/google/login`;
-  }
-};
-
 // ==========================================
 // 1. Main Component
 // ==========================================
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth(); // 2. ดึงฟังก์ชัน login จาก Context
+  const { login } = useAuth();
 
   // UI States
   const [email, setEmail] = useState("");
@@ -97,16 +54,29 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // --- Logic: Google Login ---
+  const handleGoogleLogin = () => {
+    // 🔥 1. ล้างทุกอย่างทิ้งก่อนไป Google (ป้องกันปัญหา Session ค้าง)
+    localStorage.clear(); // ล้างทิ้งทั้งหมดในครั้งเดียว
+    
+    // ล้าง Cookie ทั้งหมด
+    document.cookie.split(";").forEach((c) => {
+      document.cookie = c
+        .replace(/^ +/, "")
+        .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+
+    // 2. ไปหน้า Google Login (ใช้ API_BASE_URL เพื่อความยืดหยุ่น)
+    window.location.href = `${API_BASE_URL}/auth/google/login`;
+  };
+
   // Helper: Role-based Redirect พร้อม Logic First Login
   const handleRedirect = (role: string, firstLogin: boolean) => {
-    
-    // 1. ดักจับเงื่อนไข First Login สำหรับนิสิตก่อน
     if (role === "student" && firstLogin) {
       router.push("/student/auth/first-login");
-      return; // จบฟังก์ชันทันที ไม่ต้องไปเช็ค role อื่น
+      return;
     }
 
-    // 2. ถ้าไม่ใช่ First Login ให้ไปตาม Role ปกติ
     const routes: Record<string, string> = {
       head_of_department: "/head-of-department/consider",
       dean: "/dean/consider",
@@ -120,7 +90,7 @@ export default function LoginPage() {
     router.push(routes[role] || "/");
   };
 
-  // Logic: Login
+  // Logic: Manual Login (Email/Password)
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -132,29 +102,43 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // 2. Call Service เพื่อยิง API
-      const data = await authService.login(email, password);
+      // 1. ล้างข้อมูลเก่าก่อน Login ใหม่ (กันเหนียว)
+      localStorage.removeItem("token");
+      localStorage.removeItem("role");
 
-      // 3. ใช้ login() จาก Context แทนการ localStorage.setItem เอง
-      // (Context จะทำการ setItem และ update state ให้อัตโนมัติ)
-      login(data.token, data.role, data.user);
+      const response = await axios.post(
+        `${API_BASE_URL}/auth/login`, 
+        { email, password },
+        { 
+          // withCredentials: true,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
+      
+      const backendData = response.data;
+      const roleName = mapRoleIdToRoleName(backendData.user.role_id);
+
+      // 2. บันทึกข้อมูลผ่าน Context
+      login(backendData.token, roleName, backendData.user);
 
       await Swal.fire({
         icon: "success",
         title: "เข้าสู่ระบบสำเร็จ",
-        text: `ยินดีต้อนรับคุณ ${data.user.firstname}`,
+        text: `ยินดีต้อนรับคุณ ${backendData.user.firstname}`,
         timer: 1500,
         showConfirmButton: false,
       });
 
-      // ส่งค่า first_login ไปเช็คเพื่อ Redirect
-      handleRedirect(data.role, data.user.is_first_login);
+      // 3. Redirect (ใช้อันเดิมจาก backend ตรงๆ)
+      handleRedirect(roleName, backendData.user.is_first_login);
 
     } catch (err: any) {
       console.error("Login Error:", err);
-      let errorMessage = typeof err === 'string' ? err : "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
+      let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
       
-      if (errorMessage === "invalid credentials" || errorMessage === "record not found") {
+      // ดึง Error Message จาก Backend
+      const backendError = err.response?.data?.error || err.response?.data?.message;
+      if (backendError === "invalid credentials" || backendError === "record not found") {
           errorMessage = "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
       }
 
@@ -172,8 +156,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex w-full font-sans bg-gray-50">
-      
-      {/* Animation Styles */}
       <style jsx global>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
@@ -205,21 +187,17 @@ export default function LoginPage() {
       {/* Right Side (Login Form) */}
       <div className="w-full lg:w-1/2 bg-white flex flex-col justify-center items-center p-8 lg:p-12 relative">
         <div className="w-full max-w-md animate-scale-up">
-            
-            {/* Logo Area */}
             <div className="text-center mb-10">
                 <div className="w-20 h-20 bg-gradient-to-tr from-green-600 to-emerald-500 rounded-2xl rotate-3 mx-auto mb-6 flex items-center justify-center text-white font-bold text-2xl shadow-xl shadow-green-100 transform hover:rotate-0 transition-all duration-300">
                     KU
                 </div>
                 <h2 className="text-3xl font-bold text-gray-800 tracking-tight">เข้าสู่ระบบ</h2>
                 <p className="text-sm text-gray-500 mt-2">
-                    {USE_MOCK_DATA && <span className="inline-block px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded text-xs mr-2 font-bold">MOCK MODE</span>}
                     กรุณากรอกข้อมูลเพื่อเข้าใช้งานระบบ
                 </p>
             </div>
 
             <form onSubmit={onSubmit} className="space-y-5">
-                {/* Email Input */}
                 <div className="group">
                     <label className="block text-sm font-medium text-gray-700 mb-1 ml-1 group-focus-within:text-green-600 transition-colors">อีเมลมหาวิทยาลัย</label>
                     <div className="relative">
@@ -236,7 +214,6 @@ export default function LoginPage() {
                     </div>
                 </div>
 
-                {/* Password Input */}
                 <div className="group">
                     <label className="block text-sm font-medium text-gray-700 mb-1 ml-1 group-focus-within:text-green-600 transition-colors">รหัสผ่าน</label>
                     <div className="relative">
@@ -257,24 +234,18 @@ export default function LoginPage() {
                     </div>
                 </div>
 
-                {/* Buttons */}
                 <div className="space-y-4 pt-4">
                     <button 
                         type="submit" 
                         disabled={loading}
                         className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-gray-200 disabled:bg-gray-400 disabled:cursor-not-allowed transform active:scale-[0.98] hover:shadow-xl"
                     >
-                        {loading ? (
-                            <span className="flex items-center justify-center gap-2">
-                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                กำลังเข้าสู่ระบบ...
-                            </span>
-                        ) : "เข้าสู่ระบบ"}
+                        {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
                     </button>
                     
                     <button 
                         type="button"
-                        onClick={authService.googleLogin} 
+                        onClick={handleGoogleLogin} 
                         className="w-full bg-[#00c535] hover:bg-[#00a82d] text-white font-medium py-3.5 rounded-xl transition-colors shadow-lg shadow-green-100 flex justify-center items-center gap-2 transform active:scale-[0.98] hover:shadow-green-200"
                     >
                         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
@@ -288,7 +259,6 @@ export default function LoginPage() {
             <div className="mt-8 text-center text-sm text-gray-500">
               ยังไม่มีบัญชีผู้ใช้ ? <Link href="/register" className="text-green-600 font-medium hover:underline hover:text-green-700 transition-colors">สมัครสมาชิก</Link>
             </div>
-
         </div>
       </div>
     </div>
