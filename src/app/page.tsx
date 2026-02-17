@@ -4,15 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Swal from "sweetalert2";
-import axios from "axios";
+// ❌ ลบอันนี้ออก: import axios from "axios";
+// ✅ ใช้อันนี้แทน:
+import { api } from "@/lib/axios"; 
 import { useAuth } from "@/context/AuthContext";
 
 // ==========================================
 // 0. Configuration & Service Layer
 // ==========================================
 
-const USE_MOCK_DATA = false;
-// ปรับให้ดึงจาก Env หรือ Default ตามความเหมาะสม
+// ยังคงเก็บไว้สำหรับปุ่ม Google Login ที่ต้อง Redirect URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 // Interface
@@ -56,17 +57,14 @@ export default function LoginPage() {
 
   // --- Logic: Google Login ---
   const handleGoogleLogin = () => {
-    // 🔥 1. ล้างทุกอย่างทิ้งก่อนไป Google (ป้องกันปัญหา Session ค้าง)
-    localStorage.clear(); // ล้างทิ้งทั้งหมดในครั้งเดียว
+    localStorage.clear(); 
     
-    // ล้าง Cookie ทั้งหมด
     document.cookie.split(";").forEach((c) => {
       document.cookie = c
         .replace(/^ +/, "")
         .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
     });
 
-    // 2. ไปหน้า Google Login (ใช้ API_BASE_URL เพื่อความยืดหยุ่น)
     window.location.href = `${API_BASE_URL}/auth/google/login`;
   };
 
@@ -102,18 +100,17 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // 1. ล้างข้อมูลเก่าก่อน Login ใหม่ (กันเหนียว)
       localStorage.removeItem("token");
       localStorage.removeItem("role");
 
-      const response = await axios.post(
-        `${API_BASE_URL}/auth/login`, 
-        { email, password },
-        { 
-          // withCredentials: true,
-          headers: { "Content-Type": "application/json" }
-        }
-      );
+      // ✅ แก้ไข: ใช้ api instance แทน axios ธรรมดา
+      // - ไม่ต้องใส่ URL เต็ม
+      // - ไม่ต้องใส่ Header เพราะ lib ทำให้แล้ว
+      // - ได้ withCredentials: true อัตโนมัติ
+      const response = await api.post("/auth/login", { 
+        email, 
+        password 
+      });
       
       const backendData = response.data;
       const roleName = mapRoleIdToRoleName(backendData.user.role_id);
@@ -129,7 +126,7 @@ export default function LoginPage() {
         showConfirmButton: false,
       });
 
-      // 3. Redirect (ใช้อันเดิมจาก backend ตรงๆ)
+      // 3. Redirect
       handleRedirect(roleName, backendData.user.is_first_login);
 
     } catch (err: any) {
@@ -266,7 +263,7 @@ export default function LoginPage() {
 }
 
 // ==========================================
-// 2. Sub-Components
+// 2. Sub-Components (เหมือนเดิม)
 // ==========================================
 
 function FeatureItem({ title, desc, delay }: { title: string, desc: string, delay: string }) {

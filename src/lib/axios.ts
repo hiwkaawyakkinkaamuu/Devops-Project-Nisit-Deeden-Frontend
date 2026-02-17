@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 // สร้าง Instance กลาง
 export const api = axios.create({
@@ -17,7 +17,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // สั่ง Redirect หรือ Clear localStorage ตรงนี้ได้
-      // window.location.href = "/"; 
+      window.location.href = "/"; 
     }
     return Promise.reject(error);
   }

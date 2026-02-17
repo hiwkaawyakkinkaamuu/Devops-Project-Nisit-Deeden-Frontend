@@ -21,15 +21,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = () => {
     api.post("/auth/logout").catch(() => {}); 
-
     localStorage.removeItem("token");
     localStorage.removeItem("role");
-    
-    // ล้าง Cookie ฝั่ง Client (Clean up)
     document.cookie.split(";").forEach((c) => {
       document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
     });
-
     setUser(null);
     router.push("/");
   };
@@ -43,44 +39,42 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initAuth = async () => {
-      // 1. ดักหน้า Google Callback
       const urlParams = new URLSearchParams(window.location.search);
+      
+      // 1. ดักหน้า Google Callback: ถ้าเป็นหน้านี้ ให้หยุดการทำงานของ AuthContext เดี๋ยวนี้
+      // ปล่อยให้หน้า google-callback/page.tsx เป็นคนจัดการ Redirect เอง
       if (
         window.location.pathname.includes("/google-callback") || 
-        urlParams.has("token") || 
-        urlParams.has("code")
+        urlParams.has("token")
       ) {
-        console.log("🛠️ AuthContext: Google process detected, skipping init...");
-        setUser(null);
-        setIsLoading(false);
-        return;
+        console.log("🛠️ AuthContext: Google process detected, skipping...");
+        return; // ออกจากฟังก์ชันเลย ไม่ต้องทำข้างล่างต่อ
       }
       
       const token = localStorage.getItem("token");
 
-      // 2. ถ้าไม่มี Token และไม่ได้อยู่หน้า Login/Register ให้เด้งออก
+      // 2. ถ้าไม่มี Token -> เช็คว่าจะดีดออกไหม
       if (!token) {
-        if (pathname !== "/" && pathname !== "/register") {
+        // ข้อยกเว้น: หน้า Public หรือหน้า First Login ไม่ต้องดีดออก
+        const isPublicPage = pathname === "/" || pathname === "/register";
+        const isFirstLoginPage = pathname.includes("/student/auth/first-login");
+
+        if (!isPublicPage && !isFirstLoginPage) {
+          console.log(`🚫 AuthContext: No token on [${pathname}], redirecting...`);
           router.push("/");
         }
         setIsLoading(false);
         return;
       }
 
-      // 3. ใช้ api instance ยิง request
+      // 3. มี Token -> ยืนยันกับ Backend
       try {
-        // ✅ ใช้ api.get แทน axios.get (ไม่ต้องใส่ URL เต็ม)
-        // ✅ Header Authorization ยังใส่ไว้เพื่อความชัวร์ (Backend เช็ค Header เป็น Priority แรก)
-        const res = await api.get("/auth/me", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
+        const res = await api.get("/auth/me");
         if (res.data) {
           const userData = res.data.user || res.data;
           setUser({ ...userData, token });
         }
       } catch (error: any) {
-        console.warn("Session expired or invalid token");
         if (error.response?.status === 401) {
            logout(); 
         }

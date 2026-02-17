@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
 import axios from "axios";
-import { skeleton as Skeleton } from "@/components/Skeleton";
 
 // ==========================================
 // 0. Configuration
@@ -23,11 +22,10 @@ interface Department {
   department_name: string;
 }
 
-// [แก้ไข] ปรับ Interface ให้ตรงกับ JSON ที่ Backend ส่งมา (camelCase)
 interface Campus {
-  campusID: number;     // แก้จาก campus_id
-  campusName: string;   // แก้จาก campus_name
-  campusCode?: string;  // แก้จาก campus_code
+  campusID: number; 
+  campusName: string; 
+  campusCode?: string; 
 }
 
 interface UserProfile {
@@ -40,11 +38,11 @@ interface UserProfile {
   department_id: string;
   campus_id: string;
   email: string;      
-  image_url?: string; 
+  image_url?: string;
+  provider?: string; 
 }
 
-// --- Mockup Data (ใช้กรณี Backend ยังไม่มี API /campus) ---
-// [แก้ไข] ปรับ Mockup ให้ Key ตรงกันด้วย เผื่อกรณี Fallback
+// --- Mockup Data ---
 const MOCK_CAMPUSES: Campus[] = [
   { campusID: 1, campusName: "วิทยาเขตบางเขน", campusCode: "KU" },
   { campusID: 2, campusName: "วิทยาเขตกำแพงแสน", campusCode: "KU-KPS" },
@@ -78,7 +76,8 @@ export default function FirstLoginPage() {
     department_id: "",
     campus_id: "",
     email: "",
-    image_url: ""
+    image_url: "",
+    provider: "" 
   });
 
   // Image Upload Refs
@@ -113,6 +112,7 @@ export default function FirstLoginPage() {
             image_url: user.image_path || "",
             campus_id: user.campus_id ? String(user.campus_id) : "",
             student_number: user.student_number || "",
+            provider: user.provider || "local",
         }));
 
         // --- 2. Fetch Faculties ---
@@ -126,18 +126,24 @@ export default function FirstLoginPage() {
             console.error("Failed to fetch faculties", err);
         }
 
-        // --- 3. Fetch Campuses (Hybrid: API -> Mock) ---
+        // --- 3. Fetch Campuses (Hybrid & Normalize) ---
         try {
             const resCam = await axios.get(`${API_BASE_URL}/campus`, { headers }); 
             const camData = resCam.data.data || resCam.data;
+            
             if (Array.isArray(camData) && camData.length > 0) {
-                setCampuses(camData);
-                console.log("Loaded Campuses from API");
+                const normalizedCampuses: Campus[] = camData.map((c: any) => ({
+                    campusID: c.campusID || c.campus_id,
+                    campusName: c.campusName || c.campus_name,
+                    campusCode: c.campusCode || c.campus_code
+                }));
+                
+                setCampuses(normalizedCampuses);
             } else {
                 throw new Error("Empty API data");
             }
         } catch (err) {
-            console.warn("Campus API not ready/error, using Mockup data.");
+            console.warn("⚠️ Campus API error/empty, using Mockup data.");
             setCampuses(MOCK_CAMPUSES);
         }
 
@@ -153,7 +159,6 @@ export default function FirstLoginPage() {
     initData();
   }, [router]);
 
-  // Fetch Departments when Faculty changes
   useEffect(() => {
     const fetchDepartments = async () => {
       if (!formData.faculty_id) {
@@ -181,14 +186,27 @@ export default function FirstLoginPage() {
   }, [formData.faculty_id]);
 
   // ==========================================
-  // 2. Handlers
+  // 2. Helper Function (แปลง URL เป็น File)
+  // ==========================================
+  const urlToFile = async (url: string, filename: string, mimeType: string): Promise<File> => {
+    try {
+        const res = await fetch(url);
+        const buf = await res.arrayBuffer();
+        return new File([buf], filename, { type: mimeType });
+    } catch (error) {
+        console.error("Error converting URL to file:", error);
+        throw error;
+    }
+  };
+
+  // ==========================================
+  // 3. Handlers
   // ==========================================
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
 
-    // Reset Department if Faculty changes
     if (name === "faculty_id") {
         setFormData(prev => ({ ...prev, faculty_id: value, department_id: "" }));
     }
@@ -224,9 +242,12 @@ export default function FirstLoginPage() {
     if (!formData.campus_id) return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณาเลือกวิทยาเขต' });
     if (!formData.faculty_id || !formData.department_id) return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณาเลือกคณะและสาขาวิชา' });
 
-    // [เพิ่ม] บังคับอัปโหลดรูปภาพ
-    if (!selectedFile) {
-        return Swal.fire({ icon: 'warning', title: 'กรุณาอัปโหลดรูปภาพ', text: 'จำเป็นต้องใช้รูปภาพโปรไฟล์เพื่อยืนยันตัวตน' });
+    // Validation รูปภาพ (บังคับเฉพาะ Manual Login ที่ไม่มีรูป)
+    const isGoogleLogin = formData.provider === "google";
+    const hasImage = !!selectedFile || (!!formData.image_url && formData.image_url !== "");
+
+    if (!isGoogleLogin && !hasImage) {
+        return Swal.fire({ icon: 'warning', title: 'กรุณาอัปโหลดรูปภาพ', text: 'สำหรับผู้ใช้งานทั่วไป จำเป็นต้องอัปโหลดรูปภาพโปรไฟล์' });
     }
 
     setLoading(true);
@@ -241,18 +262,31 @@ export default function FirstLoginPage() {
         payload.append("faculty_id", formData.faculty_id);
         payload.append("department_id", formData.department_id);
         
-        // ส่งไฟล์ด้วยชื่อ key "image"
-        payload.append("profile_image", selectedFile); 
+        // --- Logic จัดการไฟล์รูป (จุดสำคัญ) ---
+        if (selectedFile) {
+            // กรณี 1: User เลือกไฟล์ใหม่มา -> ส่งไฟล์นั้นไปเลย
+            payload.append("profile_image", selectedFile);
+        } else if (isGoogleLogin && formData.image_url) {
+            // กรณี 2: เป็น Google User และไม่ได้เลือกรูปใหม่ -> แปลง URL รูปเดิมเป็น File ส่งไป
+            try {
+                // ดึงรูปจาก URL แปลงเป็น File Object (ชื่อ google-profile.jpg)
+                const googleFile = await urlToFile(formData.image_url, "google-profile.jpg", "image/jpeg");
+                payload.append("profile_image", googleFile);
+                console.log("✅ Converted Google URL to File:", googleFile);
+            } catch (err) {
+                console.warn("❌ Failed to convert Google image URL to file:", err);
+                // ถ้าแปลงไม่ได้จริงๆ (เช่นติด CORS) อาจต้องปล่อยไปแล้วยอมให้ Backend ด่ากลับมา
+                // หรืออาจจะ Mock ไฟล์เปล่าไปถ้าจำเป็น
+            }
+        }
 
-        // [แก้ไข] เปลี่ยน URL เป็น /auth/first-login และลบ Content-Type ออก
+        // ยิง Request
         await axios.put(`${API_BASE_URL}/auth/first-login`, payload, {
              headers: { 
-                 Authorization: `Bearer ${token}`,
-                 "Content-Type": "multipart/form-data" <--- ลบบรรทัดนี้ทิ้งเลยครับ ห้ามใส่
+                 Authorization: `Bearer ${token}`
              }
         });
         
-        // ... (ส่วน Success เหมือนเดิม)
         await Swal.fire({
             icon: 'success',
             title: 'บันทึกข้อมูลสำเร็จ',
@@ -260,11 +294,11 @@ export default function FirstLoginPage() {
             timer: 1500,
             showConfirmButton: false
         });
+        
         window.location.href = "/student/main/student-nomination-form"; 
 
     } catch (error: any) {
         console.error("Submit Error:", error);
-        // ... (Error handling เหมือนเดิม)
         const errorMsg = error.response?.data?.message || error.response?.data?.error || "เกิดข้อผิดพลาด";
         if (errorMsg.includes("phone")) Swal.fire({ icon: 'error', title: 'ข้อมูลซ้ำ', text: 'เบอร์โทรศัพท์นี้มีผู้ใช้งานแล้ว' });
         else if (errorMsg.includes("student number")) Swal.fire({ icon: 'error', title: 'ข้อมูลซ้ำ', text: 'รหัสนิสิตนี้มีอยู่ในระบบแล้ว' });
@@ -275,7 +309,7 @@ export default function FirstLoginPage() {
   };
 
   // ==========================================
-  // 3. Render
+  // 4. Render (เหมือนเดิม)
   // ==========================================
 
   if (!isPageLoaded) return (
@@ -291,7 +325,7 @@ export default function FirstLoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4 font-sans">
       <div className="bg-white max-w-5xl w-full rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row animate-fade-in-up transform transition-all hover:scale-[1.005] duration-500">
         
-        {/* Left Side: Welcome Section */}
+        {/* Left Side */}
         <div className="bg-gradient-to-br from-emerald-600 to-teal-800 md:w-1/3 p-10 text-white flex flex-col justify-between relative overflow-hidden group">
           <div className="relative z-10">
             <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mb-8 backdrop-blur-md shadow-inner border border-white/10 group-hover:rotate-12 transition-transform duration-500">
@@ -305,7 +339,7 @@ export default function FirstLoginPage() {
           <div className="absolute top-10 -left-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
         </div>
 
-        {/* Right Side: Form Section */}
+        {/* Right Side: Form */}
         <div className="md:w-2/3 p-8 md:p-12 overflow-y-auto max-h-[90vh] custom-scrollbar">
           <div className="mb-8 border-b border-gray-100 pb-4">
              <h3 className="text-2xl font-bold text-gray-800">ยืนยันตัวตน (ครั้งแรก)</h3>
@@ -332,17 +366,16 @@ export default function FirstLoginPage() {
                 <p className="text-xs text-gray-400 mt-2">คลิกเพื่ออัปโหลดรูปภาพ (สูงสุด 5MB)</p>
             </div>
 
-            {/* Email (Read Only) */}
+            {/* Email */}
             <div className="space-y-2 animate-fade-in delay-100">
                 <label className="block text-xs font-bold text-gray-500">อีเมล (บัญชีผู้ใช้)</label>
                 <input type="text" value={formData.email} readOnly className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-500 cursor-not-allowed focus:outline-none" />
             </div>
 
-            {/* Personal Info */}
+            {/* Personal Info Fields */}
             <div className="space-y-6 animate-fade-in delay-200">
               <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wider border-l-4 border-emerald-500 pl-3">ข้อมูลส่วนตัว</h4>
               
-              {/* Row 1: คำนำหน้า - ชื่อ - นามสกุล */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="group md:col-span-1">
                       <label className="block text-xs font-bold text-gray-700 mb-1.5">คำนำหน้า <span className="text-red-500">*</span></label>
@@ -361,7 +394,6 @@ export default function FirstLoginPage() {
                   </div>
               </div>
 
-              {/* Row 2: รหัสนิสิต - เบอร์โทร */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="group">
                       <label className="block text-xs font-bold text-gray-700 mb-1.5">รหัสนิสิต (10 หลัก) <span className="text-red-500">*</span></label>
@@ -373,14 +405,12 @@ export default function FirstLoginPage() {
                   </div>
               </div>
 
-              {/* Row 3: วิทยาเขต */}
               <div className="grid grid-cols-1 gap-4">
                 <div className="group">
                     <label className="block text-xs font-bold text-gray-700 mb-1.5">วิทยาเขต <span className="text-red-500">*</span></label>
                     <select name="campus_id" value={formData.campus_id} onChange={handleChange} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none cursor-pointer">
                         <option value="" className="text-gray-400">-- เลือกวิทยาเขต --</option>
                         {campuses.map((c, index) => (
-                            // [แก้ไข] ใส่ Index ใน Key เพื่อป้องกัน Key ซ้ำ
                             <option key={`${c.campusID}-${index}`} value={c.campusID} className="text-gray-900">
                                 {c.campusName} {c.campusCode ? `(${c.campusCode})` : ''}
                             </option>
@@ -389,7 +419,6 @@ export default function FirstLoginPage() {
                 </div>
               </div>
 
-              {/* Row 4: คณะ - สาขา */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="group">
                     <label className="block text-xs font-bold text-gray-700 mb-1.5">คณะ <span className="text-red-500">*</span></label>

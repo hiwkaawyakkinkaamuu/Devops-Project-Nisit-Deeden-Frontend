@@ -4,15 +4,24 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useState, useEffect } from "react";
 import Swal from "sweetalert2";
-import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
+import { api } from "@/lib/axios";
 
 // ==========================================
 // 1. Interfaces & Types
 // ==========================================
 
-type UserRole = "student" | "head_of_department" | "dean" | "associate_dean" | "chairman_of_student_development_committee" | "student_development_committee" | "student_development" | "admin";
+type UserRole = 
+  | "student" 
+  | "head_of_department" 
+  | "dean" 
+  | "associate_dean" 
+  | "chairman_of_student_development_committee" 
+  | "student_development_committee" 
+  | "student_development" 
+  | "chancellor" // เพิ่มตามรีเควส
+  | "admin";
 
 interface Faculty {
   faculty_id: number;
@@ -32,7 +41,6 @@ interface UserProfileData {
   role_id: number;
   campus_id: number;
   image_path?: string;
-  // รองรับโครงสร้างข้อมูลจาก Backend
   Student?: any;
   student?: any;
   student_data?: any;
@@ -54,7 +62,19 @@ interface SidebarProps {
 // 2. Constants & Helpers
 // ==========================================
 
-// ✅ ฟังก์ชันจัดการ URL รูปภาพ
+// ✅ Mapping ชื่อตำแหน่งภาษาไทย
+const ROLE_NAMES_TH: Record<string, string> = {
+  student: "นักศึกษา",
+  head_of_department: "หัวหน้าภาควิชา",
+  associate_dean: "รองคณบดี",
+  dean: "คณบดี",
+  student_development: "กองพัฒนานิสิต",
+  student_development_committee: "คณะกรรมการ",
+  chairman_of_student_development_committee: "ประธานคณะกรรมการ",
+  chancellor: "อธิการบดี",
+  admin: "ผู้ดูแลระบบ"
+};
+
 const getProfileImageUrl = (imagePath: string | undefined | null) => {
   if (!imagePath) return null;
   if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
@@ -74,6 +94,7 @@ const getRoleKey = (roleId: number | undefined): UserRole => {
     case 5: return "student_development";
     case 6: return "student_development_committee";
     case 7: return "chairman_of_student_development_committee";
+    case 8: return "chancellor"; // สมมติ ID 8 เป็นอธิการบดี
     default: return "student";
   }
 };
@@ -207,18 +228,16 @@ const ProfileSkeleton = ({ isCollapsed }: { isCollapsed: boolean }) => (
 function ProfileModal({ isOpen, onClose, data, faculties, departments }: { isOpen: boolean; onClose: () => void; data: UserProfileData | null; faculties: Faculty[]; departments: Department[] }) {
   if (!isOpen || !data) return null;
 
-  const roleName = getRoleKey(data.role_id).replace(/_/g, ' ').toUpperCase();
+  // ✅ ใช้ชื่อตำแหน่งภาษาไทย
+  const roleKey = getRoleKey(data.role_id);
+  const roleNameTH = ROLE_NAMES_TH[roleKey] || roleKey;
+  
   const campusName = getCampusName(data.campus_id);
 
   // ดึงข้อมูลนิสิต
   const student = data.Student || data.student || data.student_data;
   const studentNumber = student?.student_number;
 
-  // ✅ Logic การดึงชื่อคณะและสาขา
-  // 1. ถ้ามี object ชื่อ (เช่น student.Faculty.faculty_name) ให้ใช้เลย
-  // 2. ถ้าไม่มี ให้เอา ID ไปค้นใน List (faculties/departments)
-  // 3. ถ้าหาไม่เจอ ให้แสดง ID เดิม
-  
   let facultyName = student?.Faculty?.faculty_name || student?.faculty?.faculty_name;
   if (!facultyName && student?.faculty_id) {
       const found = faculties.find(f => f.faculty_id === Number(student.faculty_id));
@@ -284,7 +303,7 @@ function ProfileModal({ isOpen, onClose, data, faculties, departments }: { isOpe
                         <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">{data.firstname} {data.lastname}</h2>
                         <div className="flex justify-center gap-2 mt-2">
                             <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full">
-                                {roleName}
+                                {roleNameTH} {/* แสดงชื่อไทย */}
                             </span>
                         </div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">{campusName}</p>
@@ -313,7 +332,6 @@ function ProfileModal({ isOpen, onClose, data, faculties, departments }: { isOpe
                             </div>
                         )}
 
-                        {/* แสดงชื่อคณะ (หรือ ID ถ้าหาไม่เจอ) */}
                         {facultyName && (
                             <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
                                 <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
@@ -326,7 +344,6 @@ function ProfileModal({ isOpen, onClose, data, faculties, departments }: { isOpe
                             </div>
                         )}
 
-                        {/* แสดงชื่อสาขา (หรือ ID ถ้าหาไม่เจอ) */}
                         {departmentName && (
                             <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
                                 <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
@@ -357,12 +374,12 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // ✅ เพิ่ม State สำหรับเก็บ Master Data
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
 
   // คำนวณ Role และเมนู
   const roleKey = getRoleKey(user?.role_id);
+  const roleNameTH = ROLE_NAMES_TH[roleKey] || roleKey; // ✅ ใช้ชื่อไทย
   const menuItems = MENU_CONFIG[roleKey] || [];
 
   const isActive = (path: string) => {
@@ -379,14 +396,12 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
         setLoading(true);
         try {
             const token = localStorage.getItem("token");
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api";
             const headers = { Authorization: `Bearer ${token}` };
             
-            // ✅ ดึง Profile, คณะ, สาขา พร้อมกัน
             const [resMe, resFac, resDept] = await Promise.all([
-                axios.get(`${apiUrl}/auth/me`, { headers }),
-                axios.get(`${apiUrl}/faculty`, { headers }),
-                axios.get(`${apiUrl}/department`, { headers })
+                api.get("/auth/me", { headers }),
+                api.get("/faculty", { headers }),
+                api.get("/department", { headers })
             ]);
 
             if(resMe.data && resMe.data.user) {
@@ -436,8 +451,8 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
         isOpen={isProfileOpen} 
         onClose={() => setIsProfileOpen(false)} 
         data={fullProfile} 
-        faculties={faculties} // ส่งรายชื่อคณะไปให้ Modal ใช้
-        departments={departments} // ส่งรายชื่อสาขาไปให้ Modal ใช้
+        faculties={faculties} 
+        departments={departments} 
       />
 
       <motion.aside
@@ -541,7 +556,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
                       {fullProfile?.firstname} {fullProfile?.lastname}
                     </p>
                     <p className="text-[10px] text-gray-400 truncate font-bold uppercase tracking-wider">
-                      {roleKey.replace(/_/g, ' ')}
+                      {roleNameTH} {/* ✅ แสดงชื่อไทยใน Sidebar Footer */}
                     </p>
                   </motion.div>
                 )}
