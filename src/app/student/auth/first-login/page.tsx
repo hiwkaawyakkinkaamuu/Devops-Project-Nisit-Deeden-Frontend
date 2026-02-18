@@ -32,7 +32,7 @@ interface UserProfile {
   firstname: string;
   lastname: string;
   student_number: string;
-  phone_number: string;
+  // phone_number: string; // [ลบออก] ไม่ใช้แล้ว
   faculty_id: string;
   department_id: string;
   campus_id: string;
@@ -61,7 +61,7 @@ export default function FirstLoginPage() {
     firstname: "",
     lastname: "",
     student_number: "",
-    phone_number: "",
+    // phone_number: "", // [ลบออก] ไม่ใช้แล้ว
     faculty_id: "",
     department_id: "",
     campus_id: "",
@@ -122,7 +122,6 @@ export default function FirstLoginPage() {
             const camData = resCam.data.data || resCam.data;
             
             if (Array.isArray(camData) && camData.length > 0) {
-                // Normalize ข้อมูลเพื่อให้แน่ใจว่า Frontend เรียกใช้ Key ได้ถูกต้อง (DB)
                 const normalizedCampuses: Campus[] = camData.map((c: any) => ({
                     campus_id: c.campus_id || c.campusID,         
                     campus_name: c.campus_name || c.campusName,   
@@ -130,9 +129,7 @@ export default function FirstLoginPage() {
                 }));
                 
                 setCampuses(normalizedCampuses);
-                console.log("Campuses loaded from Database:", normalizedCampuses);
             } else {
-                console.warn("No campuses found in Database.");
                 setCampuses([]); 
             }
         } catch (err) {
@@ -233,11 +230,10 @@ export default function FirstLoginPage() {
     e.preventDefault();
     const token = localStorage.getItem("token");
 
-    // --- Validation ---
+    // --- Validation (เอาเช็คเบอร์โทรออก) ---
     if (!formData.title) return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณาเลือกคำนำหน้าชื่อ' });
     if (!formData.firstname.trim() || !formData.lastname.trim()) return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณากรอกชื่อ-นามสกุล' });
     if (!/^\d{10}$/.test(formData.student_number)) return Swal.fire({ icon: 'warning', title: 'รหัสนิสิตไม่ถูกต้อง', text: 'รหัสนิสิตต้องเป็นตัวเลข 10 หลักถ้วน' });
-    if (!/^0\d{9}$/.test(formData.phone_number)) return Swal.fire({ icon: 'warning', title: 'เบอร์โทรศัพท์ไม่ถูกต้อง', text: 'ต้องขึ้นต้นด้วย 0 และมี 10 หลัก' });
     if (!formData.campus_id) return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณาเลือกวิทยาเขต' });
     if (!formData.faculty_id || !formData.department_id) return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณาเลือกคณะและสาขาวิชา' });
 
@@ -257,17 +253,15 @@ export default function FirstLoginPage() {
         payload.append("firstname", formData.firstname);
         payload.append("lastname", formData.lastname);
         payload.append("student_number", formData.student_number);
-        payload.append("phone_number", formData.phone_number);
+        // payload.append("phone_number", formData.phone_number); // [ลบออก] ไม่ส่งไปหลังบ้าน
         payload.append("campus_id", formData.campus_id);
         payload.append("faculty_id", formData.faculty_id);
         payload.append("department_id", formData.department_id);
         
         // --- Logic ส่งรูปภาพ ---
         if (selectedFile) {
-            // กรณี 1: เลือกรูปใหม่ -> ส่งรูปนั้น
             payload.append("profile_image", selectedFile);
         } else if (isGoogleLogin && formData.image_url) {
-            // กรณี 2: Google และไม่ได้เปลี่ยนรูป -> แปลง URL รูปเดิมเป็นไฟล์แล้วส่ง (เพื่อไม่ให้ Backend 400)
             try {
                 const googleFile = await urlToFile(formData.image_url, "google-profile.jpg", "image/jpeg");
                 payload.append("profile_image", googleFile);
@@ -293,8 +287,7 @@ export default function FirstLoginPage() {
     } catch (error: any) {
         console.error("การส่งข้อมูลผิดพลาด:", error);
         const errorMsg = error.response?.data?.message || error.response?.data?.error || "เกิดข้อผิดพลาด";
-        if (errorMsg.includes("เบอร์โทร")) Swal.fire({ icon: 'error', title: 'ข้อมูลซ้ำ', text: 'เบอร์โทรศัพท์นี้มีผู้ใช้งานแล้ว' });
-        else if (errorMsg.includes("รหัสนิสิต")) Swal.fire({ icon: 'error', title: 'ข้อมูลซ้ำ', text: 'รหัสนิสิตนี้มีอยู่ในระบบแล้ว' });
+        if (errorMsg.includes("รหัสนิสิต")) Swal.fire({ icon: 'error', title: 'ข้อมูลซ้ำ', text: 'รหัสนิสิตนี้มีอยู่ในระบบแล้ว' });
         else Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: errorMsg });
     } finally {
         setLoading(false);
@@ -387,14 +380,11 @@ export default function FirstLoginPage() {
                   </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* ลบช่องเบอร์โทรออก เหลือแค่รหัสนิสิต */}
+              <div className="grid grid-cols-1 gap-4"> 
                   <div className="group">
                       <label className="block text-xs font-bold text-gray-700 mb-1.5">รหัสนิสิต (10 หลัก) <span className="text-red-500">*</span></label>
                       <input type="text" name="student_number" maxLength={10} value={formData.student_number} onChange={handleChange} placeholder="xxxxxxxxxx" className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-800 font-mono focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none" />
-                  </div>
-                  <div className="group">
-                      <label className="block text-xs font-bold text-gray-700 mb-1.5">เบอร์โทรศัพท์ <span className="text-red-500">*</span></label>
-                      <input type="text" name="phone_number" maxLength={10} value={formData.phone_number} onChange={handleChange} placeholder="0xxxxxxxxx" className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-800 font-mono focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none" />
                   </div>
               </div>
 
@@ -403,7 +393,6 @@ export default function FirstLoginPage() {
                     <label className="block text-xs font-bold text-gray-700 mb-1.5">วิทยาเขต <span className="text-red-500">*</span></label>
                     <select name="campus_id" value={formData.campus_id} onChange={handleChange} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none cursor-pointer">
                         <option value="" className="text-gray-400">-- เลือกวิทยาเขต --</option>
-                        {/* ใช้ตัวแปรที่ normalize มาแล้ว (snake_case from DB) */}
                         {campuses.map((c, index) => (
                             <option key={`${c.campus_id}-${index}`} value={c.campus_id} className="text-gray-900">
                                 {c.campus_name} {c.campus_code ? `(${c.campus_code})` : ''}

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import axios from "axios";
 import Swal from "sweetalert2";
 
@@ -18,6 +19,7 @@ interface NominationHistory {
   form_id: number;
   academic_year: number;
   semester: number;
+  award_type_id: number;
   award_type_name: string;
   nomination_status: string;
   status_code: 2 | 3 | 4; 
@@ -25,6 +27,55 @@ interface NominationHistory {
   completed_date: string;
   reject_reason?: string;
 }
+
+// Color Variant Configuration for Tailwind
+const colorVariants: any = {
+  orange: {
+    base: "hover:border-orange-200 hover:shadow-orange-100",
+    dateBox: "bg-orange-50 border-orange-100 group-hover:bg-orange-600 group-hover:border-orange-600",
+    dateText: "text-orange-400 group-hover:text-orange-200",
+    dateNum: "text-orange-700 group-hover:text-white",
+    title: "group-hover:text-orange-600",
+    chevron: "group-hover:bg-orange-600 group-hover:text-white",
+    badge: "bg-orange-50 text-orange-700 border-orange-200"
+  },
+  purple: {
+    base: "hover:border-purple-200 hover:shadow-purple-100",
+    dateBox: "bg-purple-50 border-purple-100 group-hover:bg-purple-600 group-hover:border-purple-600",
+    dateText: "text-purple-400 group-hover:text-purple-200",
+    dateNum: "text-purple-700 group-hover:text-white",
+    title: "group-hover:text-purple-600",
+    chevron: "group-hover:bg-purple-600 group-hover:text-white",
+    badge: "bg-purple-50 text-purple-700 border-purple-200"
+  },
+  blue: {
+    base: "hover:border-blue-200 hover:shadow-blue-100",
+    dateBox: "bg-blue-50 border-blue-100 group-hover:bg-blue-600 group-hover:border-blue-600",
+    dateText: "text-blue-400 group-hover:text-blue-200",
+    dateNum: "text-blue-700 group-hover:text-white",
+    title: "group-hover:text-blue-600",
+    chevron: "group-hover:bg-blue-600 group-hover:text-white",
+    badge: "bg-blue-50 text-blue-700 border-blue-200"
+  },
+  green: {
+    base: "hover:border-green-200 hover:shadow-green-100",
+    dateBox: "bg-green-50 border-green-100 group-hover:bg-green-600 group-hover:border-green-600",
+    dateText: "text-green-400 group-hover:text-green-200",
+    dateNum: "text-green-700 group-hover:text-white",
+    title: "group-hover:text-green-600",
+    chevron: "group-hover:bg-green-600 group-hover:text-white",
+    badge: "bg-green-50 text-green-700 border-green-200"
+  },
+  gray: {
+    base: "hover:border-gray-200 hover:shadow-gray-100",
+    dateBox: "bg-gray-50 border-gray-100 group-hover:bg-gray-600 group-hover:border-gray-600",
+    dateText: "text-gray-400 group-hover:text-gray-200",
+    dateNum: "text-gray-700 group-hover:text-white",
+    title: "group-hover:text-gray-600",
+    chevron: "group-hover:bg-gray-600 group-hover:text-white",
+    badge: "bg-gray-50 text-gray-700 border-gray-200"
+  }
+};
 
 // ==========================================
 // 2. Icons Components (SVG)
@@ -61,7 +112,6 @@ const Icons = {
 // 3. Service Layer (Axios)
 // ==========================================
 
-// Check if date is Zero time from Go (0001-01-01...)
 const isZeroDate = (dateStr: string) => {
     return !dateStr || dateStr.startsWith("0001") || dateStr.includes("0001-01-01");
 };
@@ -69,7 +119,7 @@ const isZeroDate = (dateStr: string) => {
 const mapBackendToHistory = (data: any[]): NominationHistory[] => {
     return data.map((item: any) => {
         const hasRejectReason = !!item.reject_reason;
-        const isApproved = item.form_status_id === 8; // Adjust based on your DB
+        const isApproved = item.form_status_id === 8; 
         
         let statusCode: 2 | 3 | 4 = 4;
         let statusLabel = "อยู่ระหว่างพิจารณา";
@@ -82,7 +132,6 @@ const mapBackendToHistory = (data: any[]): NominationHistory[] => {
             statusLabel = "ไม่ผ่านการคัดเลือก";
         }
 
-        // [แก้ไข] Logic วันที่อัปเดต: ถ้าไม่มีวันอัปเดต หรือเป็นวันเริ่มต้น (Zero Time) ให้ใช้วันที่ส่งแทน
         let completedDate = item.latest_update;
         if (isZeroDate(completedDate)) {
             completedDate = item.created_at;
@@ -92,11 +141,12 @@ const mapBackendToHistory = (data: any[]): NominationHistory[] => {
             form_id: item.form_id, 
             academic_year: item.academic_year || 0,
             semester: item.semester || 0,
+            award_type_id: item.award_type_id || 0,
             award_type_name: item.award_type_name || "ไม่ระบุประเภท",
             nomination_status: statusLabel,
             status_code: statusCode,
             created_at: item.created_at,
-            completed_date: completedDate, // ใช้วันที่ที่ผ่านการเช็คแล้ว
+            completed_date: completedDate, 
             reject_reason: item.reject_reason || "",
         };
     });
@@ -129,7 +179,6 @@ const nominationHistoryService = {
 const formatDate = (isoDate: string) => {
   if (!isoDate) return "-";
   const date = new Date(isoDate);
-  // ใช้ 'th-TH' เพื่อให้แสดงปี พ.ศ. โดยอัตโนมัติ
   return date.toLocaleDateString("th-TH", {
     year: "numeric",
     month: "short",
@@ -137,31 +186,20 @@ const formatDate = (isoDate: string) => {
   });
 };
 
-const getStatusConfig = (code: number) => {
-  switch (code) {
-    case 2: 
-      return {
-        label: "ผ่านการคัดเลือก",
-        color: "bg-green-50 text-green-700 border-green-200",
-        icon: <Icons.CheckCircle />,
-      };
-    case 3: 
-      return {
-        label: "ไม่ผ่านการคัดเลือก",
-        color: "bg-red-50 text-red-700 border-red-200",
-        icon: <Icons.XCircle />,
-      };
-    default: 
-      return {
-        label: "อยู่ระหว่างพิจารณา",
-        color: "bg-blue-50 text-blue-600 border-blue-200", 
-        icon: <Icons.Flag />, 
-      };
-  }
+const getThemeColor = (item: NominationHistory): string => {
+    const id = item.award_type_id;
+    const name = item.award_type_name || "";
+    
+    if (id === 1 || name.includes("กิจกรรม")) return 'orange';
+    if (id === 2 || name.includes("นวัตกรรม")) return 'purple';
+    if (id === 3 || name.includes("ประพฤติ")) return 'blue';
+    if (id === 4 || name.includes("อื่นๆ")) return 'green';
+    
+    return 'gray'; 
 };
 
 // ==========================================
-// 5. Sub-Components (Same as before)
+// 5. Sub-Components
 // ==========================================
 
 const StatCard = ({ title, count, colorClass, icon }: any) => (
@@ -243,17 +281,28 @@ export default function StudentHistoryPage() {
 
   // --- Handlers ---
   const handleViewDetail = (item: NominationHistory) => {
-    const statusConfig = getStatusConfig(item.status_code);
+    const theme = getThemeColor(item);
+    // Use theme class from colorVariants
+    const themeClasses = colorVariants[theme] || colorVariants.gray;
     
-    // Icons for Swal
+    // Icons for Swal (HTML String)
     const iconSuccess = `<svg class="w-16 h-16 text-green-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
     const iconFail = `<svg class="w-16 h-16 text-red-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
     const iconInfo = `<svg class="w-16 h-16 text-blue-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
     const iconAlert = `<svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>`;
 
     let mainIcon = iconInfo;
-    if (item.status_code === 2) mainIcon = iconSuccess;
-    else if (item.status_code === 3) mainIcon = iconFail;
+    let badgeClass = "bg-gray-50 text-gray-600 border-gray-200";
+
+    if (item.status_code === 2) {
+         mainIcon = iconSuccess;
+         badgeClass = themeClasses.badge; // Use theme color for approved
+    } else if (item.status_code === 3) {
+         mainIcon = iconFail;
+         badgeClass = "bg-red-50 text-red-700 border-red-200";
+    } else {
+         badgeClass = themeClasses.badge; // Use theme color for pending too (or gray)
+    }
 
     Swal.fire({
       html: `
@@ -280,7 +329,7 @@ export default function StudentHistoryPage() {
                     
                     <div class="flex justify-between items-center pt-2">
                         <span class="text-gray-500">สถานะ</span>
-                        <span class="px-3 py-1 rounded-lg text-xs font-bold ${statusConfig.color} border">
+                        <span class="px-3 py-1 rounded-lg text-xs font-bold ${badgeClass} border">
                             ${item.nomination_status}
                         </span>
                     </div>
@@ -305,9 +354,32 @@ export default function StudentHistoryPage() {
     });
   };
 
+  // --- Show Empty State (Redirect Card) when no history ---
+  if (!loading && historyList.length === 0) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 font-sans">
+        <div className="bg-white p-10 rounded-[32px] shadow-xl text-center max-w-lg w-full border border-gray-100 animate-fade-in-up">
+          <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-500 shadow-sm">
+            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          </div>
+          <h2 className="text-2xl font-extrabold text-gray-900 mb-3">ยังไม่มีประวัติการเสนอชื่อ</h2>
+          <p className="text-gray-500 mb-8 leading-relaxed">
+            คุณยังไม่ได้ทำการเสนอชื่อนิสิตดีเด่นในปีการศึกษานี้<br/>
+            กรุณากรอกแบบฟอร์มเพื่อเริ่มต้นการเสนอชื่อ
+          </p>
+          <Link href="/student/main/student-nomination-form" className="w-full block py-4 bg-gray-900 text-white rounded-2xl font-bold hover:bg-black transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group">
+            <span>ไปที่แบบฟอร์มเสนอชื่อ</span>
+            <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50/50 p-6 md:p-10 font-sans pb-24">
       <div className="max-w-[1200px] mx-auto space-y-8 animate-fade-in-up">
+        
         {/* 1. Header & Stats */}
         <div>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
@@ -371,34 +443,36 @@ export default function StudentHistoryPage() {
 
           {loading ? (
             <HistorySkeleton />
-          ) : filteredList.length === 0 ? (
-            <div className="text-center py-20 text-gray-400">
-              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                 <Icons.EmptyBox />
-              </div>
-              <p className="text-lg font-medium">ไม่พบประวัติคำร้อง</p>
-              <p className="text-sm opacity-70">คุณยังไม่มีการเสนอชื่อในปีที่เลือก</p>
-            </div>
           ) : (
             <div className="grid gap-4">
               {filteredList.map((item, index) => {
-                const status = getStatusConfig(item.status_code);
+                const theme = getThemeColor(item);
+                const themeClasses = colorVariants[theme] || colorVariants.gray;
+                
+                // Status Badge Color Logic
+                let statusBadgeClass = "bg-gray-50 text-gray-600 border-gray-200";
+                if (item.status_code === 2) statusBadgeClass = themeClasses.badge; 
+                else if (item.status_code === 3) statusBadgeClass = "bg-red-50 text-red-700 border-red-200"; 
+                else statusBadgeClass = themeClasses.badge;
+
                 return (
                   <div
                     key={item.form_id || index}
                     onClick={() => handleViewDetail(item)}
-                    className="group relative bg-white rounded-2xl border border-gray-100 p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:shadow-xl hover:-translate-y-1 hover:border-blue-100 transition-all duration-300 cursor-pointer animate-fade-in-up"
+                    className={`group relative bg-white rounded-2xl border border-gray-100 p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer animate-fade-in-up ${themeClasses.base}`}
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
                     <div className="flex items-start gap-5 w-full">
-                      <div className="flex flex-col items-center justify-center w-16 h-16 bg-blue-50 rounded-2xl border border-blue-100 shrink-0 group-hover:bg-blue-600 group-hover:border-blue-600 transition-colors duration-300">
-                        <span className="text-[10px] text-blue-400 font-bold uppercase group-hover:text-blue-200">เทอม</span>
-                        <span className="text-2xl font-black text-blue-700 leading-none group-hover:text-white">{item.semester}</span>
-                        <span className="text-[10px] text-blue-400 font-medium group-hover:text-blue-200">{item.academic_year}</span>
+                      {/* Date Box with Dynamic Color */}
+                      <div className={`flex flex-col items-center justify-center w-16 h-16 rounded-2xl border shrink-0 transition-colors duration-300 ${themeClasses.dateBox}`}>
+                        <span className={`text-[10px] font-bold uppercase ${themeClasses.dateText}`}>เทอม</span>
+                        <span className={`text-2xl font-black leading-none ${themeClasses.dateNum}`}>{item.semester}</span>
+                        <span className={`text-[10px] font-medium ${themeClasses.dateText}`}>{item.academic_year}</span>
                       </div>
 
                       <div className="flex-1">
-                        <h3 className="text-lg font-bold text-gray-800 group-hover:text-blue-600 transition-colors line-clamp-1">
+                        {/* Title with Dynamic Hover Color */}
+                        <h3 className={`text-lg font-bold text-gray-800 transition-colors line-clamp-1 ${themeClasses.title}`}>
                           {item.award_type_name}
                         </h3>
                         <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-gray-500">
@@ -416,13 +490,15 @@ export default function StudentHistoryPage() {
                     </div>
 
                     <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end pl-20 md:pl-0">
-                      <span className={`px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${status.color}`}>
+                      {/* Status Badge */}
+                      <span className={`px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${statusBadgeClass}`}>
                         {item.status_code === 2 && <span className="w-4 h-4"><Icons.CheckCircle/></span>}
                         {item.status_code === 3 && <span className="w-4 h-4"><Icons.XCircle/></span>}
                         {item.status_code === 4 && <span className="w-4 h-4"><Icons.Flag/></span>}
                         {item.nomination_status}
                       </span>
-                      <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-blue-600 group-hover:text-white transition-all transform group-hover:rotate-90 shadow-sm group-hover:shadow-md">
+                      {/* Chevron with Dynamic Color */}
+                      <div className={`w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 transition-all transform group-hover:rotate-90 shadow-sm group-hover:shadow-md ${themeClasses.chevron}`}>
                         <Icons.ChevronRight />
                       </div>
                     </div>
