@@ -11,7 +11,6 @@ import axios from "axios";
 
 const API_BASE_URL = "/api"; 
 
-// --- Interfaces ---
 interface Faculty {
   faculty_id: number;
   faculty_name: string;
@@ -23,9 +22,9 @@ interface Department {
 }
 
 interface Campus {
-  campusID: number; 
-  campusName: string; 
-  campusCode?: string; 
+  campus_id: number; 
+  campus_name: string; 
+  campus_code?: string; 
 }
 
 interface UserProfile {
@@ -41,15 +40,6 @@ interface UserProfile {
   image_url?: string;
   provider?: string; 
 }
-
-// --- Mockup Data ---
-const MOCK_CAMPUSES: Campus[] = [
-  { campusID: 1, campusName: "วิทยาเขตบางเขน", campusCode: "KU" },
-  { campusID: 2, campusName: "วิทยาเขตกำแพงแสน", campusCode: "KU-KPS" },
-  { campusID: 3, campusName: "วิทยาเขตศรีราชา", campusCode: "KU-SR" },
-  { campusID: 4, campusName: "วิทยาเขตเฉลิมพระเกียรติ จังหวัดสกลนคร", campusCode: "KU-CSC" },
-  { campusID: 5, campusName: "โครงการจัดตั้งวิทยาเขตสุพรรณบุรี", campusCode: "KU-SLA" }
-];
 
 const PREFIXES = ["นาย", "นาง", "นางสาว"];
 
@@ -100,7 +90,7 @@ export default function FirstLoginPage() {
       const headers = { Authorization: `Bearer ${token}` };
 
       try {
-        // --- 1. Fetch User Profile ---
+        // --- 1. Fetch User Profile (DB) ---
         const resMe = await axios.get(`${API_BASE_URL}/auth/me`, { headers });
         const user = resMe.data.user || resMe.data || {};
 
@@ -115,7 +105,7 @@ export default function FirstLoginPage() {
             provider: user.provider || "local",
         }));
 
-        // --- 2. Fetch Faculties ---
+        // --- 2. Fetch Faculties (DB) ---
         try {
             const resFac = await axios.get(`${API_BASE_URL}/faculty`, { headers });
             const facData = resFac.data.data || resFac.data;
@@ -123,28 +113,36 @@ export default function FirstLoginPage() {
                 setFaculties(facData);
             }
         } catch (err) {
-            console.error("Failed to fetch faculties", err);
+            console.error("Failed to fetch faculties from DB", err);
         }
 
-        // --- 3. Fetch Campuses (Hybrid & Normalize) ---
+        // --- 3. Fetch Campuses (DB) ---
         try {
             const resCam = await axios.get(`${API_BASE_URL}/campus`, { headers }); 
             const camData = resCam.data.data || resCam.data;
             
             if (Array.isArray(camData) && camData.length > 0) {
+                // Normalize ข้อมูลเพื่อให้แน่ใจว่า Frontend เรียกใช้ Key ได้ถูกต้อง (DB)
                 const normalizedCampuses: Campus[] = camData.map((c: any) => ({
-                    campusID: c.campusID || c.campus_id,
-                    campusName: c.campusName || c.campus_name,
-                    campusCode: c.campusCode || c.campus_code
+                    campus_id: c.campus_id || c.campusID,         
+                    campus_name: c.campus_name || c.campusName,   
+                    campus_code: c.campus_code || c.campusCode    
                 }));
                 
                 setCampuses(normalizedCampuses);
+                console.log("Campuses loaded from Database:", normalizedCampuses);
             } else {
-                throw new Error("Empty API data");
+                console.warn("No campuses found in Database.");
+                setCampuses([]); 
             }
         } catch (err) {
-            console.warn("⚠️ Campus API error/empty, using Mockup data.");
-            setCampuses(MOCK_CAMPUSES);
+            console.error("Error fetching campuses from API:", err);
+            setCampuses([]);
+            Swal.fire({
+                icon: 'error',
+                title: 'ไม่สามารถโหลดข้อมูล',
+                text: 'ไม่สามารถดึงข้อมูลวิทยาเขตจากฐานข้อมูลได้'
+            });
         }
 
         setIsPageLoaded(true);
@@ -159,6 +157,7 @@ export default function FirstLoginPage() {
     initData();
   }, [router]);
 
+  // Fetch Departments when Faculty changes (DB)
   useEffect(() => {
     const fetchDepartments = async () => {
       if (!formData.faculty_id) {
@@ -242,10 +241,11 @@ export default function FirstLoginPage() {
     if (!formData.campus_id) return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณาเลือกวิทยาเขต' });
     if (!formData.faculty_id || !formData.department_id) return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณาเลือกคณะและสาขาวิชา' });
 
-    // Validation รูปภาพ (บังคับเฉพาะ Manual Login ที่ไม่มีรูป)
+    // Logic ตรวจสอบรูปภาพ
     const isGoogleLogin = formData.provider === "google";
     const hasImage = !!selectedFile || (!!formData.image_url && formData.image_url !== "");
 
+    // ถ้าไม่ใช่ Google และไม่มีรูป -> บังคับ
     if (!isGoogleLogin && !hasImage) {
         return Swal.fire({ icon: 'warning', title: 'กรุณาอัปโหลดรูปภาพ', text: 'สำหรับผู้ใช้งานทั่วไป จำเป็นต้องอัปโหลดรูปภาพโปรไฟล์' });
     }
@@ -262,29 +262,22 @@ export default function FirstLoginPage() {
         payload.append("faculty_id", formData.faculty_id);
         payload.append("department_id", formData.department_id);
         
-        // --- Logic จัดการไฟล์รูป (จุดสำคัญ) ---
+        // --- Logic ส่งรูปภาพ ---
         if (selectedFile) {
-            // กรณี 1: User เลือกไฟล์ใหม่มา -> ส่งไฟล์นั้นไปเลย
+            // กรณี 1: เลือกรูปใหม่ -> ส่งรูปนั้น
             payload.append("profile_image", selectedFile);
         } else if (isGoogleLogin && formData.image_url) {
-            // กรณี 2: เป็น Google User และไม่ได้เลือกรูปใหม่ -> แปลง URL รูปเดิมเป็น File ส่งไป
+            // กรณี 2: Google และไม่ได้เปลี่ยนรูป -> แปลง URL รูปเดิมเป็นไฟล์แล้วส่ง (เพื่อไม่ให้ Backend 400)
             try {
-                // ดึงรูปจาก URL แปลงเป็น File Object (ชื่อ google-profile.jpg)
                 const googleFile = await urlToFile(formData.image_url, "google-profile.jpg", "image/jpeg");
                 payload.append("profile_image", googleFile);
-                console.log("✅ Converted Google URL to File:", googleFile);
             } catch (err) {
-                console.warn("❌ Failed to convert Google image URL to file:", err);
-                // ถ้าแปลงไม่ได้จริงๆ (เช่นติด CORS) อาจต้องปล่อยไปแล้วยอมให้ Backend ด่ากลับมา
-                // หรืออาจจะ Mock ไฟล์เปล่าไปถ้าจำเป็น
+                console.warn("Cannot convert google image to file, skipping upload");
             }
         }
 
-        // ยิง Request
         await axios.put(`${API_BASE_URL}/auth/first-login`, payload, {
-             headers: { 
-                 Authorization: `Bearer ${token}`
-             }
+             headers: { Authorization: `Bearer ${token}` }
         });
         
         await Swal.fire({
@@ -298,10 +291,10 @@ export default function FirstLoginPage() {
         window.location.href = "/student/main/student-nomination-form"; 
 
     } catch (error: any) {
-        console.error("Submit Error:", error);
+        console.error("การส่งข้อมูลผิดพลาด:", error);
         const errorMsg = error.response?.data?.message || error.response?.data?.error || "เกิดข้อผิดพลาด";
-        if (errorMsg.includes("phone")) Swal.fire({ icon: 'error', title: 'ข้อมูลซ้ำ', text: 'เบอร์โทรศัพท์นี้มีผู้ใช้งานแล้ว' });
-        else if (errorMsg.includes("student number")) Swal.fire({ icon: 'error', title: 'ข้อมูลซ้ำ', text: 'รหัสนิสิตนี้มีอยู่ในระบบแล้ว' });
+        if (errorMsg.includes("เบอร์โทร")) Swal.fire({ icon: 'error', title: 'ข้อมูลซ้ำ', text: 'เบอร์โทรศัพท์นี้มีผู้ใช้งานแล้ว' });
+        else if (errorMsg.includes("รหัสนิสิต")) Swal.fire({ icon: 'error', title: 'ข้อมูลซ้ำ', text: 'รหัสนิสิตนี้มีอยู่ในระบบแล้ว' });
         else Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: errorMsg });
     } finally {
         setLoading(false);
@@ -309,7 +302,7 @@ export default function FirstLoginPage() {
   };
 
   // ==========================================
-  // 4. Render (เหมือนเดิม)
+  // 4. Render
   // ==========================================
 
   if (!isPageLoaded) return (
@@ -410,9 +403,10 @@ export default function FirstLoginPage() {
                     <label className="block text-xs font-bold text-gray-700 mb-1.5">วิทยาเขต <span className="text-red-500">*</span></label>
                     <select name="campus_id" value={formData.campus_id} onChange={handleChange} className="w-full bg-white border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none cursor-pointer">
                         <option value="" className="text-gray-400">-- เลือกวิทยาเขต --</option>
+                        {/* ใช้ตัวแปรที่ normalize มาแล้ว (snake_case from DB) */}
                         {campuses.map((c, index) => (
-                            <option key={`${c.campusID}-${index}`} value={c.campusID} className="text-gray-900">
-                                {c.campusName} {c.campusCode ? `(${c.campusCode})` : ''}
+                            <option key={`${c.campus_id}-${index}`} value={c.campus_id} className="text-gray-900">
+                                {c.campus_name} {c.campus_code ? `(${c.campus_code})` : ''}
                             </option>
                         ))}
                     </select>
