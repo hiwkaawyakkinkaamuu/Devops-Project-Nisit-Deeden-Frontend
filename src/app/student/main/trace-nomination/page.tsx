@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import axios from "axios";
+import Swal from "sweetalert2";
 
 // ==========================================
 // 0. Configuration
@@ -11,309 +12,373 @@ import axios from "axios";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 // ==========================================
-// 1. Interfaces
+// 1. Interfaces & Types
 // ==========================================
 
-interface AttachedFile {
-  file_id: number;
-  file_name: string;
-  file_size: number;
-  file_url: string;
-}
-
-interface NominationTracking {
+interface NominationHistory {
   form_id: number;
-  award_type_id: number; 
+  academic_year: number;
+  semester: number;
+  award_type_id: number;
   award_type_name: string;
-  status_code: 1 | 2 | 3; // 1=Progress, 2=Approved, 3=Rejected
-  status_label: string;
-  student_firstname: string;
-  student_lastname: string;
-  student_number: string;
-  faculty_id?: number;
-  faculty_name: string;
+  nomination_status: string;
+  status_code: 2 | 3 | 4; 
   created_at: string;
-  current_step: number; // 1-8
-  files: AttachedFile[];
+  completed_date: string;
   reject_reason?: string;
-  approver_name?: string;
 }
 
+// Color Variant Configuration for Tailwind
+const colorVariants: any = {
+  orange: {
+    base: "hover:border-orange-200 hover:shadow-orange-100",
+    dateBox: "bg-orange-50 border-orange-100 group-hover:bg-orange-600 group-hover:border-orange-600",
+    dateText: "text-orange-400 group-hover:text-orange-200",
+    dateNum: "text-orange-700 group-hover:text-white",
+    title: "group-hover:text-orange-600",
+    chevron: "group-hover:bg-orange-600 group-hover:text-white",
+    badge: "bg-orange-50 text-orange-700 border-orange-200"
+  },
+  purple: {
+    base: "hover:border-purple-200 hover:shadow-purple-100",
+    dateBox: "bg-purple-50 border-purple-100 group-hover:bg-purple-600 group-hover:border-purple-600",
+    dateText: "text-purple-400 group-hover:text-purple-200",
+    dateNum: "text-purple-700 group-hover:text-white",
+    title: "group-hover:text-purple-600",
+    chevron: "group-hover:bg-purple-600 group-hover:text-white",
+    badge: "bg-purple-50 text-purple-700 border-purple-200"
+  },
+  blue: {
+    base: "hover:border-blue-200 hover:shadow-blue-100",
+    dateBox: "bg-blue-50 border-blue-100 group-hover:bg-blue-600 group-hover:border-blue-600",
+    dateText: "text-blue-400 group-hover:text-blue-200",
+    dateNum: "text-blue-700 group-hover:text-white",
+    title: "group-hover:text-blue-600",
+    chevron: "group-hover:bg-blue-600 group-hover:text-white",
+    badge: "bg-blue-50 text-blue-700 border-blue-200"
+  },
+  green: {
+    base: "hover:border-green-200 hover:shadow-green-100",
+    dateBox: "bg-green-50 border-green-100 group-hover:bg-green-600 group-hover:border-green-600",
+    dateText: "text-green-400 group-hover:text-green-200",
+    dateNum: "text-green-700 group-hover:text-white",
+    title: "group-hover:text-green-600",
+    chevron: "group-hover:bg-green-600 group-hover:text-white",
+    badge: "bg-green-50 text-green-700 border-green-200"
+  },
+  gray: {
+    base: "hover:border-gray-200 hover:shadow-gray-100",
+    dateBox: "bg-gray-50 border-gray-100 group-hover:bg-gray-600 group-hover:border-gray-600",
+    dateText: "text-gray-400 group-hover:text-gray-200",
+    dateNum: "text-gray-700 group-hover:text-white",
+    title: "group-hover:text-gray-600",
+    chevron: "group-hover:bg-gray-600 group-hover:text-white",
+    badge: "bg-gray-50 text-gray-700 border-gray-200"
+  }
+};
+
 // ==========================================
-// 2. Service Layer & Mapper
+// 2. Icons Components (SVG)
 // ==========================================
 
-// แปลง ID สถานะ (1-15) ให้เป็น Step ของ Timeline (1-8) และข้อความให้ตรงกับตาราง Database
-const getStatusInfo = (id: number): { step: number, code: 1 | 2 | 3, label: string } => {
-    const mapping: Record<number, { step: number, code: 1 | 2 | 3, label: string }> = {
-        1: { step: 2, code: 1, label: "รอหัวหน้าภาคพิจารณา" },
-        2: { step: 3, code: 1, label: "รอรองคณบดีพิจารณา" },
-        3: { step: 2, code: 3, label: "ไม่ผ่าน (ตีกลับโดยหัวหน้าภาค)" },
-        4: { step: 4, code: 1, label: "รอคณบดีพิจารณา" },
-        5: { step: 3, code: 3, label: "ไม่ผ่าน (ตีกลับโดยรองคณบดี)" },
-        6: { step: 5, code: 1, label: "รอกองพัฒนานิสิตพิจารณา" },
-        7: { step: 4, code: 3, label: "ไม่ผ่าน (ตีกลับโดยคณบดี)" },
-        8: { step: 6, code: 1, label: "รอคณะกรรมการพิจารณา" },
-        9: { step: 5, code: 3, label: "ไม่ผ่าน (ตีกลับโดยกองพัฒนานิสิต)" },
-        10: { step: 7, code: 1, label: "รอประธานกรรมการพิจารณา" },
-        11: { step: 6, code: 3, label: "ไม่ผ่าน (ตีกลับโดยคณะกรรมการ)" },
-        12: { step: 8, code: 1, label: "รออธิการบดีพิจารณา" },
-        13: { step: 7, code: 3, label: "ไม่ผ่าน (ตีกลับโดยประธานกรรมการ)" },
-        14: { step: 8, code: 2, label: "ผ่านการคัดเลือก (อนุมัติแล้ว)" },
-        15: { step: 8, code: 3, label: "ไม่ผ่าน (ตีกลับโดยอธิการบดี)" },
-    };
-    return mapping[id] || { step: 1, code: 1, label: "ส่งเสนอชื่อเรียบร้อย" };
+const Icons = {
+  Document: () => (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+  ),
+  CheckCircle: () => (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+  ),
+  XCircle: () => (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+  ),
+  Calendar: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+  ),
+  Flag: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21v-8a2 2 0 01-2-8h6l2 2 6 0a2 2 0 002 2v8a2 2 0 00-2 2h-2l-2-2H5a2 2 0 01-2-2z" /></svg>
+  ),
+  ChevronRight: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+  ),
+  EmptyBox: () => (
+    <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
+  ),
+  Alert: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+  )
 };
 
-// ฟังก์ชันหา ID จากชื่อ หาก Backend ไม่ได้ส่ง ID กลับมา
-const getAwardTypeId = (name: string) => {
-    if (!name) return 0;
-    if (name.includes("กิจกรรม")) return 1;
-    if (name.includes("นวัตกรรม")) return 2;
-    if (name.includes("ประพฤติ")) return 3;
-    if (name.includes("อื่นๆ") || name.includes("อื่น ๆ")) return 4;
-    return 0;
+// ==========================================
+// 3. Service Layer (Axios)
+// ==========================================
+
+const isZeroDate = (dateStr: string) => {
+    return !dateStr || dateStr.startsWith("0001") || dateStr.includes("0001-01-01");
 };
 
-const mapBackendToFrontend = (backendData: any): NominationTracking => {
-    // API ส่งกลับมาเป็น form_status ไม่ใช่ form_status_id
-    const statusId = backendData.form_status || backendData.form_status_id || 1;
-    const statusInfo = getStatusInfo(statusId);
-
-    // API ส่งกลับมาเป็น award_type ไม่ใช่ award_type_name
-    const awardName = backendData.award_type || backendData.award_type_name || "ไม่ระบุประเภท";
-    const awardId = backendData.award_type_id || getAwardTypeId(awardName);
-
-    return {
-        form_id: backendData.form_id, 
-        award_type_id: awardId,
-        award_type_name: awardName,
-        status_code: statusInfo.code,
-        status_label: statusInfo.label,
-        student_firstname: backendData.student_firstname || "-",
-        student_lastname: backendData.student_lastname || "-",
-        student_number: backendData.student_number || "-",
-        faculty_id: backendData.faculty_id,
-        faculty_name: backendData.faculty_name || "", // รอ fetch เพิ่มถ้าไม่มี
-        created_at: backendData.created_at,
-        current_step: statusInfo.step,
-        files: backendData.files ? backendData.files.map((f: any) => ({
-            file_id: f.file_dir_id, 
-            file_name: f.file_name || "Document.pdf", 
-            file_size: f.file_size || 0,
-            file_url: `${API_BASE_URL}/${f.file_path}`
-        })) : [],
-        reject_reason: backendData.reject_reason || "",
-        approver_name: "ระบบพิจารณา", 
-    };
-};
-
-const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return "0 Bytes";
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-};
-
-const nominationTrackingService = {
-  getLatestNomination: async (token: string | null): Promise<NominationTracking | null> => {
+const nominationHistoryService = {
+  getHistory: async (token: string | null): Promise<NominationHistory[]> => {
       try {
-        const response = await axios.get(`${API_BASE_URL}/awards/my/submissions`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        
-        const submissions = response.data.data;
-        if (Array.isArray(submissions) && submissions.length > 0) {
-            // เอาอันล่างสุด (หรือล่าสุด) ของอาร์เรย์มาโชว์ที่หน้าติดตาม
-            const latestSub = submissions.reduce((prev, current) => 
-                (new Date(prev.created_at) > new Date(current.created_at)) ? prev : current
+        // [แก้ไขจุด 1] ปรับ Path API ให้ตรงกับ router.go 
+        // formstatus => /api/form-status
+        // awardTypeGroup => /api/award-types
+        const [statusRes, typesRes, submissionsRes] = await Promise.all([
+            axios.get(`${API_BASE_URL}/form-statuses/`, { headers: { Authorization: `Bearer ${token}` } }),
+            axios.get(`${API_BASE_URL}/awards/`, { headers: { Authorization: `Bearer ${token}` } }),
+            axios.get(`${API_BASE_URL}/awards/my/submissions`, { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+
+        const statuses = statusRes.data?.data || statusRes.data || [];
+        const awardTypes = typesRes.data?.data || typesRes.data || [];
+        const rawData = submissionsRes.data?.data;
+
+        if (!Array.isArray(rawData)) return [];
+
+        // 2. จับคู่ข้อมูล
+        return rawData.map((item: any) => {
+            const hasRejectReason = !!item.reject_reason;
+            // สถานะที่ 14 คือ อนุมัติสำเร็จ (หรือ 8 ขึ้นอยู่กับเวอร์ชัน Database)
+            const isApproved = item.form_status_id === 14 || item.form_status === 14 || item.form_status_id === 8; 
+            
+            let statusCode: 2 | 3 | 4 = 4; // 4 = Progress
+            if (isApproved) {
+                statusCode = 2; // เขียว
+            } else if (hasRejectReason || [3,5,7,9,11,13,15].includes(item.form_status_id || item.form_status)) {
+                statusCode = 3; // แดง
+            }
+
+            // หาชื่อสถานะจาก API
+            const foundStatus = statuses.find((s: any) => 
+                String(s.form_status_id || s.FormStatusID || s.id) === String(item.form_status_id || item.form_status)
             );
-            return mapBackendToFrontend(latestSub); 
-        }
-        return null; 
+            const statusLabel = foundStatus ? (foundStatus.form_status_name || foundStatus.FormStatusName || foundStatus.name) : "อยู่ระหว่างพิจารณา";
+
+            // หาชื่อประเภทรางวัลจาก API
+            const foundType = awardTypes.find((t: any) => 
+                String(t.award_type_id || t.AwardTypeID || t.id) === String(item.award_type_id || item.award_type)
+            );
+            
+            // ใช้ชื่อจาก API เป็นหลัก ถ้าไม่มีค่อยดึงจากตัวเดิมที่เคยแนบมา
+            let typeLabel = "ไม่ระบุประเภท";
+            if (foundType) {
+                typeLabel = foundType.award_name || foundType.AwardName || foundType.name;
+            } else if (typeof item.award_type === 'string' && item.award_type !== "") {
+                typeLabel = item.award_type;
+            } else if (item.award_type_name) {
+                typeLabel = item.award_type_name;
+            }
+
+            let completedDate = item.latest_update;
+            if (isZeroDate(completedDate)) {
+                completedDate = item.created_at;
+            }
+
+            return {
+                form_id: item.form_id, 
+                academic_year: item.academic_year || 0,
+                semester: item.semester || 0,
+                award_type_id: item.award_type_id || item.award_type || 0,
+                award_type_name: typeLabel,
+                nomination_status: statusLabel,
+                status_code: statusCode, 
+                created_at: item.created_at,
+                completed_date: completedDate, 
+                reject_reason: item.reject_reason || "",
+            };
+        });
+
       } catch (error: any) {
-        if (error.response?.status === 404) return null;
-        if (error.response?.status === 401) throw new Error("Unauthorized");
+        if (error.response?.status === 404) return []; 
         console.error("API Error:", error);
-        throw error;
+        return [];
       }
   },
 };
 
 // ==========================================
-// 3. Helper Constants & Functions
+// 4. Helper Constants & Functions
 // ==========================================
 
-const STEPS = [
-  "ส่งเสนอ", "ภาควิชา", "รองคณบดี", "คณบดี", 
-  "กองพัฒนานิสิต", "คณะกรรมการ", "ประธาน", "อธิการบดี"
-];
-
 const formatDate = (isoDate: string) => {
-  if (!isoDate || isoDate.startsWith("0001")) return "-";
+  if (!isoDate) return "-";
   const date = new Date(isoDate);
   return date.toLocaleDateString("th-TH", {
-    year: "numeric", month: "short", day: "numeric",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   });
 };
 
-// ==========================================
-// 4. Sub-Components (UI)
-// ==========================================
-
-// Timeline Component with Theme Color Support
-const Timeline = ({ currentStep, statusCode, themeColor }: { currentStep: number; statusCode: number; themeColor: string }) => {
-  return (
-    <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
-      <div className="relative min-w-[800px] flex items-center justify-between px-4 mt-6 mb-8">
-        {/* Background Line */}
-        <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-200 -z-10 rounded-full transform -translate-y-1/2"></div>
-        
-        {/* Progress Line (Dynamic Color) */}
-        <div
-          className={`absolute top-1/2 left-0 h-1 z-0 rounded-full transform -translate-y-1/2 transition-all duration-1000 ease-out bg-${statusCode === 3 ? "red-400" : `${themeColor}-500`}`}
-          style={{ width: `${((currentStep - 1) / (STEPS.length - 1)) * 100}%` }}
-        ></div>
-
-        {STEPS.map((label, index) => {
-          const stepNum = index + 1;
-          const isPast = stepNum < currentStep;
-          const isCurrent = stepNum === currentStep;
-
-          let circleClass = "bg-white border-2 border-gray-300 text-gray-400"; 
-          let iconOrNum: React.ReactNode = stepNum;
-
-          if (statusCode === 2) { // Approved (All Green/Theme)
-            circleClass = `bg-${themeColor}-500 border-${themeColor}-500 text-white`;
-            iconOrNum = <CheckIcon />;
-          } else if (statusCode === 3 && isCurrent) { // Rejected
-            circleClass = "bg-red-500 border-red-500 text-white shadow-lg shadow-red-200 scale-110";
-            iconOrNum = <XIcon />;
-          } else if (isPast) { // Passed Steps
-            circleClass = `bg-${themeColor}-500 border-${themeColor}-500 text-white`;
-            iconOrNum = <CheckIcon />;
-          } else if (isCurrent) { // Active Step
-            circleClass = `bg-white border-[3px] border-${themeColor}-500 text-${themeColor}-500 ring-4 ring-${themeColor}-100 animate-pulse`;
-          }
-
-          return (
-            <div key={stepNum} className="relative z-10 flex flex-col items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-500 ${circleClass}`}>
-                {iconOrNum}
-              </div>
-              <span
-                className={`absolute top-12 text-xs font-semibold whitespace-nowrap px-2 py-1 rounded-md transition-colors duration-300 ${
-                  isCurrent && statusCode === 3 ? "text-red-600 bg-red-50"
-                  : isCurrent ? `text-${themeColor}-600 bg-${themeColor}-50`
-                  : statusCode === 2 ? `text-${themeColor}-600`
-                  : isPast ? `text-${themeColor}-600`
-                  : "text-gray-400"
-                }`}
-              >
-                {label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
-const CheckIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-);
-const XIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
-);
-
-const LoadingSkeleton = () => (
-  <div className="w-full max-w-6xl mx-auto p-8 bg-white rounded-[24px] shadow-sm border border-gray-100 animate-pulse mt-10">
-    <div className="flex justify-between mb-8">
-      <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-      <div className="h-8 bg-gray-200 rounded w-32"></div>
-    </div>
-    <div className="h-4 bg-gray-200 rounded w-1/2 mb-12"></div>
-    <div className="h-20 bg-gray-200 rounded-xl mb-8"></div>
-    <div className="grid grid-cols-2 gap-4">
-      <div className="h-32 bg-gray-200 rounded-xl"></div>
-      <div className="h-32 bg-gray-200 rounded-xl"></div>
-    </div>
-  </div>
-);
-
-// ==========================================
-// 5. Main Component
-// ==========================================
-
-export default function TraceNominationPage() {
-  const [loading, setLoading] = useState(true);
-  const [nomination, setNomination] = useState<NominationTracking | null>(null);
-
-  // --- Theme Logic ---
-  const themeColor = useMemo(() => {
-    if (!nomination) return 'blue'; 
-    const id = nomination.award_type_id;
-    const name = nomination.award_type_name || "";
+// ฟังก์ชันหาธีมสีตามประเภทรางวัล
+const getThemeColor = (item: NominationHistory): string => {
+    const id = Number(item.award_type_id);
+    const name = item.award_type_name || "";
     
     if (id === 1 || name.includes("กิจกรรม")) return 'orange';
     if (id === 2 || name.includes("นวัตกรรม")) return 'purple';
     if (id === 3 || name.includes("ประพฤติ")) return 'blue';
-    if (id === 4 || name.includes("อื่นๆ")) return 'green';
+    if (id === 4 || name.includes("อื่นๆ") || name.includes("อื่น ๆ")) return 'green';
     
     return 'gray'; 
-  }, [nomination]);
+};
+
+// ==========================================
+// 5. Sub-Components
+// ==========================================
+
+const StatCard = ({ title, count, colorClass, icon }: any) => (
+  <div className={`p-6 rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 group`}>
+    <div className="flex justify-between items-start">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wider text-gray-400 group-hover:text-blue-500 transition-colors">
+          {title}
+        </p>
+        <p className={`text-4xl font-black mt-2 ${colorClass}`}>{count}</p>
+      </div>
+      <div className={`w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center group-hover:scale-110 transition-transform ${colorClass}`}>
+        {icon}
+      </div>
+    </div>
+  </div>
+);
+
+const HistorySkeleton = () => (
+  <div className="space-y-4">
+    {[1, 2, 3].map((i) => (
+      <div key={i} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm animate-pulse flex justify-between items-center">
+        <div className="flex gap-4 items-center w-full">
+          <div className="h-16 w-16 bg-gray-200 rounded-xl"></div>
+          <div className="space-y-3 flex-1">
+            <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+          </div>
+          <div className="h-10 bg-gray-200 rounded w-24"></div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+// ==========================================
+// 6. Main Component
+// ==========================================
+
+export default function StudentHistoryPage() {
+  const [loading, setLoading] = useState(true);
+  const [historyList, setHistoryList] = useState<NominationHistory[]>([]);
+  const [filterYear, setFilterYear] = useState<string>("");
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
         const token = localStorage.getItem("token"); 
-        if (!token) {
-            setLoading(false);
-            return;
-        }
+        if(!token) return;
 
-        const data = await nominationTrackingService.getLatestNomination(token);
+        const data = await nominationHistoryService.getHistory(token);
+        data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         
-        // ถ้า Backend ไม่ส่งชื่อคณะมาให้ เราดึงเองเลย
-        if (data && data.faculty_id && !data.faculty_name) {
-             try {
-                 const res = await axios.get(`${API_BASE_URL}/faculty`, { headers: { Authorization: `Bearer ${token}` } });
-                 const facList = res.data?.data || res.data || [];
-                 const found = facList.find((f: any) => String(f.faculty_id || f.FacultyID) === String(data.faculty_id));
-                 if (found) data.faculty_name = found.faculty_name || found.FacultyName;
-             } catch (e) {}
-        }
-
-        setNomination(data);
-
-      } catch (error: any) {
-        if (error.message === "Unauthorized") {
-             localStorage.removeItem("token");
-             window.location.href = "/";
-             return;
-        }
-        console.error("Fetch error:", error);
+        setHistoryList(data);
+      } catch (error) {
+        Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาด", text: "ไม่สามารถดึงข้อมูลประวัติได้" });
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, []);
 
-  const handleDownload = (file: AttachedFile) => {
-    let safePath = file.file_url;
-    if (safePath.includes("api/uploads")) safePath = safePath.replace("api/uploads", "uploads");
-    window.open(safePath, "_blank");
+  const filteredList = useMemo(() => {
+    if (!filterYear) return historyList;
+    return historyList.filter((item) => item.academic_year.toString() === filterYear);
+  }, [historyList, filterYear]);
+
+  const stats = useMemo(() => {
+    return {
+      total: historyList.length,
+      approved: historyList.filter((i) => i.status_code === 2).length,
+      rejected: historyList.filter((i) => i.status_code === 3).length,
+    };
+  }, [historyList]);
+
+  const availableYears = Array.from(new Set(historyList.map((i) => i.academic_year))).sort((a, b) => b - a);
+
+  // --- Handlers ---
+  const handleViewDetail = (item: NominationHistory) => {
+    const theme = getThemeColor(item);
+    const themeClasses = colorVariants[theme] || colorVariants.gray;
+    
+    // Icons for Swal (HTML String)
+    const iconSuccess = `<svg class="w-16 h-16 text-green-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+    const iconFail = `<svg class="w-16 h-16 text-red-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+    const iconInfo = `<svg class="w-16 h-16 text-blue-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+    const iconAlert = `<svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>`;
+
+    let mainIcon = iconInfo;
+    let badgeClass = "bg-gray-50 text-gray-600 border-gray-200";
+
+    if (item.status_code === 2) {
+         mainIcon = iconSuccess;
+         badgeClass = themeClasses.badge; 
+    } else if (item.status_code === 3) {
+         mainIcon = iconFail;
+         badgeClass = "bg-red-50 text-red-700 border-red-200";
+    } else {
+         badgeClass = themeClasses.badge; 
+    }
+
+    Swal.fire({
+      html: `
+            <div class="text-left font-sans">
+                <div class="text-center mb-6">
+                    ${mainIcon}
+                    <h3 class="text-xl font-bold text-gray-800 mt-4 leading-tight">${item.award_type_name}</h3>
+                    <p class="text-sm text-gray-500 mt-1">REF: #${item.form_id}</p>
+                </div>
+                
+                <div class="bg-gray-50 p-6 rounded-2xl border border-gray-100 text-sm space-y-4">
+                    <div class="flex justify-between items-center border-b border-gray-200 pb-3">
+                        <span class="text-gray-500">ปีการศึกษา</span>
+                        <span class="font-bold text-gray-800 text-base">${item.academic_year} <span class="text-gray-400 text-xs font-normal">/ เทอม ${item.semester}</span></span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-500">วันที่เสนอ</span>
+                        <span class="font-medium text-gray-800">${formatDate(item.created_at)}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-500">อัปเดตล่าสุด</span>
+                        <span class="font-medium text-gray-800">${formatDate(item.completed_date)}</span>
+                    </div>
+                    
+                    <div class="flex justify-between items-center pt-2">
+                        <span class="text-gray-500">สถานะ</span>
+                        <span class="px-3 py-1 rounded-lg text-xs font-bold ${badgeClass} border">
+                            ${item.nomination_status}
+                        </span>
+                    </div>
+
+                    ${item.reject_reason ? `
+                    <div class="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl">
+                        <span class="text-xs font-bold text-red-600 block mb-1">
+                            ${iconAlert} เหตุผลที่ไม่ผ่าน
+                        </span>
+                        <span class="text-red-800 text-xs leading-relaxed">${item.reject_reason}</span>
+                    </div>` : ""}
+                </div>
+            </div>
+          `,
+      showConfirmButton: false,
+      showCloseButton: true,
+      customClass: {
+        popup: "animated-popup rounded-[24px] p-0 overflow-hidden",
+        htmlContainer: "m-0 p-6",
+        closeButton: "focus:outline-none"
+      },
+    });
   };
 
-  if (loading) return <LoadingSkeleton />;
-
-  // ปรับการแสดงผลหน้า Empty ให้โครงสร้างเหมือน Nomination History เป๊ะๆ
-  if (!nomination) {
+  // --- Show Empty State (Redirect Card) when no history ---
+  if (!loading && historyList.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 font-sans">
         <div className="bg-white p-10 rounded-[32px] shadow-xl text-center max-w-lg w-full border border-gray-100 animate-fade-in-up">
@@ -334,118 +399,137 @@ export default function TraceNominationPage() {
     );
   }
 
-  const isRejected = nomination.status_code === 3;
-  const isApproved = nomination.status_code === 2;
-
   return (
-    <div className={`min-h-screen bg-gray-50/50 p-6 md:p-10 font-sans pb-32`}>
-      <style jsx global>{`
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in-up { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .custom-scrollbar::-webkit-scrollbar { height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f3f4f6; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
-      `}</style>
-
-      <div className="max-w-[1400px] mx-auto space-y-8 animate-fade-in-up">
+    <div className="min-h-screen bg-gray-50/50 p-6 md:p-10 font-sans pb-24">
+      <div className="max-w-[1200px] mx-auto space-y-8 animate-fade-in-up">
         
-        {/* Header / Info Card */}
-        <div className={`bg-white/90 backdrop-blur-xl rounded-[32px] p-8 md:p-10 shadow-sm border border-${themeColor}-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden`}>
-           {/* Decorative Top Line */}
-           <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-${themeColor}-400 to-${themeColor}-600`}></div>
-           
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-2 py-1 rounded border border-gray-200">
-                REF ID: {nomination.form_id}
-              </span>
-              <span className="text-sm text-gray-400 font-medium">ส่งเมื่อ {formatDate(nomination.created_at)}</span>
-            </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 leading-tight">
-              {nomination.award_type_name}
-            </h1>
-            <p className="text-gray-500 mt-1">
-              {nomination.faculty_name} • {nomination.student_firstname} {nomination.student_lastname}
-            </p>
-          </div>
-
-          {/* Status Badge */}
-          <div className={`px-6 py-4 rounded-2xl border flex items-center gap-3 shadow-sm min-w-[200px] justify-center ${
-              isRejected ? "bg-red-50 border-red-100 text-red-700"
-              : isApproved ? `bg-${themeColor}-50 border-${themeColor}-100 text-${themeColor}-700`
-              : `bg-${themeColor}-50 border-${themeColor}-100 text-${themeColor}-700`
-            }`}
-          >
-            {isRejected ? (
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            ) : isApproved ? (
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            ) : (
-              <div className="relative flex h-6 w-6">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full bg-${themeColor}-400 opacity-75`}></span>
-                <span className={`relative inline-flex rounded-full h-6 w-6 bg-${themeColor}-500`}></span>
-              </div>
-            )}
+        {/* 1. Header & Stats */}
+        <div>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
             <div>
-              <p className="text-[10px] uppercase font-bold opacity-70 tracking-wider">สถานะปัจจุบัน</p>
-              <p className="text-lg font-bold">{nomination.status_label}</p>
+              <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-gray-700 to-gray-900 tracking-tight">
+                ประวัติคำร้อง
+              </h1>
+              <p className="text-gray-500 mt-2 font-medium">รายการเสนอชื่อย้อนหลังทั้งหมดของคุณ</p>
             </div>
-          </div>
-        </div>
 
-        {/* Rejection Reason */}
-        {isRejected && nomination.reject_reason && (
-          <div className="bg-red-50 rounded-[24px] p-6 md:p-8 border border-red-100 flex items-start gap-4 animate-fade-in-up shadow-sm">
-            <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center shrink-0">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-red-800 mb-1">คำขอของคุณไม่ผ่านการพิจารณา / ถูกตีกลับ</h3>
-              <p className="text-red-700 font-medium leading-relaxed">
-                <span className="font-bold">เหตุผล:</span> "{nomination.reject_reason}"
-              </p>
-              {nomination.approver_name && <p className="text-red-500 text-sm mt-2">โดย: {nomination.approver_name}</p>}
-              <p className="text-red-400 text-xs mt-3">* กรุณาติดต่อหน่วยงานที่เกี่ยวข้องหากมีข้อสงสัย เนื่องจากระบบไม่อนุญาตให้แก้ไขข้อมูลหลังจากถูกตีกลับ</p>
-            </div>
-          </div>
-        )}
-
-        {/* Timeline (Pass Theme Color) */}
-        <div className={`bg-white rounded-[24px] p-8 md:p-10 shadow-sm border border-${themeColor}-100 overflow-hidden`}>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">เส้นทางการพิจารณา</h3>
-          <p className="text-gray-500 text-sm mb-6">แสดงสถานะล่าสุดของการดำเนินการ</p>
-          <div className="py-4">
-            <Timeline currentStep={nomination.current_step} statusCode={nomination.status_code} themeColor={themeColor} />
-          </div>
-        </div>
-
-        {/* Files */}
-        <div className={`bg-white rounded-[24px] p-8 md:p-10 shadow-sm border border-${themeColor}-100`}>
-          <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
-            ไฟล์แนบ ({nomination.files?.length || 0})
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {nomination.files && nomination.files.length > 0 ? (
-              nomination.files.map((file) => (
-                <div key={file.file_id} onClick={() => handleDownload(file)} className={`group cursor-pointer bg-gray-50 hover:bg-${themeColor}-50 border border-gray-200 hover:border-${themeColor}-200 rounded-2xl p-4 flex items-center gap-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-md`}>
-                  <div className={`w-12 h-12 bg-white rounded-xl flex items-center justify-center text-${themeColor}-500 shadow-sm group-hover:scale-110 transition-transform`}>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-bold text-gray-700 truncate group-hover:text-${themeColor}-700`}>{file.file_name}</p>
-                    <p className="text-xs text-gray-400 mt-1">{formatFileSize(file.file_size)}</p>
-                  </div>
-                  <div className={`text-gray-300 group-hover:text-${themeColor}-500 transition-colors`}>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                  </div>
+            <div className="relative group flex items-center gap-2">
+              <div className="relative">
+                <select
+                    value={filterYear}
+                    onChange={(e) => setFilterYear(e.target.value)}
+                    disabled={availableYears.length === 0}
+                    className="bg-white border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 block p-3 pr-10 shadow-sm outline-none cursor-pointer hover:border-blue-300 transition-all font-medium appearance-none min-w-[160px] disabled:opacity-50"
+                >
+                    <option value="">ทุกปีการศึกษา</option>
+                    {availableYears.map((year) => (
+                    <option key={year} value={year}>
+                        ปีการศึกษา {year}
+                    </option>
+                    ))}
+                </select>
+                <div className="absolute right-3 top-3.5 pointer-events-none text-gray-400">
+                    <Icons.ChevronRight />
                 </div>
-              ))
-            ) : (
-              <p className="text-gray-400 text-sm">ไม่มีไฟล์แนบ</p>
-            )}
+              </div>
+            </div>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <StatCard 
+                title="คำร้องทั้งหมด" 
+                count={stats.total} 
+                colorClass="text-gray-800" 
+                icon={<Icons.Document />} 
+            />
+            <StatCard 
+                title="ผ่านการคัดเลือก" 
+                count={stats.approved} 
+                colorClass="text-green-600" 
+                icon={<Icons.CheckCircle />} 
+            />
+            <StatCard 
+                title="ไม่ผ่านการคัดเลือก" 
+                count={stats.rejected} 
+                colorClass="text-red-600" 
+                icon={<Icons.XCircle />} 
+            />
+          </div>
+        </div>
+
+        {/* 2. History List */}
+        <div className="bg-white/80 backdrop-blur-md rounded-[32px] shadow-lg border border-white/60 p-8 min-h-[400px]">
+          <h2 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+            <span className="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+            รายการย้อนหลัง
+          </h2>
+
+          {loading ? (
+            <HistorySkeleton />
+          ) : (
+            <div className="grid gap-4">
+              {filteredList.map((item, index) => {
+                const theme = getThemeColor(item);
+                const themeClasses = colorVariants[theme] || colorVariants.gray;
+                
+                // Status Badge Color Logic
+                let statusBadgeClass = "bg-gray-50 text-gray-600 border-gray-200";
+                if (item.status_code === 2) statusBadgeClass = themeClasses.badge; 
+                else if (item.status_code === 3) statusBadgeClass = "bg-red-50 text-red-700 border-red-200"; 
+                else statusBadgeClass = themeClasses.badge;
+
+                return (
+                  <div
+                    key={item.form_id || index}
+                    onClick={() => handleViewDetail(item)}
+                    className={`group relative bg-white rounded-2xl border border-gray-100 p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer animate-fade-in-up ${themeClasses.base}`}
+                    style={{ animationDelay: `${index * 100}ms` }}
+                  >
+                    <div className="flex items-start gap-5 w-full">
+                      {/* Date Box with Dynamic Color */}
+                      <div className={`flex flex-col items-center justify-center w-16 h-16 rounded-2xl border shrink-0 transition-colors duration-300 ${themeClasses.dateBox}`}>
+                        <span className={`text-[10px] font-bold uppercase ${themeClasses.dateText}`}>เทอม</span>
+                        <span className={`text-2xl font-black leading-none ${themeClasses.dateNum}`}>{item.semester}</span>
+                        <span className={`text-[10px] font-medium ${themeClasses.dateText}`}>{item.academic_year}</span>
+                      </div>
+
+                      <div className="flex-1">
+                        {/* Title with Dynamic Hover Color */}
+                        <h3 className={`text-lg font-bold text-gray-800 transition-colors line-clamp-1 ${themeClasses.title}`}>
+                          {item.award_type_name}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-gray-500">
+                          <span className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-1 rounded-md text-xs border border-gray-100">
+                            <Icons.Calendar />
+                            เสนอ: {formatDate(item.created_at)}
+                          </span>
+                          <span className="text-gray-300">|</span>
+                          <span className="flex items-center gap-1.5 bg-gray-50 px-2.5 py-1 rounded-md text-xs border border-gray-100">
+                             <Icons.Flag />
+                            อัปเดต: {formatDate(item.completed_date)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end pl-20 md:pl-0">
+                      {/* Status Badge */}
+                      <span className={`px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 ${statusBadgeClass}`}>
+                        {item.status_code === 2 && <span className="w-4 h-4"><Icons.CheckCircle/></span>}
+                        {item.status_code === 3 && <span className="w-4 h-4"><Icons.XCircle/></span>}
+                        {item.status_code === 4 && <span className="w-4 h-4"><Icons.Flag/></span>}
+                        {item.nomination_status}
+                      </span>
+                      {/* Chevron with Dynamic Color */}
+                      <div className={`w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 transition-all transform group-hover:rotate-90 shadow-sm group-hover:shadow-md ${themeClasses.chevron}`}>
+                        <Icons.ChevronRight />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

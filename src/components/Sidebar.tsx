@@ -20,7 +20,8 @@ type UserRole =
   | "chairman_of_student_development_committee" 
   | "student_development_committee" 
   | "student_development" 
-  | "chancellor" // เพิ่มตามรีเควส
+  | "chancellor"
+  | "organization"
   | "admin";
 
 interface Faculty {
@@ -31,6 +32,11 @@ interface Faculty {
 interface Department {
   department_id: number;
   department_name: string;
+}
+
+interface Campus {
+  campus_id: number;
+  campus_name: string;
 }
 
 interface UserProfileData {
@@ -62,7 +68,6 @@ interface SidebarProps {
 // 2. Constants & Helpers
 // ==========================================
 
-// ✅ Mapping ชื่อตำแหน่งภาษาไทย
 const ROLE_NAMES_TH: Record<string, string> = {
   student: "นักศึกษา",
   head_of_department: "หัวหน้าภาควิชา",
@@ -72,6 +77,7 @@ const ROLE_NAMES_TH: Record<string, string> = {
   student_development_committee: "คณะกรรมการ",
   chairman_of_student_development_committee: "ประธานคณะกรรมการ",
   chancellor: "อธิการบดี",
+  organization: "หน่วยงานภายนอก",
   admin: "ผู้ดูแลระบบ"
 };
 
@@ -89,25 +95,15 @@ const getRoleKey = (roleId: number | undefined): UserRole => {
   switch (roleId) {
     case 1: return "student";
     case 2: return "head_of_department";
-    case 3: return "dean";
-    case 4: return "associate_dean";
+    case 3: return "associate_dean";
+    case 4: return "dean";
     case 5: return "student_development";
     case 6: return "student_development_committee";
     case 7: return "chairman_of_student_development_committee";
-    case 8: return "chancellor"; // สมมติ ID 8 เป็นอธิการบดี
+    case 8: return "chancellor";
+    case 9: return "organization";
     default: return "student";
   }
-};
-
-const getCampusName = (campusId: number | undefined) => {
-    switch (campusId) {
-        case 1: return "วิทยาเขตบางเขน";
-        case 2: return "วิทยาเขตกำแพงแสน";
-        case 3: return "วิทยาเขตศรีราชา";
-        case 4: return "วิทยาเขตเฉลิมพระเกียรติ จ.สกลนคร";
-        case 5: return "โครงการจัดตั้งวิทยาเขตสุพรรณบุรี";
-        default: return "ไม่ระบุวิทยาเขต";
-    }
 };
 
 const Icons = {
@@ -159,11 +155,17 @@ const MENU_CONFIG: Record<string, MenuItemType[]> = {
     { href: "/student-development/manage-account", label: "จัดการบัญชีผู้ใช้", icon: Icons.DocumentCheck },
     { href: "/student-development/master-data", label: "จัดการคณะเเละสาขา", icon: Icons.UsersGroup },
     { href: "/student-development/setting", label: "ตั้งค่าช่วงเวลารับสมัคร", icon: Icons.History },
+  ],
+  chancellor: [
+    { href: "/chancellor/dashboard", label: "หน้าหลัก", icon: Icons.Badge },
+  ],
+  organization: [
+    { href: "/organization/dashboard", label: "หน้าหลัก", icon: Icons.Badge },
   ]
 };
 
 // ==========================================
-// 3. Sub-Components (Enhanced Design)
+// 3. Sub-Components
 // ==========================================
 
 function MenuItem({ href, label, icon, active, collapsed, onClick, index }: any) {
@@ -224,17 +226,16 @@ const ProfileSkeleton = ({ isCollapsed }: { isCollapsed: boolean }) => (
   </div>
 );
 
-// ✅ Profile Modal: รับ props faculties และ departments เพิ่ม
-function ProfileModal({ isOpen, onClose, data, faculties, departments }: { isOpen: boolean; onClose: () => void; data: UserProfileData | null; faculties: Faculty[]; departments: Department[] }) {
+function ProfileModal({ isOpen, onClose, data, faculties, departments, campuses }: { isOpen: boolean; onClose: () => void; data: UserProfileData | null; faculties: Faculty[]; departments: Department[]; campuses: Campus[] }) {
   if (!isOpen || !data) return null;
 
-  // ✅ ใช้ชื่อตำแหน่งภาษาไทย
   const roleKey = getRoleKey(data.role_id);
   const roleNameTH = ROLE_NAMES_TH[roleKey] || roleKey;
   
-  const campusName = getCampusName(data.campus_id);
+  // ✅ ดึงชื่อวิทยาเขตจาก API Data
+  const campus = campuses.find(c => c.campus_id === data.campus_id);
+  const campusName = campus ? campus.campus_name : "ไม่ระบุวิทยาเขต";
 
-  // ดึงข้อมูลนิสิต
   const student = data.Student || data.student || data.student_data;
   const studentNumber = student?.student_number;
 
@@ -303,7 +304,7 @@ function ProfileModal({ isOpen, onClose, data, faculties, departments }: { isOpe
                         <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">{data.firstname} {data.lastname}</h2>
                         <div className="flex justify-center gap-2 mt-2">
                             <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full">
-                                {roleNameTH} {/* แสดงชื่อไทย */}
+                                {roleNameTH}
                             </span>
                         </div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">{campusName}</p>
@@ -312,7 +313,7 @@ function ProfileModal({ isOpen, onClose, data, faculties, departments }: { isOpe
                     <div className="space-y-3">
                         <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
                             <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                             </div>
                             <div className="overflow-hidden">
                                 <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wide">อีเมลมหาวิทยาลัย</p>
@@ -376,10 +377,10 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
 
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [campuses, setCampuses] = useState<Campus[]>([]);
+  const [roleNameTH, setRoleNameTH] = useState("");
 
-  // คำนวณ Role และเมนู
   const roleKey = getRoleKey(user?.role_id);
-  const roleNameTH = ROLE_NAMES_TH[roleKey] || roleKey; // ✅ ใช้ชื่อไทย
   const menuItems = MENU_CONFIG[roleKey] || [];
 
   const isActive = (path: string) => {
@@ -398,10 +399,12 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
             const token = localStorage.getItem("token");
             const headers = { Authorization: `Bearer ${token}` };
             
-            const [resMe, resFac, resDept] = await Promise.all([
+            const [resMe, resFac, resDept, resRoles, resCampus] = await Promise.all([
                 api.get("/auth/me", { headers }),
                 api.get("/faculty", { headers }),
-                api.get("/department", { headers })
+                api.get("/department", { headers }),
+                api.get("/roles", { headers }),
+                api.get("/campus", { headers })
             ]);
 
             if(resMe.data && resMe.data.user) {
@@ -409,6 +412,16 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
             }
             if(resFac.data) setFaculties(resFac.data.data || resFac.data);
             if(resDept.data) setDepartments(resDept.data.data || resDept.data);
+            if(resCampus.data) setCampuses(resCampus.data.data || resCampus.data);
+
+            // ✅ ดึงชื่อ Role ภาษาไทยจาก API
+            const rolesList = resRoles.data.data || [];
+            const currentRole = rolesList.find((r: any) => r.role_id === user.role_id);
+            if (currentRole) {
+                setRoleNameTH(currentRole.role_name_th);
+            } else {
+                setRoleNameTH(ROLE_NAMES_TH[getRoleKey(user.role_id)] || "");
+            }
 
         } catch (error) {
             console.error("Failed to fetch data:", error);
@@ -453,6 +466,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
         data={fullProfile} 
         faculties={faculties} 
         departments={departments} 
+        campuses={campuses}
       />
 
       <motion.aside
@@ -461,7 +475,6 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
         transition={{ type: "spring", stiffness: 300, damping: 30, mass: 0.8 }}
         className="bg-white h-screen fixed left-0 top-0 flex flex-col z-50 border-r border-gray-100 shadow-[4px_0_40px_rgba(0,0,0,0.03)] overflow-hidden"
       >
-        {/* Header Section */}
         <div className="h-[90px] flex items-center justify-between px-6 shrink-0 relative bg-gradient-to-b from-white to-gray-50/50">
           <AnimatePresence>
             {!isCollapsed && (
@@ -471,7 +484,6 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
                 exit={{ opacity: 0, x: -10, transition: { duration: 0.1 } }}
                 className="flex items-center gap-3 overflow-hidden whitespace-nowrap"
               >
-                {/* Logo Icon */}
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-200">
                    <svg width="24" height="24" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M20 0L37.3205 10V30L20 40L2.67949 30V10L20 0Z" fill="white" fillOpacity="0.2"/>
@@ -494,7 +506,6 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
           </button>
         </div>
 
-        {/* Navigation Menu */}
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
           {menuItems.map((item, index) => (
             <MenuItem
@@ -505,12 +516,10 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
               active={isActive(item.href)}
               icon={item.icon}
               collapsed={isCollapsed}
-              onClick={item.isAction ? (e: any) => { e.preventDefault(); setIsProfileOpen(true); } : undefined}
             />
           ))}
         </nav>
 
-        {/* User Profile Footer */}
         <div className="p-5 border-t border-gray-100 bg-gray-50/30 z-10 shrink-0">
           <div
             onClick={() => !loading && setIsProfileOpen(true)}
@@ -556,7 +565,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
                       {fullProfile?.firstname} {fullProfile?.lastname}
                     </p>
                     <p className="text-[10px] text-gray-400 truncate font-bold uppercase tracking-wider">
-                      {roleNameTH} {/* ✅ แสดงชื่อไทยใน Sidebar Footer */}
+                      {roleNameTH}
                     </p>
                   </motion.div>
                 )}

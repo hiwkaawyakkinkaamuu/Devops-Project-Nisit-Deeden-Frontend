@@ -116,82 +116,79 @@ const isZeroDate = (dateStr: string) => {
     return !dateStr || dateStr.startsWith("0001") || dateStr.includes("0001-01-01");
 };
 
-// นำ Status Mapping มาใช้งานให้เหมือนหน้า Trace
-const getStatusMapping = (id: number): { code: 2 | 3 | 4, label: string } => {
-    // 2=Approved, 3=Rejected, 4=Progress
-    const mappings: Record<number, { code: 2 | 3 | 4, label: string }> = {
-        1: { code: 4, label: "รอหัวหน้าภาคพิจารณา" },
-        2: { code: 4, label: "รอรองคณบดีพิจารณา" },
-        3: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยหัวหน้าภาค)" },
-        4: { code: 4, label: "รอคณบดีพิจารณา" },
-        5: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยรองคณบดี)" },
-        6: { code: 4, label: "รอกองพัฒนานิสิตพิจารณา" },
-        7: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยคณบดี)" },
-        8: { code: 4, label: "รอคณะกรรมการพิจารณา" },
-        9: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยกองพัฒนานิสิต)" },
-        10: { code: 4, label: "รอประธานกรรมการพิจารณา" },
-        11: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยคณะกรรมการ)" },
-        12: { code: 4, label: "รออธิการบดีพิจารณา" },
-        13: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยประธานกรรมการ)" },
-        14: { code: 2, label: "ผ่านการคัดเลือก (อนุมัติแล้ว)" },
-        15: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยอธิการบดี)" },
-    };
-    return mappings[id] || { code: 4, label: "อยู่ระหว่างดำเนินการ" };
-};
-
-const getAwardTypeId = (name: string) => {
-    if (!name) return 0;
-    if (name.includes("กิจกรรม")) return 1;
-    if (name.includes("นวัตกรรม")) return 2;
-    if (name.includes("ประพฤติ")) return 3;
-    if (name.includes("อื่นๆ") || name.includes("อื่น ๆ")) return 4;
-    return 0;
-};
-
-const mapBackendToHistory = (data: any[]): NominationHistory[] => {
-    return data.map((item: any) => {
-        // อิง ID ให้ตรงกับ Database เหมือนกับหน้า Trace
-        const statusId = item.form_status || item.form_status_id || 1;
-        const statusInfo = getStatusMapping(statusId);
-
-        // รองรับทั้ง DTO แบบ Camel และ Snake
-        const awardName = item.award_type || item.award_type_name || "ไม่ระบุประเภท";
-        const awardId = item.award_type_id || getAwardTypeId(awardName);
-
-        let completedDate = item.latest_update;
-        if (isZeroDate(completedDate)) {
-            completedDate = item.created_at;
-        }
-
-        return {
-            form_id: item.form_id, 
-            academic_year: item.academic_year || 0,
-            semester: item.semester || 0,
-            award_type_id: awardId,
-            award_type_name: awardName,
-            nomination_status: statusInfo.label,
-            status_code: statusInfo.code, 
-            created_at: item.created_at,
-            completed_date: completedDate, 
-            reject_reason: item.reject_reason || "",
-        };
-    });
-};
-
 const nominationHistoryService = {
   getHistory: async (token: string | null): Promise<NominationHistory[]> => {
       try {
-        const response = await axios.get(`/api/awards/my/submissions`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        
-        const rawData = response.data?.data;
+        // [แก้ไขจุด 1] ปรับ Path API ให้ตรงกับ router.go 
+        // formstatus => /api/form-status
+        // awardTypeGroup => /api/award-types
+        const [statusRes, typesRes, submissionsRes] = await Promise.all([
+            axios.get(`${API_BASE_URL}/form-statuses/`, { headers: { Authorization: `Bearer ${token}` } }),
+            axios.get(`${API_BASE_URL}/awards/types`, { headers: { Authorization: `Bearer ${token}` } }),
+            axios.get(`${API_BASE_URL}/awards/my/submissions`, { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+
+        const statuses = statusRes.data?.data || statusRes.data || [];
+        const awardTypes = typesRes.data?.data || typesRes.data || [];
+        const rawData = submissionsRes.data?.data;
+
         if (!Array.isArray(rawData)) return [];
 
-        return mapBackendToHistory(rawData);
+        // 2. จับคู่ข้อมูล
+        return rawData.map((item: any) => {
+            const hasRejectReason = !!item.reject_reason;
+            // สถานะที่ 14 คือ อนุมัติสำเร็จ (หรือ 8 ขึ้นอยู่กับเวอร์ชัน Database)
+            const isApproved = item.form_status_id === 14 || item.form_status === 14 || item.form_status_id === 8; 
+            
+            let statusCode: 2 | 3 | 4 = 4; // 4 = Progress
+            if (isApproved) {
+                statusCode = 2; // เขียว
+            } else if (hasRejectReason || [3,5,7,9,11,13,15].includes(item.form_status_id || item.form_status)) {
+                statusCode = 3; // แดง
+            }
+
+            // หาชื่อสถานะจาก API
+            const foundStatus = statuses.find((s: any) => 
+                String(s.form_status_id || s.FormStatusID || s.id) === String(item.form_status_id || item.form_status)
+            );
+            const statusLabel = foundStatus ? (foundStatus.form_status_name || foundStatus.FormStatusName || foundStatus.name) : "อยู่ระหว่างพิจารณา";
+
+            // หาชื่อประเภทรางวัลจาก API
+            const foundType = awardTypes.find((t: any) => 
+                String(t.award_type_id || t.AwardTypeID || t.id) === String(item.award_type_id || item.award_type)
+            );
+            
+            // ใช้ชื่อจาก API เป็นหลัก ถ้าไม่มีค่อยดึงจากตัวเดิมที่เคยแนบมา
+            let typeLabel = "ไม่ระบุประเภท";
+            if (foundType) {
+                typeLabel = foundType.award_name || foundType.AwardName || foundType.name;
+            } else if (typeof item.award_type === 'string' && item.award_type !== "") {
+                typeLabel = item.award_type;
+            } else if (item.award_type_name) {
+                typeLabel = item.award_type_name;
+            }
+
+            let completedDate = item.latest_update;
+            if (isZeroDate(completedDate)) {
+                completedDate = item.created_at;
+            }
+
+            return {
+                form_id: item.form_id, 
+                academic_year: item.academic_year || 0,
+                semester: item.semester || 0,
+                award_type_id: item.award_type_id || item.award_type || 0,
+                award_type_name: typeLabel,
+                nomination_status: statusLabel,
+                status_code: statusCode, 
+                created_at: item.created_at,
+                completed_date: completedDate, 
+                reject_reason: item.reject_reason || "",
+            };
+        });
 
       } catch (error: any) {
-        if (error.response?.form_status_id === 404) return []; 
+        if (error.response?.status === 404) return []; 
         console.error("API Error:", error);
         return [];
       }
@@ -214,7 +211,7 @@ const formatDate = (isoDate: string) => {
 
 // ฟังก์ชันหาธีมสีตามประเภทรางวัล
 const getThemeColor = (item: NominationHistory): string => {
-    const id = item.award_type_id;
+    const id = Number(item.award_type_id);
     const name = item.award_type_name || "";
     
     if (id === 1 || name.includes("กิจกรรม")) return 'orange';
@@ -322,12 +319,12 @@ export default function StudentHistoryPage() {
 
     if (item.status_code === 2) {
          mainIcon = iconSuccess;
-         badgeClass = themeClasses.badge; // Use theme color for approved
+         badgeClass = themeClasses.badge; 
     } else if (item.status_code === 3) {
          mainIcon = iconFail;
          badgeClass = "bg-red-50 text-red-700 border-red-200";
     } else {
-         badgeClass = themeClasses.badge; // Use theme color for pending too (or gray)
+         badgeClass = themeClasses.badge; 
     }
 
     Swal.fire({

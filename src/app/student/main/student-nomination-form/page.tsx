@@ -10,11 +10,10 @@ import axios from "axios";
 // 0. Configuration & Types
 // ==========================================
 
-const API_BASE_URL = "/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 const MAX_TOTAL_FILE_SIZE_MB = 10;
 
-// Config สำหรับ Theme สีต่างๆ (แก้ไขปัญหา Tailwind Dynamic Class)
 const THEME_STYLES: Record<string, { 
     border: string; 
     gradient: string; 
@@ -65,7 +64,6 @@ const THEME_STYLES: Record<string, {
     }
 };
 
-// Interface หลัก
 interface UserProfile {
   student_firstname: string;
   student_lastname: string;
@@ -541,11 +539,11 @@ export default function StudentNominationForm() {
     const token = localStorage.getItem("token");
     if(!token) return;
 
-    let awardTypeId = 0;
-    if (awardType === "activity") awardTypeId = 1;
-    else if (awardType === "innovation") awardTypeId = 2;
-    else if (awardType === "behavior") awardTypeId = 3;
-    else if (awardType === "other") awardTypeId = 4;
+    let awardTypeId = "0";
+    if (awardType === "activity") awardTypeId = "1";
+    else if (awardType === "innovation") awardTypeId = "2";
+    else if (awardType === "behavior") awardTypeId = "3";
+    else if (awardType === "other") awardTypeId = "4";
 
     const result = await Swal.fire({
       title: "ยืนยันการส่งข้อมูล?",
@@ -561,56 +559,70 @@ export default function StudentNominationForm() {
 
     try {
       const formData = new FormData();
-      formData.append("award_type_id", String(awardTypeId));
+      
+      // [แก้ไข 1] Backend คาดหวัง key ชื่อ award_type แทน award_type_id
+      formData.append("award_type", awardTypeId);
 
-      if (awardTypeId === 4) {
-          formData.append("student_firstname", manualProfile.firstname);
-          formData.append("student_lastname", manualProfile.lastname);
-          formData.append("student_number", manualProfile.student_number);
+      // เตรียมกล่องใส่ Detail
+      const detailObj: any = {};
+
+      if (awardTypeId === "4") {
+          // [แก้ไข 2] เปลี่ยน key พื้นฐานให้ตรงกับ Backend
           formData.append("student_year", manualProfile.student_year);
           formData.append("advisor_name", manualProfile.advisor_name);
-          formData.append("phone_number", manualProfile.phone_number);
-          formData.append("address", manualProfile.address);
+          formData.append("student_phone_number", manualProfile.phone_number);
+          formData.append("student_address", manualProfile.address);
           formData.append("gpa", manualProfile.gpa);
-          formData.append("date_of_birth", manualProfile.date_of_birth);
-          formData.append("email", manualProfile.email);
-          formData.append("faculty", manualProfile.faculty);
-          formData.append("department", manualProfile.major);
-          formData.append("campus", manualProfile.campus);
+          formData.append("student_date_of_birth", manualProfile.date_of_birth);
           
-          formData.append("award_title", otherTitle);
-          formData.append("organization_name", orgInfo.name);
-          formData.append("organization_type", orgInfo.type);
-          formData.append("organization_location", orgInfo.location);
-          formData.append("organization_phone", orgInfo.phone);
-          formData.append("other_details", otherDetails);
+          // ข้อมูลอื่นๆ ยัดใส่ JSON สำหรับ FormDetail
+          detailObj.award_title = otherTitle;
+          detailObj.organization_name = orgInfo.name;
+          detailObj.organization_type = orgInfo.type;
+          detailObj.organization_location = orgInfo.location;
+          detailObj.organization_phone = orgInfo.phone;
+          detailObj.other_details = otherDetails;
+          detailObj.student_firstname = manualProfile.firstname;
+          detailObj.student_lastname = manualProfile.lastname;
+          detailObj.student_number = manualProfile.student_number;
+          detailObj.email = manualProfile.email;
+          detailObj.faculty = manualProfile.faculty;
+          detailObj.department = manualProfile.major;
+          detailObj.campus = manualProfile.campus;
+
       } else {
+          // [แก้ไข 3] เปลี่ยน key ของประเภททั่วไปให้ตรงกับ Backend
           formData.append("student_year", userProfile.student_year);
           formData.append("advisor_name", userProfile.advisor_name);
-          formData.append("phone_number", userProfile.phone_number);
-          formData.append("address", address);
+          formData.append("student_phone_number", userProfile.phone_number);
+          formData.append("student_address", address);
           formData.append("gpa", userProfile.gpa);
-          formData.append("date_of_birth", dateOfBirth);
+          formData.append("student_date_of_birth", dateOfBirth);
       }
 
-      if (awardTypeId === 1) {
-          formData.append("qualification_type", "activity");
-          formData.append("activity_category", activityCriteria);
-          formData.append("project_title", projectTitle);
-          formData.append("date_received", dateReceived);
-          formData.append("prize", prize);
-          formData.append("organized_by", organizedBy);
-          formData.append("team_name", teamName);
-      } else if (awardTypeId === 2) {
-          formData.append("team_name", teamName);
-          formData.append("project_title", projectTitle);
-          formData.append("prize", prize);
-          formData.append("organized_by", organizedBy);
-          formData.append("date_received", dateReceived);
-          formData.append("competition_level", innovationQual ? "National/International" : "Local"); 
-      } else if (awardTypeId === 3) {
-          formData.append("other_details", otherDetails); 
+      // นำ Detail ย่อยๆ ของแต่ละประเภทยัดใส่ Object
+      if (awardTypeId === "1") {
+          detailObj.qualification_type = "activity";
+          detailObj.activity_category = activityCriteria;
+          detailObj.project_title = projectTitle;
+          detailObj.date_received = dateReceived;
+          detailObj.prize = prize;
+          detailObj.organized_by = organizedBy;
+          detailObj.team_name = teamName;
+      } else if (awardTypeId === "2") {
+          detailObj.team_name = teamName;
+          detailObj.project_title = projectTitle;
+          detailObj.prize = prize;
+          detailObj.organized_by = organizedBy;
+          detailObj.date_received = dateReceived;
+          detailObj.competition_level = innovationQual ? "National/International" : "Local"; 
+      } else if (awardTypeId === "3") {
+          detailObj.other_details = otherDetails; 
+          detailObj.behavior_desc = otherDetails;
       }
+
+      // [แก้ไข 4] แปลง Object เป็น JSON String แล้วส่งไปในชื่อ 'form_detail'
+      formData.append("form_detail", JSON.stringify(detailObj));
 
       selectedFiles.forEach((file) => {
         formData.append("files", file);
@@ -950,9 +962,7 @@ export default function StudentNominationForm() {
 
 // ... (Sub-components) ...
 
-// แก้ไข TypeCard ให้รองรับการ mapping class แบบเต็มๆ ด้วยเช่นกัน
 const TypeCard = ({ type, current, setType, title, subtitle, color, iconPath }: any) => {
-    // กำหนด Style แบบเต็ม เพื่อแก้ปัญหา Dynamic Class
     const styles: any = {
         activity: {
             active: "border-orange-500 bg-orange-50 text-orange-700 ring-2",
@@ -1035,24 +1045,5 @@ const LoadingView = () => (
     <div className="flex flex-col items-center justify-center py-20 gap-4">
         <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin"></div>
         <div className="text-gray-400 font-medium">กำลังโหลดข้อมูล...</div>
-    </div>
-);
-
-const SuccessView = () => (
-    <div className="w-full h-screen flex items-center justify-center bg-gray-50 p-6">
-        <div className="bg-white rounded-3xl shadow-xl p-10 text-center max-w-md w-full border border-green-100">
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">บันทึกข้อมูลสำเร็จ</h2>
-            <Link href="/student/main/trace-nomination" className="block w-full py-3 bg-green-600 text-white rounded-xl mt-6">ติดตามสถานะ</Link>
-        </div>
-    </div>
-);
-
-const AlreadySubmittedView = ({ term }: any) => (
-    <div className="w-full h-screen flex items-center justify-center bg-gray-50 p-6">
-        <div className="bg-white rounded-3xl shadow-xl p-10 text-center max-w-lg w-full">
-            <h2 className="text-2xl font-bold text-gray-800 mb-3">ดำเนินการไปแล้ว</h2>
-            <p className="text-gray-500">ปีการศึกษา {term}</p>
-            <Link href="/student/main/trace-nomination" className="block w-full py-3 bg-gray-100 text-gray-700 rounded-xl mt-6">ตรวจสอบสถานะ</Link>
-        </div>
     </div>
 );
