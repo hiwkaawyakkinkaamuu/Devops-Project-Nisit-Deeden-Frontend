@@ -30,7 +30,7 @@ interface ExtracurricularDetail {
   organized_by: string;
   competition_level: string;
   activity_category: string;
-  competition_name: string; // เพิ่มให้ครบ
+  competition_name: string; 
 }
 
 interface CreativityDetail {
@@ -41,14 +41,22 @@ interface CreativityDetail {
   organized_by: string;
   competition_level: string;
   activity_category: string;
-  competition_name: string; // เพิ่มให้ครบ
+  competition_name: string; 
 }
 
 interface GoodBehaviorDetail {
    behavior_desc?: string;
 }
 
-// Interface ที่ตรงกับ Backend DTO (Snake Case)
+interface OtherDetail {
+   award_title?: string;
+   organization_name?: string;
+   organization_type?: string;
+   organization_location?: string;
+   organization_phone?: string;
+   other_details?: string;
+}
+
 export interface Nomination {
   form_id: number;
   student_id: number;
@@ -72,8 +80,8 @@ export interface Nomination {
   address: string;
   gpa: number;
   date_of_birth: string;
-  reject_reason?: string; // เพิ่ม field นี้
-  detail?: ExtracurricularDetail | CreativityDetail | GoodBehaviorDetail;
+  reject_reason?: string; 
+  detail?: ExtracurricularDetail | CreativityDetail | GoodBehaviorDetail | OtherDetail | any;
   files?: FileResponse[];
 }
 
@@ -92,13 +100,9 @@ interface MasterDepartment {
 const approvalService = {
   getNominations: async (token: string | null, params: Record<string, string>) => {
     if (USE_MOCK_DATA) {
-      // ... (ส่วน Mock เดิม ไม่ต้องแก้) ...
       return []; 
     } else {
       try {
-        // [แก้ไขจุดที่ 1] เปลี่ยน Endpoint ให้ตรงกับ Backend
-        // ใช้ /api/awards/search เพื่อดึงรายการทั้งหมด
-        // เพิ่ม limit=100 เพื่อดึงมาให้ครบแล้วค่อยกรองหน้าบ้าน
         const response = await axios.get(`${API_BASE_URL}/awards/search`, {
           params: { 
             ...params, 
@@ -107,17 +111,10 @@ const approvalService = {
           headers: { Authorization: `Bearer ${token}` }
         });
         
-        console.log("Raw Data from API:", response.data.data);
-
         const rawData = response.data.data || [];
-
-        // [แก้ไขจุดที่ 2] กรองเฉพาะสถานะที่ต้องพิจารณา 
-        // เช่น หัวหน้าภาคดูเฉพาะสถานะ 1 (รอหัวหน้าภาคพิจารณา)
-        // ** ตรวจสอบเลข Status ID ใน Database ของคุณอีกครั้งว่าใช่เลข 2 หรือไม่ **
-        const TARGET_STATUS_ID = 1; 
+        const TARGET_STATUS_ID = 1; // 1 = รอหัวหน้าภาคพิจารณา
 
         const filteredData = rawData.filter((item: any) => item.form_status_id === TARGET_STATUS_ID);
-
         return filteredData;
 
       } catch (error) {
@@ -132,12 +129,15 @@ const approvalService = {
       await new Promise(r => setTimeout(r, 800));
       return { success: true, message: "Mock vote submitted" };
     } else {
-      // API จริง: เปลี่ยนไปใช้ PUT /api/awards/:id/form-status ให้ตรงกับ Backend
-      const payload = { 
-          form_status_id: statusId
-          // หมายเหตุ: Backend ปัจจุบันรับแค่ form_status_id 
-          // (ถ้าต้องการเก็บ reason ต้องไปเพิ่ม Logic ที่ Backend ครับ)
+      // [แก้ไขจุดที่ทำให้ 500 Error] Backend รับ json:"form_status" ไม่ใช่ form_status_id
+      const payload: any = { 
+          form_status: statusId
       };
+      
+      // ถ้ามีเหตุผลส่งไปด้วยเผื่อ Backend รองรับในอนาคต (ถ้า Backend ยังไม่รับ มันจะถูก ignore ไปเอง)
+      if (reason) {
+          payload.reject_reason = reason;
+      }
 
       const response = await axios.put(`${API_BASE_URL}/awards/${formId}/form-status`, payload, {
         headers: { Authorization: `Bearer ${token}` }
@@ -177,6 +177,16 @@ const TableSkeleton = () => (
     ))}
   </>
 );
+
+// ฟังก์ชันสำหรับดึงคลาสสีให้ตรงกับประเภทรางวัล
+const getAwardTypeStyle = (awardName: string) => {
+    if (!awardName) return "bg-gray-50 text-gray-600 border-gray-200";
+    if (awardName.includes("กิจกรรม")) return "bg-orange-50 text-orange-600 border-orange-200";
+    if (awardName.includes("นวัตกรรม")) return "bg-purple-50 text-purple-600 border-purple-200";
+    if (awardName.includes("ความประพฤติ")) return "bg-blue-50 text-blue-600 border-blue-200";
+    if (awardName.includes("อื่นๆ") || awardName.includes("อื่น ๆ")) return "bg-green-50 text-green-600 border-green-200";
+    return "bg-gray-50 text-gray-600 border-gray-200";
+};
 
 // ==========================================
 // 3. Main Component
@@ -227,8 +237,8 @@ export default function HeadOfDepartmentApprovalPage() {
         if (!token) return;
 
         const params: Record<string, string> = {};
-        if (searchTerm) params.keyword = searchTerm; // แก้ parameter ให้ตรงกับ Backend (q -> keyword)
-        if (filterCategory) params.award_type = filterCategory; // Note: Backend อาจยังไม่รองรับ filter นี้โดยตรง
+        if (searchTerm) params.keyword = searchTerm; 
+        if (filterCategory) params.award_type = filterCategory; 
         if (filterYear) params.student_year = filterYear;
 
         const data = await approvalService.getNominations(token, params);
@@ -263,7 +273,7 @@ export default function HeadOfDepartmentApprovalPage() {
   const processedData = useMemo(() => {
     let filtered = items;
     
-    // Client-side filtering for award type if backend doesn't support it well
+    // Client-side filtering for award type
     if (filterCategory) {
         filtered = filtered.filter(item => item.award_type_name === filterCategory);
     }
@@ -329,10 +339,7 @@ export default function HeadOfDepartmentApprovalPage() {
     });
 
     if (result.isConfirmed) {
-        // [Logic Status]
-        // สมมติ: 1 (รอหัวหน้าภาค) -> 2 (รอรองคณบดี) 
-        // คุณต้องเช็ค Step ID ของคุณว่า "เห็นชอบ" แล้วไป Status ID ไหน
-        const NEXT_STATUS_ID = 2; 
+        const NEXT_STATUS_ID = 2; // ไปยังระดับถัดไป
         await submitVote(selectedId, NEXT_STATUS_ID, "", `${selectedItem.student_firstname} ${selectedItem.student_lastname}`);
     }
   };
@@ -347,10 +354,7 @@ export default function HeadOfDepartmentApprovalPage() {
     if (!rejectReason.trim()) return Swal.fire({ icon: 'warning', title: 'กรุณาระบุเหตุผล', text: 'โปรดกรอกเหตุผลในการไม่เห็นชอบ' });
     const selectedItem = items.find(c => c.form_id === selectedId);
     if (selectedId && selectedItem) {
-        // [Logic Status]
-        // สมมติ: ตีกลับเป็น Rejected ให้ใช้ Status ID ที่กำหนด (เช่น 99 หรือ 0)
-        // หรือถ้าแค่ "ไม่เห็นชอบ" แล้วส่งกลับให้นิสิตแก้ อาจใช้ Status 4
-        const REJECT_STATUS_ID = 4; // สมมติว่า 4 คือ Reject
+        const REJECT_STATUS_ID = 4; // ตีกลับไปให้นิสิตแก้ไข
         await submitVote(selectedId, REJECT_STATUS_ID, rejectReason, `${selectedItem.student_firstname} ${selectedItem.student_lastname}`);
         setIsRejectModalOpen(false);
     }
@@ -360,10 +364,8 @@ export default function HeadOfDepartmentApprovalPage() {
     try {
       const token = localStorage.getItem("token");
       
-      // แก้ไขการส่ง Parameter ให้ตรงกับ service ใหม่
       await approvalService.submitVote(token, id, statusId, reason);
       
-      // Remove from UI
       setItems(prev => prev.filter(c => c.form_id !== id));
       setSelectedId(null);
 
@@ -377,16 +379,18 @@ export default function HeadOfDepartmentApprovalPage() {
           title: 'บันทึกผลสำเร็จ',
           text: `ได้ทำการ${isReject ? 'ไม่เห็นชอบ' : 'เห็นชอบ'}นิสิต: ${studentName} เรียบร้อยแล้ว`
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Submit Error:", error);
-      Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ดำเนินการไม่สำเร็จ' });
+      Swal.fire({ 
+          icon: 'error', 
+          title: 'เกิดข้อผิดพลาด', 
+          text: error?.response?.data?.message || 'ดำเนินการไม่สำเร็จ โปรดลองใหม่อีกครั้ง' 
+      });
     }
   };
 
-  // ... (Render Part เหมือนเดิมทุกประการ) ...
   return (
         <div className="font-sans pb-24">
-            {/* Inject Keyframes */}
             <style jsx global>{`
                 @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
                 .animate-fade-in-up { animation: fadeInUp 0.4s ease-out forwards; }
@@ -415,15 +419,18 @@ export default function HeadOfDepartmentApprovalPage() {
                     <div className="relative group">
                         <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 outline-none focus:ring-4 focus:ring-blue-100 transition-all shadow-sm cursor-pointer" />
                     </div>
+                    
                     <div className="relative group">
                         <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 outline-none focus:ring-4 focus:ring-blue-100 transition-all shadow-sm cursor-pointer appearance-none">
                             <option value="">ทุกประเภทรางวัล</option>
-                            <option value="ด้านความคิดสร้างสรรค์และนวัตกรรม">ด้านนวัตกรรม</option>
+                            <option value="ด้านกิจกรรมเสริมหลักสูตร">ด้านกิจกรรมเสริมหลักสูตร</option>
+                            <option value="ด้านความคิดสร้างสรรค์และนวัตกรรม">ด้านความคิดสร้างสรรค์และนวัตกรรม</option>
                             <option value="ด้านความประพฤติดี">ด้านความประพฤติดี</option>
-                            <option value="ด้านกิจกรรมเสริมหลักสูตร">ด้านกิจกรรม</option>
+                            <option value="ด้านอื่นๆ">ด้านอื่นๆ</option>
                         </select>
                         <svg className="w-4 h-4 absolute right-4 top-3.5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                     </div>
+
                     <div className="relative group">
                         <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-500 outline-none focus:ring-4 focus:ring-blue-100 transition-all shadow-sm cursor-pointer appearance-none">
                             <option value="">ทุกระดับชั้น</option><option value="1">ชั้นปีที่ 1</option><option value="2">ชั้นปีที่ 2</option><option value="3">ชั้นปีที่ 3</option><option value="4">ชั้นปีที่ 4</option>
@@ -465,7 +472,13 @@ export default function HeadOfDepartmentApprovalPage() {
                                         <td className="p-5 text-sm font-bold text-gray-700">{item.student_firstname} {item.student_lastname}</td>
                                         <td className="p-5 text-sm text-center text-gray-600 font-mono">{item.student_number}</td>
                                         <td className="p-5 text-sm text-center text-gray-600">{item.academic_year}</td>
-                                        <td className="p-5 text-sm text-center"><span className="px-3 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-medium border border-gray-200">{item.award_type_name}</span></td>
+                                        
+                                        <td className="p-5 text-sm text-center">
+                                            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getAwardTypeStyle(item.award_type_name)}`}>
+                                                {item.award_type_name}
+                                            </span>
+                                        </td>
+                                        
                                         <td className="p-5 text-sm text-center text-gray-500">{formatDateTh(item.created_at)}</td>
                                         <td className="p-5 text-center align-middle">
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200 shadow-sm animate-pulse">รอพิจารณา</span>
@@ -484,14 +497,11 @@ export default function HeadOfDepartmentApprovalPage() {
 
                 {/* Footer / Actions */}
                 <div className="flex justify-between items-center p-6 border-t border-gray-100 bg-gray-50/30">
-                    {/* Pagination */}
                     <div className="flex items-center gap-2">
                         <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-100 disabled:opacity-50 transition-all shadow-sm">{'<'}</button>
                         <span className="text-xs font-semibold text-gray-500 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">หน้า {currentPage} จาก {totalPages || 1}</span>
                         <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-100 disabled:opacity-50 transition-all shadow-sm">{'>'}</button>
                     </div>
-
-                    {/* Action Buttons */}
                     <div className="flex gap-4 items-center animate-fade-in">
                         <span className="text-xs font-medium text-gray-400 mr-2 bg-gray-100 px-3 py-1 rounded-full">{selectedId ? `เลือกรายการ #${selectedId}` : "คลิกที่แถวเพื่อเลือก"}</span>
                         

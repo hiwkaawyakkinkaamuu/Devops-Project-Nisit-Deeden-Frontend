@@ -116,21 +116,47 @@ const isZeroDate = (dateStr: string) => {
     return !dateStr || dateStr.startsWith("0001") || dateStr.includes("0001-01-01");
 };
 
+// นำ Status Mapping มาใช้งานให้เหมือนหน้า Trace
+const getStatusMapping = (id: number): { code: 2 | 3 | 4, label: string } => {
+    // 2=Approved, 3=Rejected, 4=Progress
+    const mappings: Record<number, { code: 2 | 3 | 4, label: string }> = {
+        1: { code: 4, label: "รอหัวหน้าภาคพิจารณา" },
+        2: { code: 4, label: "รอรองคณบดีพิจารณา" },
+        3: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยหัวหน้าภาค)" },
+        4: { code: 4, label: "รอคณบดีพิจารณา" },
+        5: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยรองคณบดี)" },
+        6: { code: 4, label: "รอกองพัฒนานิสิตพิจารณา" },
+        7: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยคณบดี)" },
+        8: { code: 4, label: "รอคณะกรรมการพิจารณา" },
+        9: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยกองพัฒนานิสิต)" },
+        10: { code: 4, label: "รอประธานกรรมการพิจารณา" },
+        11: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยคณะกรรมการ)" },
+        12: { code: 4, label: "รออธิการบดีพิจารณา" },
+        13: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยประธานกรรมการ)" },
+        14: { code: 2, label: "ผ่านการคัดเลือก (อนุมัติแล้ว)" },
+        15: { code: 3, label: "ไม่ผ่าน (ตีกลับโดยอธิการบดี)" },
+    };
+    return mappings[id] || { code: 4, label: "อยู่ระหว่างดำเนินการ" };
+};
+
+const getAwardTypeId = (name: string) => {
+    if (!name) return 0;
+    if (name.includes("กิจกรรม")) return 1;
+    if (name.includes("นวัตกรรม")) return 2;
+    if (name.includes("ประพฤติ")) return 3;
+    if (name.includes("อื่นๆ") || name.includes("อื่น ๆ")) return 4;
+    return 0;
+};
+
 const mapBackendToHistory = (data: any[]): NominationHistory[] => {
     return data.map((item: any) => {
-        const hasRejectReason = !!item.reject_reason;
-        const isApproved = item.form_status_id === 8; 
-        
-        let statusCode: 2 | 3 | 4 = 4;
-        let statusLabel = "อยู่ระหว่างพิจารณา";
+        // อิง ID ให้ตรงกับ Database เหมือนกับหน้า Trace
+        const statusId = item.form_status || item.form_status_id || 1;
+        const statusInfo = getStatusMapping(statusId);
 
-        if (isApproved) {
-            statusCode = 2;
-            statusLabel = "ผ่านการคัดเลือก";
-        } else if (hasRejectReason) {
-            statusCode = 3;
-            statusLabel = "ไม่ผ่านการคัดเลือก";
-        }
+        // รองรับทั้ง DTO แบบ Camel และ Snake
+        const awardName = item.award_type || item.award_type_name || "ไม่ระบุประเภท";
+        const awardId = item.award_type_id || getAwardTypeId(awardName);
 
         let completedDate = item.latest_update;
         if (isZeroDate(completedDate)) {
@@ -141,10 +167,10 @@ const mapBackendToHistory = (data: any[]): NominationHistory[] => {
             form_id: item.form_id, 
             academic_year: item.academic_year || 0,
             semester: item.semester || 0,
-            award_type_id: item.award_type_id || 0,
-            award_type_name: item.award_type_name || "ไม่ระบุประเภท",
-            nomination_status: statusLabel,
-            status_code: statusCode,
+            award_type_id: awardId,
+            award_type_name: awardName,
+            nomination_status: statusInfo.label,
+            status_code: statusInfo.code, 
             created_at: item.created_at,
             completed_date: completedDate, 
             reject_reason: item.reject_reason || "",
@@ -186,6 +212,7 @@ const formatDate = (isoDate: string) => {
   });
 };
 
+// ฟังก์ชันหาธีมสีตามประเภทรางวัล
 const getThemeColor = (item: NominationHistory): string => {
     const id = item.award_type_id;
     const name = item.award_type_name || "";
@@ -193,7 +220,7 @@ const getThemeColor = (item: NominationHistory): string => {
     if (id === 1 || name.includes("กิจกรรม")) return 'orange';
     if (id === 2 || name.includes("นวัตกรรม")) return 'purple';
     if (id === 3 || name.includes("ประพฤติ")) return 'blue';
-    if (id === 4 || name.includes("อื่นๆ")) return 'green';
+    if (id === 4 || name.includes("อื่นๆ") || name.includes("อื่น ๆ")) return 'green';
     
     return 'gray'; 
 };
@@ -282,7 +309,6 @@ export default function StudentHistoryPage() {
   // --- Handlers ---
   const handleViewDetail = (item: NominationHistory) => {
     const theme = getThemeColor(item);
-    // Use theme class from colorVariants
     const themeClasses = colorVariants[theme] || colorVariants.gray;
     
     // Icons for Swal (HTML String)
@@ -369,7 +395,7 @@ export default function StudentHistoryPage() {
           </p>
           <Link href="/student/main/student-nomination-form" className="w-full block py-4 bg-gray-900 text-white rounded-2xl font-bold hover:bg-black transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 group">
             <span>ไปที่แบบฟอร์มเสนอชื่อ</span>
-            <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+            <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
           </Link>
         </div>
       </div>
