@@ -14,6 +14,57 @@ const API_BASE_URL = "/api";
 const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 const MAX_TOTAL_FILE_SIZE_MB = 10;
 
+// Config สำหรับ Theme สีต่างๆ (แก้ไขปัญหา Tailwind Dynamic Class)
+const THEME_STYLES: Record<string, { 
+    border: string; 
+    gradient: string; 
+    numberBg: string; 
+    buttonHover: string;
+    text: string;
+    bgSoft: string;
+}> = {
+    activity: {
+        border: "border-orange-100",
+        gradient: "from-orange-400 to-orange-600",
+        numberBg: "bg-orange-600",
+        buttonHover: "hover:bg-orange-700",
+        text: "text-orange-600",
+        bgSoft: "bg-orange-50"
+    },
+    innovation: {
+        border: "border-purple-100",
+        gradient: "from-purple-400 to-purple-600",
+        numberBg: "bg-purple-600",
+        buttonHover: "hover:bg-purple-700",
+        text: "text-purple-600",
+        bgSoft: "bg-purple-50"
+    },
+    behavior: {
+        border: "border-blue-100",
+        gradient: "from-blue-400 to-blue-600",
+        numberBg: "bg-blue-600",
+        buttonHover: "hover:bg-blue-700",
+        text: "text-blue-600",
+        bgSoft: "bg-blue-50"
+    },
+    other: {
+        border: "border-green-100",
+        gradient: "from-green-400 to-green-600",
+        numberBg: "bg-green-600",
+        buttonHover: "hover:bg-green-700",
+        text: "text-green-600",
+        bgSoft: "bg-green-50"
+    },
+    default: {
+        border: "border-gray-100",
+        gradient: "from-gray-400 to-gray-600",
+        numberBg: "bg-gray-600",
+        buttonHover: "hover:bg-gray-700",
+        text: "text-gray-600",
+        bgSoft: "bg-gray-50"
+    }
+};
+
 // Interface หลัก
 interface UserProfile {
   student_firstname: string;
@@ -46,8 +97,6 @@ interface ManualProfile {
   address: string;
 }
 
-// Interface สำหรับ Sub-components Props
-// แก้ไข Type ให้รองรับทั้ง Input และ Textarea เพื่อความยืดหยุ่นและแก้ Error
 interface InputTextProps {
   label: string;
   value: string;
@@ -62,7 +111,6 @@ interface InputTextProps {
   placeholder?: string;
 }
 
-// ปรับให้รับ Type เดียวกันกับ InputTextProps เพื่อความเข้ากันได้
 interface FixedLabelInputProps {
   value: string;
   onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
@@ -277,15 +325,9 @@ export default function StudentNominationForm() {
   const totalFileSize = useMemo(() => selectedFiles.reduce((acc, file) => acc + file.size, 0), [selectedFiles]);
   const fileSizePercentage = (totalFileSize / MAX_TOTAL_FILE_SIZE_BYTES) * 100;
 
-  // Determine Theme Color based on Award Type
-  const themeColor = useMemo(() => {
-      switch(awardType) {
-          case 'activity': return 'orange';
-          case 'innovation': return 'purple';
-          case 'behavior': return 'blue';
-          case 'other': return 'green';
-          default: return 'gray';
-      }
+  // Determine Theme Styles based on Award Type
+  const themeStyles = useMemo(() => {
+      return THEME_STYLES[awardType] || THEME_STYLES.default;
   }, [awardType]);
 
   // ==========================================
@@ -661,10 +703,10 @@ export default function StudentNominationForm() {
                 
                 {/* === Type 4: Section 1 (Title) === */}
                 {awardType === "other" && (
-                    <div className={`bg-white/60 backdrop-blur-sm p-8 rounded-[24px] border border-${themeColor}-100 shadow-sm relative overflow-hidden`}>
-                        <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-${themeColor}-400 to-${themeColor}-600`}></div>
+                    <div className={`bg-white/60 backdrop-blur-sm p-8 rounded-[24px] ${themeStyles.border} shadow-sm relative overflow-hidden`}>
+                        <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${themeStyles.gradient}`}></div>
                         <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-                            <span className={`w-8 h-8 rounded-full bg-${themeColor}-600 text-white flex items-center justify-center text-sm`}>1</span>
+                            <span className={`w-8 h-8 rounded-full ${themeStyles.numberBg} text-white flex items-center justify-center text-sm`}>1</span>
                             ระบุชื่อรางวัล/ประเภทที่ยื่นเสนอ <span className="text-red-500">*</span>
                         </h3>
                         <InputText label="ชื่อรางวัล" value={otherTitle} onChange={(e) => setOtherTitle(e.target.value)} required placeholder="เช่น รางวัลจิตอาสาดีเด่น..." />
@@ -672,10 +714,10 @@ export default function StudentNominationForm() {
                 )}
                 
                 {/* === Section 2: User Info === */}
-                <div className={`bg-white/60 backdrop-blur-sm p-8 rounded-[24px] border border-${themeColor}-100 shadow-sm relative overflow-hidden`}>
-                  <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-${themeColor}-400 to-${themeColor}-600`}></div>
+                <div className={`bg-white/60 backdrop-blur-sm p-8 rounded-[24px] ${themeStyles.border} shadow-sm relative overflow-hidden`}>
+                  <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${themeStyles.gradient}`}></div>
                   <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-                    <span className={`w-8 h-8 rounded-full bg-${themeColor}-600 text-white flex items-center justify-center text-sm`}>2</span>
+                    <span className={`w-8 h-8 rounded-full ${themeStyles.numberBg} text-white flex items-center justify-center text-sm`}>2</span>
                     ข้อมูลนิสิต {awardType === 'other' && <span className="text-sm font-normal text-gray-500 ml-2">(กรอกด้วยตนเอง)</span>}
                   </h3>
 
@@ -751,14 +793,14 @@ export default function StudentNominationForm() {
                 </div>
                 
                 {/* === Section 3 & 4 (Details) === */}
-                <div className={`bg-white/60 backdrop-blur-sm p-8 rounded-[24px] border border-${themeColor}-100 shadow-sm relative overflow-hidden animate-fade-in-up`}>
-                    <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-${themeColor}-400 to-${themeColor}-600`}></div>
+                <div className={`bg-white/60 backdrop-blur-sm p-8 rounded-[24px] ${themeStyles.border} shadow-sm relative overflow-hidden animate-fade-in-up`}>
+                    <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${themeStyles.gradient}`}></div>
                     
                     {awardType === "other" ? (
                         <>
                             {/* Section 3: Organization Info (Manual Input for Name/Loc) */}
                             <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-                                <span className={`w-8 h-8 rounded-full flex items-center justify-center bg-${themeColor}-600 text-white text-sm`}>3</span>
+                                <span className={`w-8 h-8 rounded-full flex items-center justify-center ${themeStyles.numberBg} text-white text-sm`}>3</span>
                                 ข้อมูลหน่วยงานที่เสนอชื่อ <span className="text-red-500 text-sm font-normal ml-2">*</span>
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
@@ -770,7 +812,7 @@ export default function StudentNominationForm() {
 
                             {/* Section 4: Details */}
                             <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3 border-t border-gray-200 pt-8">
-                                <span className={`w-8 h-8 rounded-full flex items-center justify-center bg-${themeColor}-600 text-white text-sm`}>4</span>
+                                <span className={`w-8 h-8 rounded-full flex items-center justify-center ${themeStyles.numberBg} text-white text-sm`}>4</span>
                                 รายละเอียดเพิ่มเติม <span className="text-red-500 text-sm font-normal ml-2">*</span>
                             </h3>
                             <div className="space-y-4">
@@ -781,7 +823,7 @@ export default function StudentNominationForm() {
                         <>
                              {/* Type 1-2-3 Details */}
                              <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-                                <span className={`w-8 h-8 rounded-full flex items-center justify-center bg-${themeColor}-600 text-white text-sm`}>3</span>
+                                <span className={`w-8 h-8 rounded-full flex items-center justify-center ${themeStyles.numberBg} text-white text-sm`}>3</span>
                                 {awardType === 'behavior' ? 'รายละเอียดเพิ่มเติม' : 'รายละเอียดผลงาน'}
                              </h3>
 
@@ -844,9 +886,9 @@ export default function StudentNominationForm() {
                 </div>
 
                 {/* 4. Files */}
-                <div className={`bg-white/60 backdrop-blur-sm p-8 rounded-[24px] border border-${themeColor}-100 shadow-sm animate-fade-in-up animate-delay-300`}>
+                <div className={`bg-white/60 backdrop-blur-sm p-8 rounded-[24px] ${themeStyles.border} shadow-sm animate-fade-in-up animate-delay-300`}>
                     <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-                        <span className={`w-8 h-8 rounded-full flex items-center justify-center bg-${themeColor}-600 text-white text-sm`}>
+                        <span className={`w-8 h-8 rounded-full flex items-center justify-center ${themeStyles.numberBg} text-white text-sm`}>
                             {awardType === 'other' ? 5 : (awardType === 'behavior' ? 4 : 4)}
                         </span>
                         เอกสารประกอบ <span className="text-red-500 text-sm font-normal ml-2">* (PDF เท่านั้น, รวมไม่เกิน 10MB)</span>
@@ -892,7 +934,7 @@ export default function StudentNominationForm() {
                 </div>
 
                 <div className="flex justify-end pt-4 animate-fade-in-up animate-delay-300">
-                    <button type="submit" className={`bg-gray-900 hover:bg-${themeColor}-700 text-white px-10 py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center gap-2`}>
+                    <button type="submit" className={`bg-gray-900 ${themeStyles.buttonHover} text-white px-10 py-4 rounded-xl text-lg font-bold shadow-xl transition-all flex items-center gap-2`}>
                         ยืนยันการเสนอรายชื่อ
                     </button>
                 </div>
@@ -906,19 +948,49 @@ export default function StudentNominationForm() {
   );
 }
 
-// ... (Sub-components: TypeCard, ReadOnlyField, InputText, InputDate, InputPhone, InputGPA, SelectYear, LoadingView, SuccessView, AlreadySubmittedView) ...
-// (Sub-components remain exactly the same as in previous correct version)
-const TypeCard = ({ type, current, setType, title, subtitle, color, iconPath }: any) => (
-    <div onClick={() => setType(type)} className={`cursor-pointer rounded-2xl border-2 p-4 flex flex-col items-center justify-center gap-2 transition-all hover:shadow-lg ${current === type ? `border-${color}-500 bg-${color}-50 text-${color}-700 ring-2` : "border-gray-100 bg-white text-gray-500"}`}>
-        <div className={`p-3 rounded-full ${current === type ? `bg-${color}-200` : 'bg-gray-100'}`}>
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={iconPath} /></svg>
+// ... (Sub-components) ...
+
+// แก้ไข TypeCard ให้รองรับการ mapping class แบบเต็มๆ ด้วยเช่นกัน
+const TypeCard = ({ type, current, setType, title, subtitle, color, iconPath }: any) => {
+    // กำหนด Style แบบเต็ม เพื่อแก้ปัญหา Dynamic Class
+    const styles: any = {
+        activity: {
+            active: "border-orange-500 bg-orange-50 text-orange-700 ring-2",
+            inactive: "border-gray-100 bg-white text-gray-500",
+            iconBgActive: "bg-orange-200"
+        },
+        innovation: {
+            active: "border-purple-500 bg-purple-50 text-purple-700 ring-2",
+            inactive: "border-gray-100 bg-white text-gray-500",
+            iconBgActive: "bg-purple-200"
+        },
+        behavior: {
+            active: "border-blue-500 bg-blue-50 text-blue-700 ring-2",
+            inactive: "border-gray-100 bg-white text-gray-500",
+            iconBgActive: "bg-blue-200"
+        },
+        other: {
+            active: "border-green-500 bg-green-50 text-green-700 ring-2",
+            inactive: "border-gray-100 bg-white text-gray-500",
+            iconBgActive: "bg-green-200"
+        }
+    };
+
+    const currentStyle = styles[type] || styles.activity;
+    const isActive = current === type;
+
+    return (
+        <div onClick={() => setType(type)} className={`cursor-pointer rounded-2xl border-2 p-4 flex flex-col items-center justify-center gap-2 transition-all hover:shadow-lg ${isActive ? currentStyle.active : currentStyle.inactive}`}>
+            <div className={`p-3 rounded-full ${isActive ? currentStyle.iconBgActive : 'bg-gray-100'}`}>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={iconPath} /></svg>
+            </div>
+            <div className="text-center">
+                <span className="block font-bold">{title}</span>
+                <span className="text-xs opacity-70">{subtitle}</span>
+            </div>
         </div>
-        <div className="text-center">
-            <span className="block font-bold">{title}</span>
-            <span className="text-xs opacity-70">{subtitle}</span>
-        </div>
-    </div>
-);
+    );
+};
 
 const ReadOnlyField = ({ label, value, font }: any) => (
     <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
