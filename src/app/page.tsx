@@ -25,19 +25,6 @@ interface LoginResponse {
   };
 }
 
-const mapRoleIdToRoleName = (roleId: number): string => {
-  switch (roleId) {
-    case 1: return "student";
-    case 2: return "head_of_department";
-    case 3: return "dean";
-    case 4: return "associate_dean";
-    case 5: return "student_development";
-    case 6: return "student_development_committee";
-    case 7: return "chairman_of_student_development_committee";
-    default: return "student";
-  }
-};
-
 // ==========================================
 // 1. Main Component
 // ==========================================
@@ -89,7 +76,7 @@ export default function LoginPage() {
       6: "/committee/consider",
       7: "/committee-chairman/consider",
       8: "/chancellor/dashboard",    // อธิการบดี
-      9: "/organization/dashboard",  // หน่วยงานภายนอก
+      9: "/organization/main/organization-nomination-form",  // หน่วยงานภายนอก
     };
     
     // เปลี่ยนหน้าไปยัง Path ที่กำหนด หรือกลับหน้าหลักถ้าไม่พบ ID

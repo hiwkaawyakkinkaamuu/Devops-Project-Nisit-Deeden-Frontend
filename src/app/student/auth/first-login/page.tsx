@@ -186,7 +186,13 @@ export default function FirstLoginPage() {
   // ==========================================
   const urlToFile = async (url: string, filename: string, mimeType: string): Promise<File> => {
     try {
-        const res = await fetch(url);
+        const res = await fetch(url, {
+            referrerPolicy: "no-referrer",
+            cache: "no-cache" // ป้องกันการดึง cache เดิมที่อาจจะติด error ไปแล้ว
+        });
+
+        if (!res.ok) throw new Error("Network response was not ok");
+
         const buf = await res.arrayBuffer();
         return new File([buf], filename, { type: mimeType });
     } catch (error) {
@@ -264,7 +270,7 @@ export default function FirstLoginPage() {
         } else if (isGoogleLogin && formData.image_url) {
             try {
                 const googleFile = await urlToFile(formData.image_url, "google-profile.jpg", "image/jpeg");
-                payload.append("profile_image", googleFile);
+                payload.append("profile_image", googleFile); // นำไฟล์ที่แปลงได้ แนบเตรียมส่งไปให้ Backend
             } catch (err) {
                 console.warn("Cannot convert google image to file, skipping upload");
             }
@@ -339,7 +345,12 @@ export default function FirstLoginPage() {
                 <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
                     <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-emerald-50 shadow-lg bg-gray-100 flex items-center justify-center group-hover:border-emerald-200 transition-all duration-300 transform group-hover:scale-105">
                         {imagePreview || formData.image_url ? (
-                            <img src={imagePreview || formData.image_url} alt="Profile" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                        <img 
+                            src={imagePreview || formData.image_url} 
+                            alt="Profile" 
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                            referrerPolicy="no-referrer" 
+                        />
                         ) : (
                             <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
                         )}

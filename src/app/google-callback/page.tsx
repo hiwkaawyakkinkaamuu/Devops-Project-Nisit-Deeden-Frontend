@@ -43,19 +43,30 @@ function GoogleCallbackHandler() {
         is_first_login: isFirstLogin 
       });
 
-      console.log("✅ Token saved. Redirecting...", { isFirstLogin });
+      console.log("Token saved. Redirecting...", { isFirstLogin, role });
 
       // Redirect ไปให้ถูกหน้า
       setTimeout(() => {
         if (isFirstLogin) {
-            window.location.replace("/student/auth/first-login");
+            // กรณียังไม่เคยกรอกข้อมูล (First Login)
+            if (role === "organization") {
+                window.location.replace("/organization/auth/first-login"); 
+            } else {
+                window.location.replace("/student/auth/first-login");
+            }
         } else {
-            window.location.replace("/student/main/student-nomination-form");
+            // กรณีเคยกรอกข้อมูลแล้ว (ไม่ใช่ First Login)
+            if (role === "organization") {
+                // สมมติว่าหน้าหลักองค์กรคือหน้านี้ (แก้ path ได้ตามโครงสร้างโปรเจกต์คุณ)
+                window.location.replace("/organization/main/organization-nomination-form"); 
+            } else {
+                window.location.replace("/student/main/student-nomination-form");
+            }
         }
       }, 500);
 
     } else {
-       console.error("❌ No token found");
+       console.error("No token found");
        window.location.replace("/"); 
     }
   }, [searchParams, login]); 

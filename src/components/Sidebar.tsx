@@ -4,9 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useState, useEffect } from "react";
 import Swal from "sweetalert2";
-import { motion, AnimatePresence } from "framer-motion";
+// Import Variants เพิ่มเข้ามาเพื่อแก้ปัญหา TypeScript
+import { motion, AnimatePresence, Variants } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/axios";
+
+// Import Icons จาก lucide-react
+import { 
+  UserCheck, History, Award, Search, FileText, User, 
+  CheckSquare, Users, Menu, X, LogOut, Landmark, BookOpen, 
+  Phone, MapPin, Building2, Mail, ChevronRight, Sparkles
+} from "lucide-react";
 
 // ==========================================
 // 1. Interfaces & Types
@@ -21,22 +29,19 @@ type UserRole =
   | "student_development_committee" 
   | "student_development" 
   | "chancellor"
-  | "organization"
-  | "admin";
+  | "organization";
 
-interface Faculty {
-  faculty_id: number;
-  faculty_name: string;
-}
+interface Faculty { faculty_id: number; faculty_name: string; }
+interface Department { department_id: number; department_name: string; }
+interface Campus { campus_id: number; campus_name: string; }
 
-interface Department {
-  department_id: number;
-  department_name: string;
-}
-
-interface Campus {
-  campus_id: number;
-  campus_name: string;
+interface OrganizationData {
+  organization_id: number;
+  user_id: number;
+  organization_name: string;
+  organization_type: string;
+  organization_location: string;
+  organization_phone: string;
 }
 
 interface UserProfileData {
@@ -50,19 +55,13 @@ interface UserProfileData {
   Student?: any;
   student?: any;
   student_data?: any;
+  Organization?: OrganizationData;
+  organization?: OrganizationData;
+  organization_data?: OrganizationData; 
 }
 
-interface MenuItemType {
-  href: string;
-  label: string;
-  icon: ReactNode;
-  isAction?: boolean;
-}
-
-interface SidebarProps {
-  isCollapsed: boolean;
-  toggleSidebar: () => void;
-}
+interface MenuItemType { href: string; label: string; icon: ReactNode; isAction?: boolean; }
+interface SidebarProps { isCollapsed: boolean; toggleSidebar: () => void; }
 
 // ==========================================
 // 2. Constants & Helpers
@@ -77,57 +76,52 @@ const ROLE_NAMES_TH: Record<string, string> = {
   student_development_committee: "คณะกรรมการ",
   chairman_of_student_development_committee: "ประธานคณะกรรมการ",
   chancellor: "อธิการบดี",
-  organization: "หน่วยงานภายนอก",
-  admin: "ผู้ดูแลระบบ"
+  organization: "หน่วยงานภายนอก"
 };
 
 const getProfileImageUrl = (imagePath: string | undefined | null) => {
   if (!imagePath) return null;
-  if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
-    return imagePath;
-  }
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"; 
+  if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) return imagePath;
   const cleanPath = imagePath.startsWith("/") ? imagePath : `/${imagePath}`;
-  return `${API_URL}${cleanPath}`;
+  return `${cleanPath}`;
 };
 
 const getRoleKey = (roleId: number | undefined): UserRole => {
   switch (roleId) {
-    case 1: return "student";
-    case 2: return "head_of_department";
-    case 3: return "associate_dean";
-    case 4: return "dean";
-    case 5: return "student_development";
-    case 6: return "student_development_committee";
-    case 7: return "chairman_of_student_development_committee";
-    case 8: return "chancellor";
-    case 9: return "organization";
+    case 1: return "student"; case 2: return "head_of_department"; case 3: return "associate_dean";
+    case 4: return "dean"; case 5: return "student_development"; case 6: return "student_development_committee";
+    case 7: return "chairman_of_student_development_committee"; case 8: return "chancellor"; case 9: return "organization";
     default: return "student";
   }
 };
 
+const iconProps = { className: "w-[18px] h-[18px] stroke-[2.5px]" };
+
 const Icons = {
-    CheckUser: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-    History: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>,
-    Badge: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 01-3.138-3.138z" /></svg>,
-    Track: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-    Edit: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
-    User: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0c0 .884-.5 2-2 2h4c-1.5 0-2-1.116-2-2z" /></svg>,
-    DocumentCheck: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>,
-    UsersGroup: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
-    Menu: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>,
-    MenuClose: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>,
-    Logout: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>,
-    Close: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>,
-    School: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>,
-    BookOpen: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+  CheckUser: <UserCheck {...iconProps} />,
+  History: <History {...iconProps} />,
+  Badge: <Award {...iconProps} />,
+  Track: <Search {...iconProps} />,
+  Edit: <FileText {...iconProps} />,
+  User: <User {...iconProps} />,
+  DocumentCheck: <CheckSquare {...iconProps} />,
+  UsersGroup: <Users {...iconProps} />,
+  Menu: <Menu className="w-5 h-5 stroke-[2.5px]" />,
+  MenuClose: <X className="w-5 h-5 stroke-[2.5px]" />,
+  Logout: <LogOut className="w-[18px] h-[18px] stroke-[2.5px]" />,
+  Close: <X className="w-5 h-5 stroke-[2.5px]" />,
+  School: <Landmark {...iconProps} />,
+  BookOpen: <BookOpen {...iconProps} />,
+  Phone: <Phone {...iconProps} />,
+  MapPin: <MapPin {...iconProps} />,
+  Building: <Building2 {...iconProps} />,
+  Mail: <Mail {...iconProps} />
 };
 
 const MENU_CONFIG: Record<string, MenuItemType[]> = {
   student: [
     { href: "/student/main/student-nomination-form", label: "เสนอรายชื่อนิสิตดีเด่น", icon: Icons.Badge },
-    { href: "/student/main/trace-nomination", label: "ติดตามสถานะ", icon: Icons.Track },
-    { href: "/student/main/nomination-history", label: "ประวัติการเสนอ", icon: Icons.History },
+    { href: "/student/main/student-trace-and-details", label: "ติดตามและดูรายละเอียด", icon: Icons.Track },
   ],
   head_of_department: [
     { href: "/head-of-department/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
@@ -160,54 +154,71 @@ const MENU_CONFIG: Record<string, MenuItemType[]> = {
     { href: "/chancellor/dashboard", label: "หน้าหลัก", icon: Icons.Badge },
   ],
   organization: [
-    { href: "/organization/dashboard", label: "หน้าหลัก", icon: Icons.Badge },
+    { href: "/organization/main/organization-nomination-form", label: "เสนอรายชื่อนิสิตดีเด่น", icon: Icons.Badge },
+    { href: "/organization/main/organization-trace-and-details", label: "ติดตามและดูรายละเอียด", icon: Icons.Track },
   ]
 };
 
 // ==========================================
-// 3. Sub-Components
+// 3. Ultra-Premium UI Sub-Components
 // ==========================================
 
 function MenuItem({ href, label, icon, active, collapsed, onClick, index }: any) {
   return (
-    <Link href={href} onClick={onClick} className="relative block mb-1">
+    <Link href={href} onClick={onClick} className="relative block mb-1.5 outline-none group/menu">
       <motion.div
-        initial={{ opacity: 0, x: -10 }}
+        initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: index * 0.05, duration: 0.3 }}
+        transition={{ delay: index * 0.05, type: "spring", stiffness: 300, damping: 24 }}
         className={`
-            group flex items-center px-3 py-3 rounded-2xl text-sm font-medium transition-all duration-300 cursor-pointer overflow-hidden relative
-            ${active 
-                ? 'text-emerald-700 font-bold' 
-                : 'text-gray-500 hover:text-emerald-700 hover:bg-emerald-50/50'
-            }
-            ${collapsed ? 'justify-center' : 'gap-3'}
+            flex items-center px-3.5 py-3 rounded-[16px] text-[13.5px] font-semibold transition-all duration-500 cursor-pointer overflow-hidden relative z-10
+            ${active ? 'text-white shadow-[0_6px_16px_-4px_rgba(20,184,166,0.4)]' : 'text-slate-500 hover:text-teal-800'}
+            ${collapsed ? 'justify-center' : 'gap-3.5'}
         `}
-        title={collapsed ? label : ""}
       >
+        {/* Magic Glass Active Background */}
         {active && (
           <motion.div
-            layoutId="active-menu-bg"
-            className="absolute inset-0 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-100/50"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          />
+            layoutId="active-menu-bg-magic"
+            className="absolute inset-0 bg-gradient-to-r from-teal-500 via-emerald-500 to-teal-400 rounded-[16px] -z-10"
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+          >
+             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
+          </motion.div>
         )}
 
-        {active && (
-            <motion.div 
-                layoutId="active-pill"
-                className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-emerald-500 rounded-r-full"
-            />
+        {/* Hover Highlight (Non-active) */}
+        {!active && (
+            <div className="absolute inset-0 bg-slate-100/60 rounded-[16px] opacity-0 group-hover/menu:opacity-100 transition-opacity duration-300 -z-10 backdrop-blur-md"></div>
         )}
 
-        <span className={`relative z-10 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 ${active ? 'text-emerald-600' : 'text-gray-400 group-hover:text-emerald-600'}`}>
+        {/* Icon */}
+        <span className={`relative z-10 shrink-0 transition-transform duration-500 ease-out 
+            ${active ? 'text-white drop-shadow-md scale-110' : 'text-slate-400 group-hover/menu:text-teal-500 group-hover/menu:scale-110 group-hover/menu:rotate-[4deg]'}
+        `}>
           {icon}
         </span>
 
+        {/* Text */}
         {!collapsed && (
-          <span className="relative z-10 truncate tracking-wide">{label}</span>
+          <span className="relative z-10 truncate tracking-wide flex-1">
+              {label}
+          </span>
+        )}
+
+        {/* Chevron for active state */}
+        {!collapsed && active && (
+            <motion.div initial={{ opacity:0, x: -10 }} animate={{ opacity:1, x: 0 }} className="shrink-0 text-white/80">
+                <ChevronRight className="w-3.5 h-3.5 stroke-[3px]" />
+            </motion.div>
+        )}
+
+        {/* Tooltip for Collapsed State */}
+        {collapsed && (
+            <div className="absolute left-[110%] ml-4 px-3 py-1.5 bg-slate-800 text-white text-[11px] font-bold rounded-xl opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all duration-300 whitespace-nowrap shadow-xl z-50">
+                {label}
+                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
+            </div>
         )}
       </motion.div>
     </Link>
@@ -216,26 +227,58 @@ function MenuItem({ href, label, icon, active, collapsed, onClick, index }: any)
 
 const ProfileSkeleton = ({ isCollapsed }: { isCollapsed: boolean }) => (
   <div className={`flex items-center gap-3 animate-pulse ${isCollapsed ? 'justify-center' : 'w-full'}`}>
-    <div className="w-10 h-10 bg-gray-200 rounded-full shrink-0"></div>
+    <div className="w-10 h-10 bg-slate-200 rounded-xl shrink-0"></div>
     {!isCollapsed && (
       <div className="flex-1 space-y-2 min-w-0">
-        <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-        <div className="h-2 bg-gray-200 rounded w-1/2"></div>
+        <div className="h-3 bg-slate-200 rounded-full w-2/3"></div>
+        <div className="h-2 bg-slate-200 rounded-full w-1/2"></div>
       </div>
     )}
   </div>
 );
+
+function getOrganizationData(data: UserProfileData): OrganizationData | null {
+  return data.organization_data || data.Organization || data.organization || null;
+}
+
+// 🎴 Profile Info Row - Card Design 
+// ✅ เพิ่มชนิด : Variants ตรงนี้เพื่อให้ TypeScript เข้าใจโครงสร้างอย่างถูกต้อง
+const itemVariants: Variants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+};
+
+function ProfileInfoRow({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <motion.div 
+      variants={itemVariants}
+      whileHover={{ scale: 1.02, y: -2 }}
+      className="relative flex items-center gap-4 p-4 sm:p-5 bg-white/70 backdrop-blur-xl rounded-[24px] border border-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgba(20,184,166,0.08)] transition-all duration-300 group overflow-hidden"
+    >
+      <div className="absolute top-0 -left-[100%] w-1/2 h-full bg-gradient-to-r from-transparent via-white/60 to-transparent -skew-x-12 group-hover:animate-shine z-0"></div>
+      
+      <div className="relative z-10 w-[48px] h-[48px] rounded-[16px] bg-gradient-to-br from-teal-50 to-emerald-50 border border-teal-100/50 flex items-center justify-center text-teal-600 shadow-[inset_0_2px_10px_rgba(255,255,255,1),0_4px_12px_rgba(20,184,166,0.1)] group-hover:scale-110 group-hover:rotate-[-5deg] transition-all duration-500 shrink-0">
+        {icon}
+      </div>
+      <div className="relative z-10 overflow-hidden flex-1">
+        <p className="text-[10px] text-teal-600/70 uppercase font-black tracking-[0.2em] mb-1">{label}</p>
+        <p className="text-[14px] text-slate-800 font-extrabold truncate leading-snug drop-shadow-sm">{value}</p>
+      </div>
+    </motion.div>
+  );
+}
 
 function ProfileModal({ isOpen, onClose, data, faculties, departments, campuses }: { isOpen: boolean; onClose: () => void; data: UserProfileData | null; faculties: Faculty[]; departments: Department[]; campuses: Campus[] }) {
   if (!isOpen || !data) return null;
 
   const roleKey = getRoleKey(data.role_id);
   const roleNameTH = ROLE_NAMES_TH[roleKey] || roleKey;
-  
-  // ✅ ดึงชื่อวิทยาเขตจาก API Data
+  const isOrganization = roleKey === "organization" || data.role_id === 9;
+
   const campus = campuses.find(c => c.campus_id === data.campus_id);
   const campusName = campus ? campus.campus_name : "ไม่ระบุวิทยาเขต";
 
+  const orgData = getOrganizationData(data);
   const student = data.Student || data.student || data.student_data;
   const studentNumber = student?.student_number;
 
@@ -255,107 +298,103 @@ function ProfileModal({ isOpen, onClose, data, faculties, departments, campuses 
 
   return (
     <AnimatePresence>
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+            <style dangerouslySetInnerHTML={{__html: `
+                @keyframes gradient-xy { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+                .animate-gradient-xy { background-size: 400% 400%; animation: gradient-xy 12s ease infinite; }
+                @keyframes shine { 100% { left: 200%; } }
+                .animate-shine { animation: shine 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+            `}} />
+
             <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-slate-900/30 backdrop-blur-md"
+                initial={{ opacity: 0, backdropFilter: "blur(0px)" }}
+                animate={{ opacity: 1, backdropFilter: "blur(12px)" }}
+                exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
+                transition={{ duration: 0.4 }}
+                className="absolute inset-0 bg-slate-900/30"
                 onClick={onClose}
             />
             
             <motion.div
-                initial={{ scale: 0.85, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                className="relative bg-white rounded-[32px] shadow-2xl w-full max-w-sm overflow-hidden z-10 border border-white/50"
+                initial={{ scale: 0.9, opacity: 0, y: 30, rotateX: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0, rotateX: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: -20 }}
+                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                className="relative bg-slate-50/90 backdrop-blur-2xl rounded-[40px] shadow-[0_0_0_1px_rgba(255,255,255,0.4),0_30px_60px_-15px_rgba(0,0,0,0.3)] w-full max-w-md overflow-hidden z-10 flex flex-col max-h-[92vh] perspective-[1000px]"
             >
-                <div className="h-32 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-full opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-                    <button 
-                        onClick={onClose} 
-                        className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/40 text-white rounded-full transition-all backdrop-blur-sm"
-                    >
-                        {Icons.Close}
-                    </button>
-                </div>
+                <button 
+                    onClick={onClose} 
+                    className="absolute top-5 right-5 p-2 bg-black/10 hover:bg-black/20 text-white rounded-full transition-all duration-300 backdrop-blur-md shadow-sm hover:scale-110 hover:rotate-90 z-50"
+                >
+                    <X className="w-5 h-5 stroke-[2.5px]" />
+                </button>
 
-                <div className="px-8 pb-8 relative">
-                    <div className="-mt-14 mb-5 flex justify-center">
-                        <div className="w-28 h-28 rounded-full p-1.5 bg-white shadow-xl">
-                            <div className="w-full h-full rounded-full bg-gray-50 overflow-hidden relative border border-gray-100">
-                                {imageUrl ? (
-                                    <img 
-                                        src={imageUrl} 
-                                        alt="Profile" 
-                                        className="w-full h-full object-cover"
-                                        onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
-                                    />
-                                ) : null}
-                                <div className={`w-full h-full flex items-center justify-center bg-emerald-50 text-emerald-600 text-4xl font-bold ${imageUrl ? 'hidden' : ''}`}>
-                                    {data.firstname ? data.firstname.charAt(0) : "U"}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div className="overflow-y-auto custom-scrollbar flex-1 w-full relative">
                     
-                    <div className="text-center mb-8">
-                        <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">{data.firstname} {data.lastname}</h2>
-                        <div className="flex justify-center gap-2 mt-2">
-                            <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full">
-                                {roleNameTH}
-                            </span>
-                        </div>
-                        <p className="mt-3 text-sm text-gray-500 font-medium">{campusName}</p>
+                    <div className="h-[150px] relative overflow-hidden shrink-0 animate-gradient-xy bg-gradient-to-br from-teal-400 via-emerald-600 to-cyan-500">
+                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/noise-pattern-with-subtle-cross-lines.png')] opacity-20 mix-blend-overlay"></div>
+                        <div className="absolute -top-10 -right-10 w-48 h-48 bg-teal-300 rounded-full blur-[50px] mix-blend-lighten opacity-60"></div>
+                        <div className="absolute top-20 -left-10 w-40 h-40 bg-emerald-300 rounded-full blur-[40px] mix-blend-lighten opacity-50"></div>
                     </div>
 
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
-                            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                            </div>
-                            <div className="overflow-hidden">
-                                <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wide">อีเมลมหาวิทยาลัย</p>
-                                <p className="text-sm text-gray-800 font-bold truncate">{data.email}</p>
-                            </div>
+                    <div className="px-6 sm:px-8 pb-8 relative">
+                        <div className="-mt-[65px] mb-5 flex justify-center relative z-20">
+                            <motion.div 
+                                initial={{ scale: 0, y: 20 }} animate={{ scale: 1, y: 0 }} transition={{ type:"spring", delay: 0.1, stiffness: 300 }}
+                                className="w-[120px] h-[120px] rounded-[32px] p-2 bg-white/60 backdrop-blur-xl shadow-[0_12px_40px_-10px_rgba(20,184,166,0.4)] rotate-3 hover:rotate-0 transition-transform duration-500"
+                            >
+                                <div className="w-full h-full rounded-[24px] overflow-hidden relative border-2 border-white shadow-inner bg-gradient-to-br from-teal-50 to-slate-100">
+                                    {imageUrl ? (
+                                        <img src={imageUrl} alt="Profile" className="w-full h-full object-cover scale-110 hover:scale-100 transition-transform duration-700" onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                                    ) : null}
+                                    <div className={`w-full h-full flex items-center justify-center bg-gradient-to-br from-teal-100 via-emerald-50 to-cyan-50 text-teal-600 text-5xl font-black drop-shadow-sm ${imageUrl ? 'hidden' : ''}`}>
+                                        {isOrganization ? (orgData?.organization_name?.charAt(0) ?? "O") : (data.firstname ? data.firstname.charAt(0) : "U")}
+                                    </div>
+                                </div>
+                            </motion.div>
                         </div>
                         
-                        {studentNumber && (
-                            <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
-                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
-                                    {Icons.User}
+                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="text-center mb-8">
+                            <h2 className="text-[26px] font-black text-transparent bg-clip-text bg-gradient-to-r from-slate-800 to-slate-600 tracking-tight leading-tight px-2">
+                              {isOrganization ? (orgData?.organization_name || data.firstname || "องค์กรภายนอก") : `${data.firstname} ${data.lastname}`}
+                            </h2>
+                            
+                            <div className="flex flex-col items-center justify-center gap-2.5 mt-3">
+                                <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full shadow-[0_4px_14px_rgba(20,184,166,0.25)]">
+                                    <Sparkles className="w-3.5 h-3.5 text-white" />
+                                    <span className="text-[11px] font-black uppercase tracking-[0.15em] text-white">
+                                        {roleNameTH}
+                                    </span>
                                 </div>
-                                <div className="overflow-hidden">
-                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wide">รหัสนิสิต</p>
-                                    <p className="text-sm text-gray-800 font-mono font-bold tracking-wider">{studentNumber}</p>
-                                </div>
+                                <span className="text-[12px] text-slate-500 font-bold flex items-center gap-1.5 bg-white/60 backdrop-blur-sm px-4 py-1.5 rounded-xl border border-white shadow-sm mt-1">
+                                    <MapPin className="w-3.5 h-3.5 text-teal-500" />
+                                    {campusName}
+                                </span>
                             </div>
-                        )}
+                        </motion.div>
 
-                        {facultyName && (
-                            <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
-                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
-                                    {Icons.School}
-                                </div>
-                                <div className="overflow-hidden">
-                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wide">คณะ</p>
-                                    <p className="text-sm text-gray-800 font-bold truncate">{facultyName}</p>
-                                </div>
-                            </div>
-                        )}
-
-                        {departmentName && (
-                            <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 hover:border-emerald-100 transition-colors">
-                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-gray-100 shrink-0">
-                                    {Icons.BookOpen}
-                                </div>
-                                <div className="overflow-hidden">
-                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wide">สาขาวิชา</p>
-                                    <p className="text-sm text-gray-800 font-bold truncate">{departmentName}</p>
-                                </div>
-                            </div>
-                        )}
+                        <motion.div 
+                            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.1, delayChildren: 0.3 } } }}
+                            initial="hidden" animate="visible"
+                            className="space-y-3 relative z-10"
+                        >
+                            {isOrganization ? (
+                              <>
+                                <ProfileInfoRow icon={<Building2 {...iconProps} />} label="ชื่อองค์กร" value={orgData?.organization_name || "-"} />
+                                <ProfileInfoRow icon={<Award {...iconProps} />} label="ประเภทของหน่วยงาน" value={orgData?.organization_type || "-"} />
+                                <ProfileInfoRow icon={<Phone {...iconProps} />} label="เบอร์โทรศัพท์" value={orgData?.organization_phone || "-"} />
+                                <ProfileInfoRow icon={<Mail {...iconProps} />} label="อีเมล" value={data.email || "-"} />
+                                <ProfileInfoRow icon={<MapPin {...iconProps} />} label="ที่ตั้งหน่วยงาน" value={orgData?.organization_location || "-"} />
+                              </>
+                            ) : (
+                              <>
+                                <ProfileInfoRow icon={<Mail {...iconProps} />} label="อีเมลมหาวิทยาลัย" value={data.email || "-"} />
+                                {studentNumber && <ProfileInfoRow icon={<User {...iconProps} />} label="รหัสนิสิต" value={studentNumber} />}
+                                {facultyName && <ProfileInfoRow icon={<Landmark {...iconProps} />} label="คณะ" value={facultyName} />}
+                                {departmentName && <ProfileInfoRow icon={<BookOpen {...iconProps} />} label="สาขาวิชา" value={departmentName} />}
+                              </>
+                            )}
+                        </motion.div>
                     </div>
                 </div>
             </motion.div>
@@ -383,17 +422,12 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
   const roleKey = getRoleKey(user?.role_id);
   const menuItems = MENU_CONFIG[roleKey] || [];
 
-  const isActive = (path: string) => {
-    return pathname === path || (path !== "/" && pathname.startsWith(path));
-  };
-
+  const isActive = (path: string) => pathname === path || (path !== "/" && pathname.startsWith(path));
   const footerImageUrl = getProfileImageUrl(fullProfile?.image_path);
 
-  // Fetch Full Profile & Master Data
   useEffect(() => {
     const fetchData = async () => {
         if (!user) return;
-        
         setLoading(true);
         try {
             const token = localStorage.getItem("token");
@@ -407,21 +441,15 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
                 api.get("/campus", { headers })
             ]);
 
-            if(resMe.data && resMe.data.user) {
-                setFullProfile(resMe.data.user);
-            }
+            if(resMe.data && resMe.data.user) setFullProfile(resMe.data.user);
             if(resFac.data) setFaculties(resFac.data.data || resFac.data);
             if(resDept.data) setDepartments(resDept.data.data || resDept.data);
             if(resCampus.data) setCampuses(resCampus.data.data || resCampus.data);
 
-            // ✅ ดึงชื่อ Role ภาษาไทยจาก API
             const rolesList = resRoles.data.data || [];
             const currentRole = rolesList.find((r: any) => r.role_id === user.role_id);
-            if (currentRole) {
-                setRoleNameTH(currentRole.role_name_th);
-            } else {
-                setRoleNameTH(ROLE_NAMES_TH[getRoleKey(user.role_id)] || "");
-            }
+            if (currentRole) setRoleNameTH(currentRole.role_name_th);
+            else setRoleNameTH(ROLE_NAMES_TH[getRoleKey(user.role_id)] || "");
 
         } catch (error) {
             console.error("Failed to fetch data:", error);
@@ -431,51 +459,44 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
             setLoading(false);
         }
     };
-
     fetchData();
   }, [user]);
 
   const confirmLogout = () => {
     Swal.fire({
-      title: 'ยืนยันการออกจากระบบ?',
-      text: "คุณต้องการออกจากระบบใช่หรือไม่",
+      title: 'ออกจากระบบ',
+      text: "คุณแน่ใจหรือไม่ว่าต้องการออกจากระบบ?",
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#afafaf',
+      confirmButtonColor: '#0f766e',
+      cancelButtonColor: '#f1f5f9',
       confirmButtonText: 'ออกจากระบบ',
-      cancelButtonText: 'ยกเลิก',
+      cancelButtonText: '<span class="text-slate-600">ยกเลิก</span>',
       customClass: {
-         popup: 'rounded-3xl shadow-2xl font-sans',
-         title: 'text-xl font-bold text-gray-800',
-         confirmButton: 'rounded-xl px-6 py-3 font-bold shadow-lg shadow-red-200 hover:shadow-red-300 transition-all',
-         cancelButton: 'rounded-xl px-6 py-3 font-bold text-gray-600 hover:bg-gray-200 transition-all'
+         popup: 'rounded-[32px] shadow-[0_20px_60px_-10px_rgba(0,0,0,0.15)] font-sans border border-white/50 backdrop-blur-xl bg-white/90',
+         title: 'text-[22px] font-black text-slate-800 tracking-tight',
+         confirmButton: 'rounded-[14px] px-7 py-3 font-bold shadow-[0_8px_20px_rgba(15,118,110,0.25)] hover:shadow-[0_12px_24px_rgba(15,118,110,0.35)] hover:-translate-y-1 transition-all text-white',
+         cancelButton: 'rounded-[14px] px-7 py-3 font-bold text-slate-600 hover:bg-slate-200 transition-all'
       }
     }).then((result) => {
-      if (result.isConfirmed) {
-        logout();
-      }
+      if (result.isConfirmed) logout();
     });
   };
 
   return (
     <>
       <ProfileModal 
-        isOpen={isProfileOpen} 
-        onClose={() => setIsProfileOpen(false)} 
-        data={fullProfile} 
-        faculties={faculties} 
-        departments={departments} 
-        campuses={campuses}
+        isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} 
+        data={fullProfile} faculties={faculties} departments={departments} campuses={campuses}
       />
 
       <motion.aside
         initial={false}
-        animate={{ width: isCollapsed ? 90 : 280 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30, mass: 0.8 }}
-        className="bg-white h-screen fixed left-0 top-0 flex flex-col z-50 border-r border-gray-100 shadow-[4px_0_40px_rgba(0,0,0,0.03)] overflow-hidden"
+        animate={{ width: isCollapsed ? 86 : 280 }}
+        transition={{ type: "spring", stiffness: 350, damping: 30, mass: 0.8 }}
+        className="bg-slate-50/80 backdrop-blur-3xl h-screen fixed left-0 top-0 flex flex-col z-50 border-r border-slate-200/50 shadow-[8px_0_40px_rgba(0,0,0,0.02)] overflow-hidden"
       >
-        <div className="h-[90px] flex items-center justify-between px-6 shrink-0 relative bg-gradient-to-b from-white to-gray-50/50">
+        <div className="h-[90px] flex items-center justify-between px-5 shrink-0 relative z-20 bg-transparent">
           <AnimatePresence>
             {!isCollapsed && (
               <motion.div
@@ -484,15 +505,13 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
                 exit={{ opacity: 0, x: -10, transition: { duration: 0.1 } }}
                 className="flex items-center gap-3 overflow-hidden whitespace-nowrap"
               >
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-200">
-                   <svg width="24" height="24" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M20 0L37.3205 10V30L20 40L2.67949 30V10L20 0Z" fill="white" fillOpacity="0.2"/>
-                      <path d="M20 5L32.9904 12.5V27.5L20 35L7.00962 27.5V12.5L20 5Z" fill="white"/>
-                   </svg>
+                <div className="w-11 h-11 rounded-[14px] bg-gradient-to-br from-teal-500 via-emerald-500 to-teal-400 flex items-center justify-center text-white shrink-0 shadow-[0_8px_20px_rgba(20,184,166,0.3)] border border-teal-300 relative overflow-hidden group/logo">
+                   <div className="absolute inset-0 bg-white/20 -skew-x-12 -translate-x-full group-hover/logo:animate-shine"></div>
+                   <Award className="w-[22px] h-[22px] stroke-[2.5px] relative z-10" />
                 </div>
-                <div>
-                   <h1 className="font-black text-base text-gray-800 tracking-tight leading-none">ระบบนิสิตดีเด่น</h1>
-                   <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">มหาวิทยาลัยเกษตรศาสตร์</span>
+                <div className="flex flex-col">
+                   <h1 className="font-black text-[16.5px] text-transparent bg-clip-text bg-gradient-to-r from-slate-800 to-slate-600 tracking-tight leading-tight">ระบบนิสิตดีเด่น</h1>
+                   <span className="text-[9px] text-teal-600 font-extrabold uppercase tracking-[0.15em] mt-0.5">มหาวิทยาลัยเกษตรศาสตร์</span>
                 </div>
               </motion.div>
             )}
@@ -500,34 +519,32 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
 
           <button
             onClick={toggleSidebar}
-            className={`p-2.5 rounded-xl text-gray-400 hover:bg-white hover:text-emerald-600 hover:shadow-md transition-all absolute ${isCollapsed ? 'left-1/2 -translate-x-1/2' : 'right-4'}`}
+            className={`p-2.5 rounded-xl text-slate-400 bg-white border border-slate-200 hover:bg-teal-50 hover:text-teal-600 hover:border-teal-200 hover:shadow-[0_6px_12px_rgba(20,184,166,0.12)] transition-all duration-300 absolute ${isCollapsed ? 'left-1/2 -translate-x-1/2' : 'right-4'} shadow-sm`}
           >
-            {isCollapsed ? Icons.Menu : Icons.MenuClose}
+            {isCollapsed ? <Menu className="w-[18px] h-[18px] stroke-[2.5px]" /> : <X className="w-[18px] h-[18px] stroke-[2.5px]" />}
           </button>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
-          {menuItems.map((item, index) => (
-            <MenuItem
-              key={item.href}
-              index={index}
-              href={item.href}
-              label={item.label}
-              active={isActive(item.href)}
-              icon={item.icon}
-              collapsed={isCollapsed}
-            />
-          ))}
-        </nav>
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-4 z-10 relative">
+          <div className="absolute top-20 left-10 w-32 h-32 bg-teal-50/50 rounded-full blur-3xl -z-10"></div>
+          <nav className="space-y-1">
+            {menuItems.map((item, index) => (
+              <MenuItem
+                key={item.href} index={index} href={item.href} label={item.label}
+                active={isActive(item.href)} icon={item.icon} collapsed={isCollapsed}
+              />
+            ))}
+          </nav>
+        </div>
 
-        <div className="p-5 border-t border-gray-100 bg-gray-50/30 z-10 shrink-0">
+        <div className="p-4 z-20 shrink-0">
           <div
             onClick={() => !loading && setIsProfileOpen(true)}
             className={`
-                group relative flex items-center rounded-2xl cursor-pointer transition-all duration-300 border
+                group relative flex items-center rounded-[24px] cursor-pointer transition-all duration-500 bg-white/90 backdrop-blur-xl border border-white shadow-[0_6px_20px_rgba(0,0,0,0.04)]
                 ${isCollapsed 
-                    ? 'justify-center p-3 bg-white border-gray-200 hover:border-emerald-300' 
-                    : 'p-3 bg-white border-gray-200 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-100/50 hover:-translate-y-1'
+                    ? 'justify-center p-2.5 hover:shadow-[0_8px_24px_rgba(20,184,166,0.15)] hover:border-teal-200' 
+                    : 'p-3 hover:shadow-[0_16px_30px_-8px_rgba(20,184,166,0.25)] hover:border-teal-200 hover:-translate-y-1'
                 }
             `}
           >
@@ -536,35 +553,31 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
             ) : (
               <>
                 <div className="relative shrink-0">
-                   <div className="w-10 h-10 rounded-full p-[2px] bg-gradient-to-br from-emerald-400 to-cyan-500 shadow-sm">
-                      <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
+                   <div className="w-[44px] h-[44px] rounded-[16px] p-[2px] bg-gradient-to-br from-teal-300 via-emerald-400 to-cyan-300 shadow-sm transition-transform duration-500 group-hover:scale-105 group-hover:rotate-3">
+                      <div className="w-full h-full rounded-[14px] bg-white flex items-center justify-center overflow-hidden">
                           {footerImageUrl ? (
-                              <img 
-                                src={footerImageUrl} 
-                                alt="User" 
-                                className="w-full h-full object-cover" 
-                                onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
-                              />
+                              <img src={footerImageUrl} alt="User" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
                           ) : null}
-                          
-                          <span className={`text-sm font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-500 to-cyan-600 ${footerImageUrl ? 'hidden' : ''}`}>
-                            {fullProfile?.firstname?.charAt(0) || 'U'}
+                          <span className={`text-[16px] font-black text-transparent bg-clip-text bg-gradient-to-br from-teal-600 to-emerald-600 drop-shadow-sm ${footerImageUrl ? 'hidden' : ''}`}>
+                            {roleKey === "organization" || user?.role_id === 9
+                              ? (getOrganizationData(fullProfile!)?.organization_name?.charAt(0) ?? "O")
+                              : (fullProfile?.firstname?.charAt(0) || 'U')
+                            }
                           </span>
                       </div>
                    </div>
-                   <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
+                   <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-[2.5px] border-white rounded-full shadow-[0_0_6px_rgba(16,185,129,0.5)]"></div>
                 </div>
 
                 {!isCollapsed && (
-                  <motion.div 
-                    initial={{ opacity: 0, width: 0 }} 
-                    animate={{ opacity: 1, width: "auto" }} 
-                    className="ml-3 flex-1 min-w-0"
-                  >
-                    <p className="text-sm font-bold text-gray-700 truncate group-hover:text-emerald-700 transition-colors">
-                      {fullProfile?.firstname} {fullProfile?.lastname}
+                  <motion.div initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} className="ml-3 flex-1 min-w-0">
+                    <p className="text-[14px] font-black text-slate-800 truncate group-hover:text-teal-700 transition-colors">
+                      {roleKey === "organization" || user?.role_id === 9
+                        ? (getOrganizationData(fullProfile!)?.organization_name || fullProfile?.firstname || "หน่วยงานภายนอก")
+                        : `${fullProfile?.firstname} ${fullProfile?.lastname}`
+                      }
                     </p>
-                    <p className="text-[10px] text-gray-400 truncate font-bold uppercase tracking-wider">
+                    <p className="text-[10px] text-slate-400 truncate font-extrabold uppercase tracking-widest mt-0.5">
                       {roleNameTH}
                     </p>
                   </motion.div>
@@ -573,10 +586,10 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
                 {!isCollapsed && (
                    <button 
                       onClick={(e) => { e.stopPropagation(); confirmLogout(); }}
-                      className="ml-1 p-2 rounded-xl text-gray-300 hover:bg-red-50 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                      className="ml-1 p-2 rounded-[12px] text-slate-300 hover:bg-rose-50 hover:text-rose-500 hover:shadow-inner border border-transparent transition-all duration-300 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0"
                       title="ออกจากระบบ"
                    >
-                      {Icons.Logout}
+                      <LogOut className="w-[18px] h-[18px] stroke-[2.5px]" />
                    </button>
                 )}
               </>
