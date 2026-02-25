@@ -1,16 +1,12 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import axios from "axios";
+import { api } from "@/lib/axios"; // ✅ เปลี่ยนมาใช้ api จาก axios เพื่อจัดการ token อัตโนมัติ
 import Swal from "sweetalert2";
-// import StaffDetailModal from "@/components/staff-detail-modals"; 
 
 // ==========================================
 // 0. Configuration & Service Layer
 // ==========================================
-
-const USE_MOCK_DATA = true; // Set FALSE to use Real API
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
 
 type CommitteeRole = "none" | "committee" | "chairman";
 
@@ -31,41 +27,44 @@ interface MasterOption {
   name: string;
 }
 
-// --- Mock Data ---
-const MOCK_STAFF: Staff[] = [
-  { id: 1, name: "ศ.ดร. สมเกียรติ ตั้งใจ", faculty: "คณะวิศวกรรมศาสตร์", department: "วิศวกรรมคอมพิวเตอร์", role: "chairman", email: "somkiat@ku.th", position: "ศาสตราจารย์" },
-  { id: 2, name: "ผศ.ดร. นุดี มีสุข", faculty: "คณะวิทยาศาสตร์", department: "เคมี", role: "committee", email: "nudee@ku.th", position: "ผู้ช่วยศาสตราจารย์" },
-  { id: 3, name: "รศ. มานะ อดทน", faculty: "คณะเกษตร", department: "พืชไร่", role: "committee", email: "mana@ku.th", position: "รองศาสตราจารย์" },
-  { id: 4, name: "อ. ใจดี สู้เสือ", faculty: "คณะมนุษยศาสตร์", department: "ภาษาอังกฤษ", role: "none", email: "jaidee@ku.th", position: "อาจารย์" },
-  { id: 5, name: "ดร. วีระ กล้าหาญ", faculty: "คณะศึกษาศาสตร์", department: "พลศึกษา", role: "none", email: "weera@ku.th", position: "อาจารย์" },
-  { id: 6, name: "ผศ. ปิติ ยินดี", faculty: "คณะบริหารธุรกิจ", department: "การตลาด", role: "committee", email: "piti@ku.th", position: "ผู้ช่วยศาสตราจารย์" },
-  { id: 7, name: "อ. สุดา งามตา", faculty: "คณะประมง", department: "เพาะเลี้ยงสัตว์น้ำ", role: "none", email: "suda@ku.th", position: "อาจารย์" }
-];
-
 // --- Service Object ---
 const staffService = {
-  getStaffList: async () => {
-    if (USE_MOCK_DATA) {
-      await new Promise(r => setTimeout(r, 800)); // Simulate delay
-      return MOCK_STAFF;
-    } else {
-      try {
-        const response = await axios.get(`${API_BASE_URL}/staff/list`);
-        return response.data.data || [];
-      } catch (error) {
-        throw error;
-      }
+  getStaffList: async (): Promise<Staff[]> => {
+    try {
+      // ✅ เรียก API ผู้ใช้ทั้งหมด
+      const response = await api.get("/users");
+      const users = response.data || [];
+      
+      // ✅ กรองเอานิสิต (1) และองค์กร (9) ออก เหลือแต่บุคลากร
+      const staffs = users.filter((u: any) => u.role_id !== 1 && u.role_id !== 9);
+      
+      return staffs.map((u: any) => {
+        let role: CommitteeRole = "none";
+        // ✅ แมป RoleID 6 = คณะกรรมการ, 7 = ประธานคณะกรรมการ
+        if (u.role_id === 7) role = "chairman";
+        else if (u.role_id === 6) role = "committee";
+
+        return {
+          id: u.user_id,
+          name: `${u.prefix || ''}${u.firstname} ${u.lastname}`.trim(),
+          faculty: "ไม่ระบุ", // ⚠️ ข้อมูล Faculty ไม่มีใน API /users ปัจจุบันของ Backend
+          department: "ไม่ระบุ", // ⚠️ ข้อมูล Department ไม่มีใน API /users ปัจจุบันของ Backend
+          role: role,
+          email: u.email,
+          position: "บุคลากร"
+        };
+      });
+    } catch (error) {
+      console.error("Failed to fetch staff list:", error);
+      throw error;
     }
   },
 
   setupCommittee: async (payload: { chairman_id: number; committee_ids: number[] }) => {
-    if (USE_MOCK_DATA) {
-      await new Promise(r => setTimeout(r, 1000)); // Simulate delay
-      return { success: true, message: "Mock setup successful" };
-    } else {
-      const response = await axios.post(`${API_BASE_URL}/staff/committee/setup`, payload);
-      return response.data;
-    }
+    // 🚨 คำเตือน: ใน Backend ยังไม่มี Route สำหรับบันทึก Committee!
+    // คุณจะต้องไปเพิ่ม API ใน Go ให้รับ POST /committee/setup เพื่อนำไปบันทึกลงตาราง Committee
+    const response = await api.post("/committee/setup", payload);
+    return response.data;
   }
 };
 
@@ -73,6 +72,7 @@ const staffService = {
 // 1. Static Data
 // ==========================================
 
+// เนื่องจาก Backend ยังไม่มีข้อมูลคณะติดมากับ User จึงขอ Mock คณะไว้ชั่วคราวสำหรับการ Filter
 const STATIC_FACULTIES: MasterOption[] = [
   { id: 1, name: "คณะวิทยาศาสตร์" },
   { id: 2, name: "คณะวิศวกรรมศาสตร์" },
@@ -126,8 +126,7 @@ export default function CommitteeSetupPage() {
         const data = await staffService.getStaffList();
         setStaffList(data);
       } catch (error) {
-        console.error("Fetch Error:", error);
-        Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: 'กรุณาลองใหม่อีกครั้ง' });
+        Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: 'กรุณาลองใหม่อีกครั้ง หรือตรวจสอบหลังบ้าน' });
       } finally {
         setLoading(false);
       }
@@ -154,7 +153,7 @@ export default function CommitteeSetupPage() {
     setStaffList(prev => {
       let updated = [...prev];
       
-      // Logic: ถ้าเลือกประธานคนใหม่ ให้ปลดประธานคนเก่าเป็นกรรมการ หรือ none
+      // ถ้าเลือกประธานคนใหม่ ให้ปลดประธานคนเก่าเป็น 'none'
       if (newRole === 'chairman') {
         updated = updated.map(s => s.role === 'chairman' ? { ...s, role: 'none' } : s);
       }
@@ -199,7 +198,7 @@ export default function CommitteeSetupPage() {
       cancelButtonText: 'ยกเลิก'
     });
 
-    // 3. API Call via Service
+    // 3. API Call
     if (result.isConfirmed) {
       setSaving(true);
       try {
@@ -212,9 +211,13 @@ export default function CommitteeSetupPage() {
 
         Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false });
         
-      } catch (error) {
+      } catch (error: any) {
         console.error(error);
-        Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: 'เกิดข้อผิดพลาดที่ระบบ' });
+        // แสดง 404 ให้เห็นชัดๆ ว่ายังไม่มี API หลังบ้าน
+        const errorMsg = error.response?.status === 404 
+          ? 'ยังไม่มี API /api/committee/setup ในฝั่งหลังบ้าน (404 Not Found)' 
+          : 'เกิดข้อผิดพลาดที่ระบบ';
+        Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: errorMsg });
       } finally {
         setSaving(false);
       }
@@ -239,7 +242,6 @@ export default function CommitteeSetupPage() {
           <div>
             <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">แต่งตั้งคณะกรรมการ</h1>
             <p className="text-gray-500 mt-1">
-                {USE_MOCK_DATA && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded mr-2">MOCK MODE</span>}
                 จัดการโครงสร้างคณะกรรมการพิจารณานิสิตดีเด่น
             </p>
           </div>
@@ -326,7 +328,6 @@ export default function CommitteeSetupPage() {
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shadow-sm transition-colors
                             ${staff.role === 'chairman' ? 'bg-gradient-to-br from-orange-400 to-red-500 text-white' : 'bg-gray-200 text-gray-500 group-hover:bg-blue-200 group-hover:text-blue-700'}
                           `}>
-                            {/* Replaced Initials with User Icon */}
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                           </div>
                           <div>
@@ -361,7 +362,6 @@ export default function CommitteeSetupPage() {
                             <option value="committee">กรรมการ</option>
                             <option value="chairman">ประธาน</option>
                           </select>
-                          {/* Custom Arrow Icon */}
                           <div className="absolute right-3 top-2.5 pointer-events-none text-current opacity-60">
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
                           </div>

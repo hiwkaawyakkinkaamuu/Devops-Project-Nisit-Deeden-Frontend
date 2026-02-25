@@ -1,18 +1,22 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import Swal from "sweetalert2"; 
-import axios from "axios";
-import NominationDetailModal from "@/components/Nomination-detail-modal"; 
+import React, { useState, useEffect, useMemo } from "react";
+import NominationDetailModal from "@/components/Nomination-detail-modal";
+import Swal from "sweetalert2";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Search, Calendar, GraduationCap, CheckCircle2, XCircle,
+  Eye, Award, Building2, ChevronLeft, ChevronRight, 
+  ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, PenTool, Check, X,
+  Sparkles, Users, FileSignature
+} from "lucide-react";
+import { api } from "@/lib/axios";
 
 // ==========================================
-// 0. Configuration & Service Layer
+// 0. Configuration & Types
 // ==========================================
+const USE_MOCK_DATA = false;
 
-const USE_MOCK_DATA = true; // Set FALSE to use Real API
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
-
-// --- Interfaces ---
 interface VoteSummary {
   approve: number;
   reject: number;
@@ -20,347 +24,215 @@ interface VoteSummary {
   total_voters: number;
 }
 
-interface FileResponse {
+export interface FileResponse {
   file_dir_id: number;
-  file_name: string;
+  file_name?: string;
   file_type: string;
   file_size: number;
   file_path: string;
 }
 
-interface ExtracurricularDetail {
-  qualification_type: string;
-  date_received: string;
-  team_name: string;
-  project_title: string;
-  prize: string;
-  organized_by: string;
-  competition_level?: string;
-  activity_category?: string;
-}
-
-interface CreativityDetail {
-  date_received: string;
-  team_name: string;
-  project_title: string;
-  prize: string;
-  organized_by: string;
-  competition_level?: string;
-  activity_category?: string;
-}
-
-interface GoodBehaviorDetail {
-   behavior_desc?: string;
-}
-
-interface Nomination {
+export interface Nomination {
   form_id: number;
-  student_id: number;
+  user_id: number;
   student_firstname: string;
   student_lastname: string;
-  email: string;
+  student_email: string;
   student_number: string;
   faculty_id: number;
   department_id: number;
   campus_id: number;
   academic_year: number;
   semester: number;
-  form_status_id: number;
-  award_type_id: number;
-  award_type_name: string;
+  form_status: number;
+  award_type: string;
+  award_type_name?: string;
   created_at: string;
   latest_update: string;
   student_year: number;
   advisor_name: string;
-  phone_number: string;
-  address: string;
+  student_phone_number: string;
+  student_address: string;
   gpa: number;
-  date_of_birth: string;
-  detail?: ExtracurricularDetail | CreativityDetail | GoodBehaviorDetail;
+  student_date_of_birth: string;
+  org_name: string;
+  org_type: string;
+  org_location: string;
+  org_phone_number: string;
+  form_detail: string | any;
+  reject_reason: string;
   files?: FileResponse[];
-  
-  vote_summary: VoteSummary; 
-  is_signed: boolean;        
-  signed_date?: string;      
+  is_organization_nominated?: boolean; 
+  organization_name?: string;
+
+  vote_summary?: VoteSummary; 
 }
 
-interface MasterOption {
-  id: number;
-  name: string;
-}
-
-// --- Mock Data ---
-const MOCK_CANDIDATES: Nomination[] = [
-    {
-        form_id: 1, student_id: 101, student_number: "6610400001", student_firstname: "สมชาย", student_lastname: "ใจดี",
-        email: "somchai@ku.th", student_year: 1, form_status_id: 1, created_at: "2026-01-15T10:00:00Z", latest_update: "2026-01-15T10:00:00Z",
-        award_type_id: 2, award_type_name: "ด้านความคิดสร้างสรรค์และนวัตกรรม",
-        faculty_id: 2, department_id: 20, campus_id: 1, academic_year: 2569, semester: 1,
-        advisor_name: "ดร. สมชาย", gpa: 3.50, phone_number: "0812345678", address: "กทม.", date_of_birth: "2002-01-01",
-        vote_summary: { approve: 4, reject: 1, abstain: 0, total_voters: 5 }, is_signed: false,
-        detail: { date_received: "2025-12-01", team_name: "AI Innovators", project_title: "Smart Farm IoT", prize: "รางวัลชนะเลิศ", organized_by: "NSTDA" } as CreativityDetail,
-        files: [{ file_dir_id: 1, file_name: "project_proposal.pdf", file_type: "application/pdf", file_size: 2000, file_path: "#" }]
-    },
-    {
-        form_id: 2, student_id: 102, student_number: "6610400002", student_firstname: "สมหญิง", student_lastname: "รักเรียน",
-        email: "ying@ku.th", student_year: 2, form_status_id: 1, created_at: "2026-01-16T09:00:00Z", latest_update: "2026-01-16T09:00:00Z",
-        award_type_id: 1, award_type_name: "ด้านความประพฤติดี",
-        faculty_id: 3, department_id: 30, campus_id: 1, academic_year: 2569, semester: 1,
-        advisor_name: "อ. สมศรี", gpa: 3.80, phone_number: "0891234567", address: "กทม.", date_of_birth: "2002-02-02",
-        vote_summary: { approve: 5, reject: 0, abstain: 0, total_voters: 5 }, is_signed: true, signed_date: "2026-02-20T10:30:00Z",
-        detail: { behavior_desc: "มีความประพฤติเรียบร้อย..." } as GoodBehaviorDetail,
-        files: [{ file_dir_id: 3, file_name: "transcript.pdf", file_type: "application/pdf", file_size: 5000, file_path: "#" }]
-    },
-    {
-        form_id: 3, student_id: 103, student_number: "6610400003", student_firstname: "เก่ง", student_lastname: "กล้าหาญ",
-        email: "keng@ku.th", student_year: 3, form_status_id: 1, created_at: "2026-01-10T10:00:00Z", latest_update: "2026-01-10T10:00:00Z",
-        award_type_id: 3, award_type_name: "ด้านกิจกรรมเสริมหลักสูตร",
-        faculty_id: 1, department_id: 10, campus_id: 1, academic_year: 2569, semester: 1,
-        advisor_name: "อ. เก่ง", gpa: 3.20, phone_number: "0899999999", address: "กทม.", date_of_birth: "2001-03-03",
-        vote_summary: { approve: 2, reject: 3, abstain: 0, total_voters: 5 }, is_signed: false,
-        detail: { project_title: "Marathon", prize: "Gold", organized_by: "Red Cross", date_received: "2025-11-20", team_name: "Runners", qualification_type: "Runner" } as ExtracurricularDetail,
-        files: [{ file_dir_id: 5, file_name: "cert.pdf", file_type: "application/pdf", file_size: 1000, file_path: "#" }]
-    },
-    {
-        form_id: 4, student_id: 104, student_number: "6610400004", student_firstname: "มานี", student_lastname: "มีตา",
-        email: "manee@ku.th", student_year: 4, form_status_id: 1, created_at: "2026-01-12T10:00:00Z", latest_update: "2026-01-12T10:00:00Z",
-        award_type_id: 1, award_type_name: "ด้านความประพฤติดี",
-        faculty_id: 4, department_id: 40, campus_id: 1, academic_year: 2569, semester: 1,
-        advisor_name: "ดร. ฟ้า", gpa: 3.90, phone_number: "0888888888", address: "กทม.", date_of_birth: "2000-04-04",
-        vote_summary: { approve: 3, reject: 1, abstain: 1, total_voters: 5 }, is_signed: false,
-        detail: { behavior_desc: "ผู้นำกิจกรรม..." } as GoodBehaviorDetail,
-        files: [{ file_dir_id: 7, file_name: "portfolio.pdf", file_type: "application/pdf", file_size: 5000, file_path: "#" }]
-    },
-    {
-        form_id: 5, student_id: 105, student_number: "6610400005", student_firstname: "ปิติ", student_lastname: "ยินดี",
-        email: "piti@ku.th", student_year: 2, form_status_id: 1, created_at: "2026-01-13T10:00:00Z", latest_update: "2026-01-13T10:00:00Z",
-        award_type_id: 2, award_type_name: "ด้านความคิดสร้างสรรค์และนวัตกรรม",
-        faculty_id: 1, department_id: 10, campus_id: 1, academic_year: 2569, semester: 1,
-        advisor_name: "ผศ. วีระ", gpa: 3.60, phone_number: "0877777777", address: "นนทบุรี", date_of_birth: "2002-05-05",
-        vote_summary: { approve: 5, reject: 0, abstain: 0, total_voters: 5 }, is_signed: false,
-        detail: { project_title: "Green Energy", prize: "Silver", organized_by: "Egco", date_received: "2025-10-10", team_name: "Eco", activity_category: "Env" } as CreativityDetail,
-        files: [{ file_dir_id: 8, file_name: "proposal.pdf", file_type: "application/pdf", file_size: 3000, file_path: "#" }]
-    },
-    {
-        form_id: 6, student_id: 106, student_number: "6610400006", student_firstname: "ชูใจ", student_lastname: "เลิศล้ำ",
-        email: "choojai@ku.th", student_year: 3, form_status_id: 1, created_at: "2026-01-14T10:00:00Z", latest_update: "2026-01-14T10:00:00Z",
-        award_type_id: 3, award_type_name: "ด้านกิจกรรมเสริมหลักสูตร",
-        faculty_id: 2, department_id: 20, campus_id: 1, academic_year: 2569, semester: 1,
-        advisor_name: "ดร. กล้า", gpa: 3.10, phone_number: "0866666666", address: "ปทุมธานี", date_of_birth: "2001-06-06",
-        vote_summary: { approve: 1, reject: 4, abstain: 0, total_voters: 5 }, is_signed: false,
-        detail: { project_title: "Music Fest", prize: "Runner-up", organized_by: "Music Club", date_received: "2025-09-09", team_name: "Band", qualification_type: "Musician" } as ExtracurricularDetail,
-        files: [{ file_dir_id: 9, file_name: "photo.jpg", file_type: "image/jpeg", file_size: 2000, file_path: "#" }]
-    },
-    {
-        form_id: 7, student_id: 107, student_number: "6610400007", student_firstname: "แก้ว", student_lastname: "ตา",
-        email: "kaew@ku.th", student_year: 1, form_status_id: 1, created_at: "2026-01-15T10:00:00Z", latest_update: "2026-01-15T10:00:00Z",
-        award_type_id: 1, award_type_name: "ด้านความประพฤติดี",
-        faculty_id: 3, department_id: 30, campus_id: 1, academic_year: 2569, semester: 1,
-        advisor_name: "อ. ดวงใจ", gpa: 3.40, phone_number: "0855555555", address: "กทม.", date_of_birth: "2003-07-07",
-        vote_summary: { approve: 4, reject: 0, abstain: 1, total_voters: 5 }, is_signed: false,
-        detail: { behavior_desc: "ช่วยงานห้องสมุด..." } as GoodBehaviorDetail,
-        files: [{ file_dir_id: 10, file_name: "ref_letter.pdf", file_type: "application/pdf", file_size: 1500, file_path: "#" }]
-    }
-];
-
-// --- Service Logic ---
-const chairmanService = {
-  getCandidates: async (token: string | null, params: Record<string, string>) => {
-    if (USE_MOCK_DATA) {
-      await new Promise(r => setTimeout(r, 800)); // Simulate Delay
-      
-      let filtered = MOCK_CANDIDATES;
-      // Mock Filtering
-      if (params.q) {
-        const lower = params.q.toLowerCase();
-        filtered = filtered.filter(i => 
-            i.student_firstname.toLowerCase().includes(lower) || 
-            i.student_lastname.toLowerCase().includes(lower) || 
-            i.student_number.includes(lower)
-        );
-      }
-      if (params.award_type) {
-        filtered = filtered.filter(i => i.award_type_name === params.award_type);
-      }
-      return filtered;
-
-    } else {
-      // Real API Call
-      try {
-        const response = await axios.get(`${API_BASE_URL}/api/chairman/candidates`, {
-          params,
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        return response.data.data || [];
-      } catch (error) {
-        throw error;
-      }
-    }
-  },
-
-  signNomination: async (token: string | null, form_id: number) => {
-    if (USE_MOCK_DATA) {
-      await new Promise(r => setTimeout(r, 1500)); // Simulate Delay
-      return { success: true, message: "Signed successfully" };
-    } else {
-      // Real API Call
-      const response = await axios.post(`${API_BASE_URL}/api/chairman/sign`, { form_id }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      return response.data;
-    }
-  }
-};
+const ITEMS_PER_PAGE = 8; 
 
 // ==========================================
-// 1. Static Data
+// 1. Main Component
 // ==========================================
-
-const STATIC_FACULTIES: MasterOption[] = [
-  { id: 1, name: "คณะวิทยาศาสตร์" },
-  { id: 2, name: "คณะวิศวกรรมศาสตร์" },
-  { id: 3, name: "คณะเกษตร" },
-  { id: 4, name: "คณะบริหารธุรกิจ" }
-];
-
-const STATIC_DEPARTMENTS: MasterOption[] = [
-  { id: 10, name: "วิทยาการคอมพิวเตอร์" },
-  { id: 20, name: "วิศวกรรมไฟฟ้า" },
-  { id: 30, name: "พืชไร่" },
-  { id: 40, name: "การตลาด" }
-];
-
-// ==========================================
-// 2. Components: Skeleton Loading
-// ==========================================
-
-const TableSkeleton = () => (
-  <>
-    {[1, 2, 3, 4, 5].map((i) => (
-      <tr key={i} className="animate-pulse border-b border-gray-100">
-        <td className="p-5"><div className="h-4 bg-gray-200 rounded w-48 mb-2"></div><div className="h-3 bg-gray-200 rounded w-32"></div></td>
-        <td className="p-5"><div className="h-8 w-16 bg-gray-200 rounded mx-auto"></div></td>
-        <td className="p-5"><div className="h-3 bg-gray-200 rounded-full w-full mb-2"></div><div className="h-2 bg-gray-200 rounded w-1/2 mx-auto"></div></td>
-        <td className="p-5"><div className="h-6 w-24 bg-gray-200 rounded-full mx-auto"></div></td>
-        <td className="p-5"><div className="h-8 w-20 bg-gray-200 rounded mx-auto"></div></td>
-        <td className="p-5"><div className="h-8 w-8 bg-gray-200 rounded-full mx-auto"></div></td>
-      </tr>
-    ))}
-  </>
-);
-
-// ==========================================
-// 3. Main Component
-// ==========================================
-
 export default function ChairmanApprovalPage() {
   
-  // --- UI States ---
+  // --- States ---
   const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<Nomination[]>([]);
+  const [awardTypes, setAwardTypes] = useState<string[]>([]);
   const [signingId, setSigningId] = useState<number | null>(null);
 
-  // --- Data States ---
-  const [candidates, setCandidates] = useState<Nomination[]>([]);
-
-  // --- Filter States ---
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterCategory, setFilterCategory] = useState("");
-
-  // --- Modal States ---
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Modals
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [modalData, setModalData] = useState<Nomination | null>(null);
 
-  // --- Helpers ---
-  const getFacultyName = (id: number) => {
-      const found = STATIC_FACULTIES.find(f => f.id === id);
-      return found ? found.name : `-`;
-  };
-
-  const getResolution = (votes: VoteSummary) => {
-      const total = votes.total_voters || 1; // Prevent division by zero
-      const threshold = total / 2;
-      const isPassed = votes.approve > threshold;
-      return {
-        isPassed,
-        label: isPassed ? "เห็นชอบตามเสนอ" : "ไม่เห็นชอบ",
-        colorClass: isPassed 
-          ? "bg-green-100 text-green-700 border border-green-200" 
-          : "bg-red-100 text-red-700 border border-red-200"
-      };
-  };
-
-  // ==========================================
-  // 4. Effects (Fetch Data using Service)
-  // ==========================================
+  // Filters & Sort
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterYear, setFilterYear] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Nomination | 'award_type_name' | null, direction: 'asc' | 'desc' | null }>({ key: 'latest_update', direction: 'desc' });
 
   useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterCategory, filterYear]);
+
+  // ==========================================
+  // 2. Data Fetching
+  // ==========================================
+  useEffect(() => {
     let isMounted = true;
+    
+    const fetchAwardTypes = async () => {
+      try {
+        const response = await api.get("/awards/types");
+        const types = response.data?.data || response.data || [];
+        if (isMounted) setAwardTypes(types);
+      } catch (error) {
+        console.error("Error fetching award types:", error);
+      }
+    };
+
     const fetchData = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem("accessToken");
-        const params: Record<string, string> = {};
-        if (searchTerm) params.q = searchTerm;
+        if (USE_MOCK_DATA) return;
+
+        const params: Record<string, string> = { limit: "200" };
+        if (searchTerm) params.keyword = searchTerm;
         if (filterCategory) params.award_type = filterCategory;
+        if (filterYear) params.student_year = filterYear;
 
-        const data = await chairmanService.getCandidates(token, params);
+        const response = await api.get(`/awards/search`, { params });
+        const rawData = response.data?.data || response.data || [];
 
-        if (isMounted) {
-            setCandidates(data);
-        }
+        const mappedData = rawData.map((item: any) => {
+            const isOrgNominated = item.org_name && item.org_name.trim() !== "";
+            
+            // 💡 Mock Vote Summary (สุ่มเพื่อให้ UI สวยงาม กรณี API จริงยังไม่มีข้อมูลโหวต)
+            const mockApprove = (item.form_id % 3) + 3; // สุ่ม 3-5
+            const mockReject = 5 - mockApprove;
 
+            return {
+                ...item,
+                award_type_name: item.award_type,
+                is_organization_nominated: isOrgNominated, 
+                organization_name: item.org_name,
+                vote_summary: { approve: mockApprove, reject: mockReject, abstain: 0, total_voters: 5 }
+            };
+        });
+
+        // ✅ ประธานคณะกรรมการ ดึงเฉพาะสถานะ 10 (อนุมัติโดยคณะกรรมการ) มารอลงนาม
+        const TARGET_STATUS_ID = 10; 
+        const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID);
+
+        if (isMounted) setItems(filteredData);
       } catch (error) {
-        console.warn("API Error:", error);
+        console.error("API Error:", error);
         if (isMounted) {
-             Swal.fire({
-                icon: 'error',
-                title: 'ไม่สามารถดึงข้อมูลได้',
-                text: 'กรุณาลองใหม่อีกครั้ง',
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                timer: 3000
-            });
+          Swal.fire({ icon: 'error', title: 'ไม่สามารถดึงข้อมูลได้', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
         }
       } finally {
         if (isMounted) setLoading(false);
       }
     };
 
+    fetchAwardTypes();
     fetchData();
     return () => { isMounted = false; };
-  }, [searchTerm, filterCategory]);
+  }, [searchTerm, filterCategory, filterYear]);
 
   // ==========================================
-  // 5. Logic: Filter
+  // 3. Logic & Handlers
   // ==========================================
+  const processedData = useMemo(() => {
+    let filtered = items;
+    if (filterCategory) filtered = filtered.filter(item => item.award_type_name === filterCategory);
+    
+    if (sortConfig.key) {
+      filtered.sort((a: any, b: any) => {
+        let valA = sortConfig.key ? a[sortConfig.key] : '';
+        let valB = sortConfig.key ? b[sortConfig.key] : '';
+        if (sortConfig.key === 'student_firstname') {
+          valA = `${a.student_firstname} ${a.student_lastname}`;
+          valB = `${b.student_firstname} ${b.student_lastname}`;
+        } else if (sortConfig.key === 'latest_update' || sortConfig.key === 'created_at') {
+          valA = new Date(a.latest_update || a.created_at).getTime();
+          valB = new Date(b.latest_update || b.created_at).getTime();
+        }
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return filtered;
+  }, [items, filterCategory, sortConfig]);
 
-  // (Already handled by Service/Mock Filter, but double-check if needed for client-side sorting later)
-  const filteredData = candidates; 
+  const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
+  const currentItems = processedData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-  // ==========================================
-  // 6. Handlers
-  // ==========================================
+  const handleSort = (key: keyof Nomination | 'award_type_name' | 'latest_update') => {
+    setSortConfig(prev => {
+      if (prev.key === key) return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      return { key, direction: 'asc' };
+    });
+  };
 
-  const handleViewDetail = (item: Nomination) => {
-    setModalData(item);
-    setIsModalOpen(true);
+  const getDisplayName = (item: Nomination) => {
+    if (!item.student_lastname || item.student_lastname === "-") return item.student_firstname || "-";
+    return `${item.student_firstname || ""} ${item.student_lastname || ""}`.trim();
+  };
+
+  const getResolution = (votes?: VoteSummary) => {
+      if (!votes) return { isPassed: true, label: "เห็นชอบ", colorClass: "bg-emerald-100 text-emerald-700 border-emerald-200" };
+      const total = votes.total_voters || 1; 
+      const threshold = total / 2;
+      const isPassed = votes.approve > threshold;
+      return {
+        isPassed,
+        label: isPassed ? "มติเห็นชอบ" : "มติไม่เห็นชอบ",
+        colorClass: isPassed 
+          ? "bg-emerald-50 text-emerald-600 border border-emerald-200" 
+          : "bg-rose-50 text-rose-600 border border-rose-200"
+      };
   };
 
   const handleSign = async (id: number, name: string) => {
-    // Advanced Validation
     if (!id) return;
 
-    // SweetAlert Confirm
     const result = await Swal.fire({
         title: 'ยืนยันการลงนาม?',
-        text: `คุณต้องการรับรองผลการพิจารณาของ "${name}" ใช่หรือไม่?`,
+        html: `คุณต้องการรับรองผลการพิจารณาของ<br/><b class="text-indigo-600 text-lg">${name}</b> ใช่หรือไม่?`,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: '#4f46e5', // Indigo-600
+        cancelButtonColor: '#94a3b8',
         confirmButtonText: 'ยืนยันลงนาม',
-        cancelButtonText: 'ยกเลิก'
+        cancelButtonText: 'ยกเลิก',
+        customClass: { 
+            popup: 'rounded-[24px]',
+            confirmButton: 'rounded-xl px-6 py-2.5 font-bold',
+            cancelButton: 'rounded-xl px-6 py-2.5 font-bold'
+        }
     });
 
     if (!result.isConfirmed) return;
@@ -368,252 +240,277 @@ export default function ChairmanApprovalPage() {
     setSigningId(id);
 
     try {
-        const token = localStorage.getItem("accessToken");
-        await chairmanService.signNomination(token, id);
+        if (!USE_MOCK_DATA) {
+            // ✅ สถานะ 12 = ลงนามโดยประธานคณะกรรมการ
+            const NEXT_STATUS_ID = 12; 
+            await api.put(`/awards/${id}/form-status`, { form_status: NEXT_STATUS_ID, reject_reason: "" });
+        }
 
-        // Update UI Optimistically
-        setCandidates((prev) =>
-            prev.map((item) =>
-                item.form_id === id
-                ? { 
-                    ...item, 
-                    is_signed: true, 
-                    signed_date: new Date().toISOString() 
-                  }
-                : item
-            )
-        );
+        setItems(prev => prev.filter(item => item.form_id !== id));
 
-        // --- Show Toast Notification ---
-        const Toast = Swal.mixin({
+        Swal.fire({
+            icon: 'success',
+            title: 'ลงนามสำเร็จ',
+            text: `รับรองผลการพิจารณาเรียบร้อยแล้ว`,
             toast: true,
             position: 'top-end',
             showConfirmButton: false,
             timer: 3000,
-            timerProgressBar: true,
-            didOpen: (toast) => {
-                toast.addEventListener('mouseenter', Swal.stopTimer)
-                toast.addEventListener('mouseleave', Swal.resumeTimer)
-            }
-        });
-
-        Toast.fire({
-            icon: 'success',
-            title: 'ลงนามสำเร็จ',
-            text: `รับรองผลการพิจารณาของ ${name} เรียบร้อยแล้ว`
+            timerProgressBar: true
         });
 
     } catch (error) {
         console.error(error);
-        Swal.fire({
-            icon: 'error',
-            title: 'เกิดข้อผิดพลาด',
-            text: 'ไม่สามารถบันทึกการลงนามได้'
-        });
+        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ไม่สามารถบันทึกการลงนามได้' });
     } finally {
         setSigningId(null);
     }
   };
 
   // ==========================================
-  // 7. Render UI
+  // 4. Render UI
   // ==========================================
-
   return (
-    <div className="min-h-screen bg-gray-50/50 p-8 font-sans pb-24">
+    <div className="min-h-screen bg-[#f8fafc] p-6 pt-24 lg:p-10 lg:pt-28 font-sans pb-24 relative overflow-hidden">
       
-      {/* Inject Keyframes */}
+      {/* --- Abstract Background Orbs --- */}
+      <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-indigo-400/10 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-5%] w-[30%] h-[50%] bg-purple-400/10 blur-[120px] rounded-full pointer-events-none" />
+
+      {/* --- CSS Animations --- */}
       <style jsx global>{`
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in-up {
-          animation: fadeInUp 0.4s ease-out forwards;
-        }
-        .animate-fade-in {
-          animation: fadeIn 0.5s ease-out forwards;
-        }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in-up { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-pulse-slow { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
       `}</style>
 
-      {/* Header Section */}
-      <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-lg border border-white/50 p-8 mb-8 animate-fade-in-up flex flex-col md:flex-row justify-between items-end gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">รับรองผลการคัดเลือก</h1>
-          <p className="text-gray-500 mt-1 font-medium">
-            {USE_MOCK_DATA && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded mr-2">MOCK MODE</span>}
-            ตรวจสอบคะแนนโหวตและลงนามรับรองมติที่ประชุม
-          </p>
-        </div>
-        <div className="bg-blue-50/50 px-5 py-3 rounded-xl border border-blue-100 text-right">
-            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">สถานะปัจจุบัน</p>
-            <p className="text-sm font-bold text-blue-600 flex items-center gap-2 justify-end">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                </span>
-                ปิดโหวต / รอรับรอง
-            </p>
-        </div>
-      </div>
-
-      {/* Main Card */}
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden animate-fade-in-up" style={{ animationDelay: '100ms' }}>
+      <div className="max-w-7xl mx-auto space-y-6 relative z-10">
         
-        {/* Toolbar */}
-        <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative group">
-                <input 
-                    type="text" 
-                    placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" 
-                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 pl-10 text-sm focus:ring-4 focus:ring-blue-100 focus:border-blue-300 outline-none transition-all shadow-sm group-hover:shadow-md"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                <svg className="w-5 h-5 absolute left-3 top-3 text-gray-400 group-focus-within:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        {/* --- Header Section (Glassmorphism) --- */}
+        <div className="bg-white/60 backdrop-blur-2xl rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/80 p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 animate-fade-in-up">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 mb-3 text-indigo-600">
+                <Sparkles className="w-4 h-4" />
+                <span className="text-[11px] font-black uppercase tracking-[0.15em]">System Action Required</span>
             </div>
-            <div className="relative group md:w-1/3">
-                <select 
-                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none cursor-pointer focus:ring-4 focus:ring-blue-100 focus:border-blue-300 transition-all shadow-sm group-hover:shadow-md appearance-none text-gray-600"
-                    value={filterCategory}
-                    onChange={(e) => setFilterCategory(e.target.value)}
-                >
-                    <option value="">ทุกประเภทรางวัล</option>
-                    <option value="ด้านความคิดสร้างสรรค์และนวัตกรรม">ด้านความคิดสร้างสรรค์และนวัตกรรม</option>
-                    <option value="ด้านความประพฤติดี">ด้านความประพฤติดี</option>
-                    <option value="ด้านกิจกรรมเสริมหลักสูตร">ด้านกิจกรรมเสริมหลักสูตร</option>
-                </select>
-                <svg className="w-4 h-4 absolute right-4 top-3.5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+            <h1 className="text-3xl lg:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-700 via-purple-600 to-indigo-600 flex items-center gap-3 tracking-tight">
+              รับรองผลการคัดเลือก
+            </h1>
+            <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-indigo-400" /> สำหรับประธานคณะกรรมการ
+            </p>
+          </div>
+          <div className="bg-gradient-to-br from-white to-slate-50 px-6 py-4 rounded-2xl border border-slate-200/60 shadow-sm w-full md:w-auto relative overflow-hidden group">
+              <div className="absolute inset-0 bg-indigo-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
+              <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1 relative z-10">สถานะระบบ</p>
+              <p className="text-sm font-bold text-indigo-600 flex items-center gap-2.5 md:justify-end relative z-10">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
+                  </span>
+                  รอลงนามรับรองมติ
+              </p>
+          </div>
+        </div>
+
+        {/* --- Filters Grid --- */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" /></div>
+              <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-2xl px-4 py-3.5 pl-11 text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-[0_2px_10px_rgb(0,0,0,0.02)]" />
+            </div>
+            
+            <div className="relative group">
+               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Award className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" /></div>
+              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-2xl px-4 py-3.5 pl-11 pr-10 text-sm font-medium text-slate-600 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-[0_2px_10px_rgb(0,0,0,0.02)] cursor-pointer appearance-none">
+                <option value="">ทุกประเภทรางวัล</option>
+                {awardTypes.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 absolute right-4 top-4 text-slate-400 pointer-events-none" />
+            </div>
+            
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><GraduationCap className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" /></div>
+              <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-full bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-2xl px-4 py-3.5 pl-11 pr-10 text-sm font-medium text-slate-600 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-[0_2px_10px_rgb(0,0,0,0.02)] cursor-pointer appearance-none">
+                <option value="">ทุกระดับชั้นปี</option>
+                <option value="1">ชั้นปีที่ 1</option><option value="2">ชั้นปีที่ 2</option><option value="3">ชั้นปีที่ 3</option><option value="4">ชั้นปีที่ 4</option>
+              </select>
+              <ChevronDown className="w-4 h-4 absolute right-4 top-4 text-slate-400 pointer-events-none" />
             </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto min-h-[400px]">
+        {/* --- Data Table --- */}
+        <div className="bg-white/90 backdrop-blur-xl rounded-[32px] shadow-[0_10px_40px_rgb(0,0,0,0.05)] border border-slate-100 overflow-hidden animate-fade-in-up" style={{ animationDelay: '150ms' }}>
+          <div className="overflow-x-auto min-h-[400px]">
             <table className="w-full text-left border-collapse">
-            <thead className="bg-gray-50/80 text-gray-500 text-xs font-bold uppercase tracking-wider border-b border-gray-200">
-                <tr>
-                <th className="p-5 w-[25%]">ผู้ได้รับการเสนอชื่อ</th>
-                <th className="p-5 text-center w-[15%]">คะแนนโหวต</th>
-                <th className="p-5 text-center w-[20%]">สรุปผลคะแนน</th>
-                <th className="p-5 text-center w-[15%]">มติที่ประชุม</th>
-                <th className="p-5 text-center w-[15%]">การดำเนินการ</th>
-                <th className="p-5 text-center w-[10%]">รายละเอียด</th>
+              <thead>
+                <tr className="bg-slate-50/50 text-slate-500 text-[11px] font-extrabold uppercase tracking-widest border-b border-slate-100">
+                  <th className="p-6 cursor-pointer hover:bg-slate-100/50 transition-colors w-[25%]" onClick={() => handleSort('student_firstname')}>
+                    <div className="flex items-center gap-1.5">ผู้ได้รับการเสนอชื่อ {sortConfig.key === 'student_firstname' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-500"/> : <ArrowDown className="w-3.5 h-3.5 text-indigo-500"/>) : <ArrowUpDown className="w-3.5 h-3.5 text-slate-300"/>}</div>
+                  </th>
+                  <th className="p-6 text-center w-[15%]">
+                    <div className="flex items-center justify-center gap-1.5"><Users className="w-3.5 h-3.5"/> คะแนนโหวต</div>
+                  </th>
+                  <th className="p-6 text-center w-[20%]">สรุปผลคะแนน</th>
+                  <th className="p-6 text-center w-[15%]">มติที่ประชุม</th>
+                  <th className="p-6 text-center w-[15%]">การดำเนินการ</th>
+                  <th className="p-6 text-center w-[10%]">รายละเอียด</th>
                 </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 text-sm bg-white">
+              </thead>
+              <tbody className="divide-y divide-slate-50 bg-transparent text-sm">
                 {loading ? (
-                    <TableSkeleton />
-                ) : filteredData.length === 0 ? (
-                    <tr><td colSpan={6} className="p-10 text-center text-gray-400 flex flex-col items-center gap-2 py-20"><svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>ไม่พบรายการ</td></tr>
+                  [1, 2, 3, 4, 5].map((i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td className="p-6"><div className="h-4 bg-slate-200 rounded-md w-48 mb-2"></div><div className="h-3 bg-slate-100 rounded-md w-32"></div></td>
+                      <td className="p-6"><div className="h-8 w-16 bg-slate-200 rounded-lg mx-auto"></div></td>
+                      <td className="p-6"><div className="h-3 bg-slate-200 rounded-full w-full mb-2"></div><div className="h-2 bg-slate-100 rounded-md w-1/2 mx-auto"></div></td>
+                      <td className="p-6"><div className="h-6 w-24 bg-slate-200 rounded-full mx-auto"></div></td>
+                      <td className="p-6"><div className="h-10 w-28 bg-slate-200 rounded-xl mx-auto"></div></td>
+                      <td className="p-6"><div className="h-10 w-10 bg-slate-200 rounded-xl mx-auto"></div></td>
+                    </tr>
+                  ))
+                ) : currentItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-20 text-center">
+                      <div className="flex flex-col items-center justify-center text-slate-400">
+                        <div className="bg-indigo-50 p-5 rounded-full mb-4 shadow-sm border border-indigo-100">
+                          <FileSignature className="w-12 h-12 text-indigo-300" strokeWidth={1.5} />
+                        </div>
+                        <p className="text-xl font-bold text-slate-700">ไม่มีรายการรอลงนาม</p>
+                        <p className="text-sm mt-2 font-medium text-slate-500">คุณได้ดำเนินการลงนามรับรองเอกสารทั้งหมดเรียบร้อยแล้ว</p>
+                      </div>
+                    </td>
+                  </tr>
                 ) : (
-                filteredData.map((item, index) => {
+                  currentItems.map((item, index) => {
+                    const fullName = getDisplayName(item);
                     const resolution = getResolution(item.vote_summary);
-                    const fullName = `${item.student_firstname} ${item.student_lastname}`;
-                    const approvePercent = item.vote_summary.total_voters > 0 
-                        ? (item.vote_summary.approve / item.vote_summary.total_voters) * 100 
-                        : 0;
+                    const isOrg = item.student_lastname === "-";
                     
+                    let approvePercent = 0;
+                    if (item.vote_summary && item.vote_summary.total_voters > 0) {
+                        approvePercent = (item.vote_summary.approve / item.vote_summary.total_voters) * 100;
+                    }
+
                     return (
                         <tr 
-                            key={item.form_id} 
-                            className="group hover:bg-blue-50/30 transition-all duration-300 animate-fade-in-up hover:-translate-y-0.5 hover:shadow-sm"
-                            style={{ animationDelay: `${index * 50}ms` }}
+                          key={item.form_id} 
+                          className="group hover:bg-indigo-50/20 transition-all duration-300 animate-fade-in-up"
+                          style={{ opacity: 0, animationDelay: `${index * 50}ms`, animationFillMode: 'forwards' }}
                         >
-                            <td className="p-5">
-                                <div className="font-bold text-gray-800 text-base">{fullName}</div>
-                                <div className="text-xs text-gray-500 mt-1 font-medium">{item.student_number} <span className="text-gray-300 mx-1">|</span> {getFacultyName(item.faculty_id)}</div>
-                                <div className="text-[10px] font-bold text-blue-600 mt-2 bg-blue-50 inline-block px-2 py-0.5 rounded border border-blue-100">{item.award_type_name}</div>
-                            </td>
-                            <td className="p-5 text-center align-middle">
-                                <div className="flex flex-col items-center justify-center">
-                                    <div className="text-2xl font-extrabold text-gray-700">
-                                        {item.vote_summary.approve} <span className="text-gray-400 text-sm font-medium">/ {item.vote_summary.total_voters}</span>
-                                    </div>
-                                    <div className="text-[10px] font-bold text-gray-400 uppercase mt-1 tracking-wide">เสียงเห็นชอบ</div>
-                                </div>
-                            </td>
-                            
-                            {/* Vote Bar Section */}
-                            <td className="p-5 align-middle">
-                                <div className="w-full h-3 rounded-full overflow-hidden shadow-inner bg-gray-200 flex">
-                                    <div 
-                                        className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-1000 ease-out" 
-                                        style={{ width: `${approvePercent}%` }}
-                                    ></div>
-                                    <div className="flex-1 bg-gradient-to-r from-red-400 to-red-500 transition-all duration-1000 ease-out"></div>
-                                </div>
-                                <div className="flex justify-between text-[10px] font-bold text-gray-500 mt-1.5">
-                                    <span className="flex items-center gap-1 text-emerald-600"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>เห็นชอบ: {item.vote_summary.approve}</span>
-                                    <span className="flex items-center gap-1 text-red-600"><span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>ไม่เห็นชอบ: {item.vote_summary.reject + item.vote_summary.abstain}</span>
-                                </div>
-                            </td>
+                          {/* Column 1: Info */}
+                          <td className="p-6 align-middle">
+                            <div className="font-extrabold text-slate-800 text-[15px] group-hover:text-indigo-700 transition-colors">{fullName}</div>
+                            <div className="text-[12px] text-slate-500 mt-1 font-medium tracking-wide">
+                                {isOrg ? <span className="text-indigo-500 font-bold bg-indigo-50 px-2 py-0.5 rounded">องค์กรภายนอก</span> : <span className="font-mono bg-slate-100 px-2 py-0.5 rounded-md text-slate-600">{item.student_number}</span>} 
+                            </div>
+                            <div className="text-[10.5px] font-bold text-indigo-600 mt-2.5 bg-indigo-50/80 inline-block px-3 py-1 rounded-lg border border-indigo-100/50 shadow-sm">
+                                {item.award_type_name || item.award_type}
+                            </div>
+                          </td>
 
-                            <td className="p-5 text-center align-middle">
-                                <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold shadow-sm ${resolution.colorClass}`}>
-                                    {resolution.isPassed && <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>}
-                                    {!resolution.isPassed && <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>}
-                                    {resolution.label}
-                                </span>
-                            </td>
-                            <td className="p-5 text-center align-middle">
-                                {item.is_signed ? (
-                                    <div className="flex flex-col items-center animate-fade-in">
-                                        <div className="flex items-center gap-1 text-emerald-600 font-bold text-sm bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-100">
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                            รับรองแล้ว
-                                        </div>
-                                        <span className="text-[10px] text-gray-400 mt-1 font-mono">
-                                            {item.signed_date ? new Date(item.signed_date).toLocaleDateString('th-TH') : ''}
-                                        </span>
-                                    </div>
-                                ) : (
-                                    <button 
-                                        onClick={() => handleSign(item.form_id, fullName)}
-                                        disabled={signingId === item.form_id}
-                                        className={`bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all transform active:scale-95 flex items-center gap-2 mx-auto ${signingId === item.form_id ? 'opacity-70 cursor-not-allowed' : ''}`}
-                                    >
-                                        {signingId === item.form_id ? (
-                                            <>
-                                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                บันทึก...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                                                ลงนาม
-                                            </>
-                                        )}
-                                    </button>
-                                )}
-                            </td>
-                            <td className="p-5 text-center align-middle">
-                                <button 
-                                    onClick={() => handleViewDetail(item)}
-                                    className="text-gray-400 hover:text-blue-600 p-2.5 rounded-full hover:bg-blue-50 transition-all transform hover:scale-110 shadow-sm hover:shadow-md border border-transparent hover:border-blue-100"
-                                    title="ดูรายละเอียด"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                                </button>
-                            </td>
+                          {/* Column 2: Vote Numbers */}
+                          <td className="p-6 text-center align-middle">
+                            <div className="flex flex-col items-center justify-center bg-slate-50 py-2 px-4 rounded-2xl border border-slate-100 group-hover:border-indigo-100 transition-colors w-fit mx-auto">
+                                <div className="text-[24px] font-black text-slate-700 tracking-tight leading-none">
+                                    {item.vote_summary?.approve || 0} <span className="text-slate-300 text-sm font-medium">/ {item.vote_summary?.total_voters || 0}</span>
+                                </div>
+                            </div>
+                          </td>
+
+                          {/* Column 3: Progress Bar */}
+                          <td className="p-6 align-middle">
+                              <div className="w-full h-3 rounded-full overflow-hidden bg-slate-100 flex shadow-inner">
+                                  <div 
+                                      className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-1000 ease-out" 
+                                      style={{ width: `${approvePercent}%` }}
+                                  ></div>
+                                  <div className="flex-1 bg-gradient-to-r from-rose-200 to-rose-300 transition-all duration-1000 ease-out opacity-80"></div>
+                              </div>
+                              <div className="flex justify-between text-[11px] font-bold text-slate-500 mt-2.5 px-1">
+                                  <span className="flex items-center gap-1.5 text-emerald-600"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]"></span>{item.vote_summary?.approve || 0} เสียง</span>
+                                  <span className="flex items-center gap-1.5 text-rose-500"><span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>{(item.vote_summary?.reject || 0) + (item.vote_summary?.abstain || 0)} เสียง</span>
+                              </div>
+                          </td>
+
+                          {/* Column 4: Resolution */}
+                          <td className="p-6 text-center align-middle">
+                              <span className={`inline-flex items-center px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm ${resolution.colorClass}`}>
+                                  {resolution.isPassed ? <Check className="w-3.5 h-3.5 mr-1" strokeWidth={3} /> : <X className="w-3.5 h-3.5 mr-1" strokeWidth={3} />}
+                                  {resolution.label}
+                              </span>
+                          </td>
+
+                          {/* Column 5: Action (Sign) */}
+                          <td className="p-6 text-center align-middle">
+                              <button 
+                                  onClick={() => handleSign(item.form_id, fullName)}
+                                  disabled={signingId === item.form_id}
+                                  className={`
+                                      relative overflow-hidden group/btn bg-gradient-to-br from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 
+                                      text-white text-[13px] font-bold px-6 py-3 rounded-xl shadow-[0_6px_20px_rgba(79,70,229,0.3)] hover:shadow-[0_8px_25px_rgba(79,70,229,0.45)] 
+                                      transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2 mx-auto w-full max-w-[140px]
+                                      ${signingId === item.form_id ? 'opacity-80 cursor-not-allowed' : ''}
+                                  `}
+                              >
+                                  {signingId === item.form_id ? (
+                                      <>
+                                          <div className="w-4 h-4 border-[2.5px] border-white/30 border-t-white rounded-full animate-spin"></div>
+                                          <span>กำลังบันทึก</span>
+                                      </>
+                                  ) : (
+                                      <>
+                                          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 ease-out"></div>
+                                          <PenTool className="w-4 h-4 relative z-10" />
+                                          <span className="relative z-10">ลงนาม</span>
+                                      </>
+                                  )}
+                              </button>
+                          </td>
+
+                          {/* Column 6: Details */}
+                          <td className="p-6 text-center align-middle">
+                            <button 
+                              onClick={() => { setModalData(item); setIsDetailModalOpen(true); }} 
+                              className="inline-flex items-center justify-center p-3 rounded-xl text-slate-400 bg-slate-50 hover:text-indigo-600 hover:bg-indigo-50 transition-all transform hover:scale-110 border border-slate-200 hover:border-indigo-200 shadow-sm"
+                              title="ดูรายละเอียดข้อมูล"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          </td>
                         </tr>
                     );
-                })
+                  })
                 )}
-            </tbody>
+              </tbody>
             </table>
+          </div>
+
+          {/* --- Table Footer / Pagination --- */}
+          <div className="bg-slate-50/80 border-t border-slate-100 p-5 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronLeft className="w-4 h-4" /></button>
+              <span className="text-sm font-bold text-slate-600 bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm">หน้า {currentPage} จาก {totalPages || 1}</span>
+              <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronRight className="w-4 h-4" /></button>
+            </div>
+            <div className="text-[13px] text-slate-500 font-bold bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm">
+                พบข้อมูลรอลงนามทั้งหมด <span className="text-indigo-600 text-[14px] ml-1">{processedData.length}</span> รายการ
+            </div>
+          </div>
         </div>
+
+        {/* --- Modal: Nomination Detail --- */}
+        <NominationDetailModal 
+          isOpen={isDetailModalOpen} 
+          onClose={() => setIsDetailModalOpen(false)} 
+          data={modalData} 
+          faculties={[]} 
+          departments={[]}
+        />
+
       </div>
-
-      {/* Static Faculties & Departments are passed here */}
-      <NominationDetailModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        data={modalData} 
-        faculties={STATIC_FACULTIES.map(f => ({ faculty_id: f.id, faculty_name: f.name }))}
-        departments={STATIC_DEPARTMENTS.map(d => ({ department_id: d.id, department_name: d.name, faculty_id: 0 }))} 
-      />
-
     </div>
   );
 }

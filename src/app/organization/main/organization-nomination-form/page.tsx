@@ -8,8 +8,8 @@ import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy, Lightbulb, Heart, Star, UploadCloud, FileText, XCircle, CheckCircle2,
-  AlertCircle, Calendar, MapPin, User, Mail, Phone, Briefcase, GraduationCap,
-  ChevronRight, Building2, Hash, Percent, BookOpen, Users
+  AlertCircle, Calendar, MapPin, User, Mail, Phone, GraduationCap,
+  ChevronRight, Building2, Hash, Percent, BookOpen
 } from "lucide-react";
 
 // ==========================================
@@ -18,23 +18,28 @@ import {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
-const MAX_TOTAL_FILE_SIZE_MB = 10;
 
+// ✅ เพิ่มคลาสสีแบบเต็ม เพื่อป้องกันบัค Tailwind ไม่ยอม Render สีตามประเภท
 const THEME_STYLES: Record<string, any> = {
   activity: {
-    accent: "orange", border: "border-orange-200/50", gradient: "from-orange-400 to-rose-500", shadow: "shadow-orange-500/20", text: "text-orange-600", ring: "focus:ring-orange-500/30"
+    accent: "orange", border: "border-orange-200/50", gradient: "from-orange-400 to-rose-500", shadow: "shadow-orange-500/20", text: "text-orange-600", ring: "focus:ring-orange-500/30",
+    cardBorder: "border-orange-500", cardBg: "bg-orange-50", cardIconBg: "bg-orange-500", cardIconText: "text-white", cardShadow: "shadow-orange-500/30", titleText: "text-orange-700", subText: "text-orange-500"
   },
   innovation: {
-    accent: "purple", border: "border-purple-200/50", gradient: "from-purple-500 to-indigo-500", shadow: "shadow-purple-500/20", text: "text-purple-600", ring: "focus:ring-purple-500/30"
+    accent: "purple", border: "border-purple-200/50", gradient: "from-purple-500 to-indigo-500", shadow: "shadow-purple-500/20", text: "text-purple-600", ring: "focus:ring-purple-500/30",
+    cardBorder: "border-purple-500", cardBg: "bg-purple-50", cardIconBg: "bg-purple-500", cardIconText: "text-white", cardShadow: "shadow-purple-500/30", titleText: "text-purple-700", subText: "text-purple-500"
   },
   behavior: {
-    accent: "blue", border: "border-blue-200/50", gradient: "from-blue-400 to-cyan-500", shadow: "shadow-blue-500/20", text: "text-blue-600", ring: "focus:ring-blue-500/30"
+    accent: "blue", border: "border-blue-200/50", gradient: "from-blue-400 to-cyan-500", shadow: "shadow-blue-500/20", text: "text-blue-600", ring: "focus:ring-blue-500/30",
+    cardBorder: "border-blue-500", cardBg: "bg-blue-50", cardIconBg: "bg-blue-500", cardIconText: "text-white", cardShadow: "shadow-blue-500/30", titleText: "text-blue-700", subText: "text-blue-500"
   },
   other: {
-    accent: "emerald", border: "border-emerald-200/50", gradient: "from-emerald-400 to-teal-500", shadow: "shadow-emerald-500/20", text: "text-emerald-600", ring: "focus:ring-emerald-500/30"
+    accent: "emerald", border: "border-emerald-200/50", gradient: "from-emerald-400 to-teal-500", shadow: "shadow-emerald-500/20", text: "text-emerald-600", ring: "focus:ring-emerald-500/30",
+    cardBorder: "border-emerald-500", cardBg: "bg-emerald-50", cardIconBg: "bg-emerald-500", cardIconText: "text-white", cardShadow: "shadow-emerald-500/30", titleText: "text-emerald-700", subText: "text-emerald-500"
   },
   default: {
-    accent: "gray", border: "border-gray-200/50", gradient: "from-gray-600 to-slate-800", shadow: "shadow-gray-500/20", text: "text-gray-800", ring: "focus:ring-gray-500/30"
+    accent: "gray", border: "border-gray-200/50", gradient: "from-gray-600 to-slate-800", shadow: "shadow-gray-500/20", text: "text-gray-800", ring: "focus:ring-gray-500/30",
+    cardBorder: "border-slate-300", cardBg: "bg-white/60", cardIconBg: "bg-slate-100", cardIconText: "text-slate-400", cardShadow: "", titleText: "text-slate-600", subText: "text-slate-400"
   }
 };
 
@@ -95,18 +100,12 @@ export default function OrganizationNominationForm() {
   const [campuses, setCampuses] = useState<any[]>([]);
   const [filteredDepartments, setFilteredDepartments] = useState<any[]>([]);
 
+  // --- Form Data ---
   const [awardType, setAwardType] = useState("");
   const [otherTitle, setOtherTitle] = useState("");
   const [orgInfo, setOrgInfo] = useState({ name: "", type: "", location: "", phone: "" });
 
-  const [activityCriteria, setActivityCriteria] = useState("");
-  const [innovationQual, setInnovationQual] = useState(false);
-  const [dateReceived, setDateReceived] = useState("");
-  const [projectTitle, setProjectTitle] = useState("");
-  const [teamName, setTeamName] = useState("");
-  const [prize, setPrize] = useState("");
-  const [organizedBy, setOrganizedBy] = useState("");
-  const [otherDetails, setOtherDetails] = useState("");
+  const [otherDetails, setOtherDetails] = useState(""); // ใช้ตัวเดียวสำหรับทุกประเภทผลงาน
 
   const [manualProfile, setManualProfile] = useState<ManualProfile>({
     firstname: "", lastname: "", student_number: "", email: "", phone_number: "",
@@ -171,15 +170,13 @@ export default function OrganizationNominationForm() {
     if (!awardType) return "กรุณาเลือกประเภทรางวัล";
     if (awardType === "other" && !otherTitle.trim()) return "กรุณาระบุชื่อรางวัล";
     const mp = manualProfile;
-    if (!mp.firstname || !mp.lastname) return "กรุณากรอกชื่อ-นามสกุล";
+    if (!mp.firstname || !mp.lastname) return "กรุณากรอกชื่อ-นามสกุล นิสิต";
     if (mp.student_number.length !== 10) return "รหัสนิสิตต้องมี 10 หลัก";
     if (!mp.email.includes("@")) return "รูปแบบอีเมลไม่ถูกต้อง";
     if (mp.phone_number.length !== 10) return "เบอร์โทรศัพท์ต้องมี 10 หลัก";
     if (!mp.faculty || !mp.major || !mp.campus) return "กรุณาเลือกข้อมูลการศึกษาให้ครบถ้วน";
     if (parseFloat(mp.gpa) < 0 || parseFloat(mp.gpa) > 4.00 || !mp.gpa) return "เกรดเฉลี่ยต้องอยู่ระหว่าง 0.00 - 4.00";
-    if (awardType === "activity" && (!activityCriteria || !projectTitle || !dateReceived || !prize || !organizedBy)) return "กรุณากรอกข้อมูลกิจกรรมให้ครบถ้วน";
-    if (awardType === "innovation" && (!innovationQual || !projectTitle || !dateReceived || !prize || !organizedBy)) return "กรุณากรอกข้อมูลนวัตกรรมให้ครบถ้วน และยืนยันผลงานระดับชาติ";
-    if (!otherDetails.trim()) return "กรุณากรอกเหตุผลในการเสนอชื่อ";
+    if (!otherDetails.trim()) return "กรุณากรอกเหตุผลในการเสนอชื่อและความโดดเด่นของผลงาน";
     if (!selectedFiles.length) return "กรุณาแนบไฟล์เอกสารอย่างน้อย 1 ไฟล์";
     return null;
   };
@@ -188,6 +185,7 @@ export default function OrganizationNominationForm() {
     e.preventDefault();
     const err = validateForm();
     if (err) return Swal.fire({ icon: "warning", title: "ข้อมูลไม่ครบถ้วน", text: err, confirmButtonColor: "#3b82f6", customClass: { popup: 'rounded-[24px]' } });
+    
     const token = localStorage.getItem("token");
     if (!token) return;
 
@@ -213,12 +211,14 @@ export default function OrganizationNominationForm() {
     setLoading(true);
     try {
       const fd = new FormData();
+      
+      // ข้อมูลหลักของฟอร์ม
       fd.append("award_type", awardName);
       
+      // 1. ข้อมูลนิสิต
       fd.append("student_firstname", manualProfile.firstname);
       fd.append("student_lastname", manualProfile.lastname);
       fd.append("student_number", manualProfile.student_number);
-      // ✅ แก้ไขปัญหา 400 Bad Request เพิ่ม student_email 
       fd.append("student_email", manualProfile.email); 
       
       const selectedFac = faculties.find(f => f.faculty_name === manualProfile.faculty);
@@ -236,31 +236,27 @@ export default function OrganizationNominationForm() {
       fd.append("student_phone_number", manualProfile.phone_number);
       fd.append("student_address", manualProfile.address);
 
-      const detail: any = {
-        award_title: awardName,
-        organization_name: orgInfo.name, 
-        organization_type: orgInfo.type, 
-        organization_location: orgInfo.location, 
-        organization_phone: orgInfo.phone,
-        other_details: otherDetails,
-        student_firstname: manualProfile.firstname, 
-        student_lastname: manualProfile.lastname, 
-        student_number: manualProfile.student_number, 
-        email: manualProfile.email, 
-        faculty: manualProfile.faculty, 
-        department: manualProfile.major, 
-        campus: manualProfile.campus,
-      };
+      // 2. ข้อมูลองค์กร 
+      fd.append("org_name", orgInfo.name);
+      fd.append("org_type", orgInfo.type);
+      fd.append("org_location", orgInfo.location);
+      fd.append("org_phone_number", orgInfo.phone);
 
-      if (awardType === "activity") {
-          Object.assign(detail, { qualification_type: "activity", activity_category: activityCriteria, project_title: projectTitle, date_received: dateReceived, prize: prize, organized_by: organizedBy, team_name: teamName });
-      } else if (awardType === "innovation") {
-          Object.assign(detail, { team_name: teamName, project_title: projectTitle, prize: prize, organized_by: organizedBy, date_received: dateReceived, competition_level: innovationQual ? "National/International" : "Local" });
-      } else if (awardType === "behavior") {
-          Object.assign(detail, { behavior_desc: otherDetails });
+      // 3. ข้อมูลรายละเอียดตามประเภทรางวัล
+      // ✅ ส่ง text ไปตรงๆ แทน Object หากเป็น awardType แบบปกติ
+      let formDetailValue = otherDetails;
+      
+      // ✅ คงรูปแบบ Object ไว้เฉพาะกรณีที่เป็น "อื่นๆ" เพราะต้องส่งชื่อรางวัลไปด้วย
+      if (awardType === "other") {
+          formDetailValue = JSON.stringify({
+            award_title: otherTitle,
+            other_details: otherDetails
+          });
       }
 
-      fd.append("form_detail", JSON.stringify(detail));
+      fd.append("form_detail", formDetailValue);
+      
+      // แนบไฟล์
       selectedFiles.forEach(f => fd.append("files", f));
 
       await nominationService.submitNomination(token, fd);
@@ -302,10 +298,10 @@ export default function OrganizationNominationForm() {
             {/* Step 1: Award Type */}
             <Section num={1} title="ประเภทรางวัลที่เสนอชื่อ" theme={theme}>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <TypeCard type="activity" active={awardType} set={setAwardType} title="นอกหลักสูตรกิจกรรม" sub="ผู้นำ/แข่งขัน" icon={Trophy} color="orange" />
-                <TypeCard type="innovation" active={awardType} set={setAwardType} title="ความคิดสร้างสรรค์เเละนวัตกรรม" sub="สิ่งประดิษฐ์/วิจัย" icon={Lightbulb} color="purple" />
-                <TypeCard type="behavior" active={awardType} set={setAwardType} title="ความประพฤติดี" sub="จิตอาสา/คุณธรรม" icon={Heart} color="blue" />
-                <TypeCard type="other" active={awardType} set={setAwardType} title="อื่นๆ" sub="ระบุชื่อรางวัลเอง" icon={Star} color="emerald" />
+                <TypeCard type="activity" active={awardType} set={setAwardType} title="นอกหลักสูตรกิจกรรม" sub="ผู้นำ/แข่งขัน" icon={Trophy} />
+                <TypeCard type="innovation" active={awardType} set={setAwardType} title="ความคิดสร้างสรรค์เเละนวัตกรรม" sub="สิ่งประดิษฐ์/วิจัย" icon={Lightbulb} />
+                <TypeCard type="behavior" active={awardType} set={setAwardType} title="ความประพฤติดี" sub="จิตอาสา/คุณธรรม" icon={Heart} />
+                <TypeCard type="other" active={awardType} set={setAwardType} title="อื่นๆ" sub="ระบุชื่อรางวัลเอง" icon={Star} />
               </div>
               <AnimatePresence>
                 {awardType === "other" && (
@@ -321,7 +317,7 @@ export default function OrganizationNominationForm() {
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ staggerChildren: 0.1 }} className="space-y-16">
                   
                   {/* Step 2: Student Profile */}
-                  <Section num={2} title="ข้อมูลส่วนตัวนิสิต" theme={theme}>
+                  <Section num={2} title="ข้อมูลส่วนตัวนิสิต (ผู้รับรางวัล)" theme={theme}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <Input label="ชื่อจริง" val={manualProfile.firstname} set={(v: string) => handleProfileChange("firstname", v)} icon={User} theme={theme} req />
                       <Input label="นามสกุล" val={manualProfile.lastname} set={(v: string) => handleProfileChange("lastname", v)} icon={User} theme={theme} req />
@@ -331,8 +327,8 @@ export default function OrganizationNominationForm() {
                       <Select label="สาขา/ภาควิชา" val={manualProfile.major} set={(v: string) => handleProfileChange("major", v)} options={filteredDepartments.map(d => ({v:d.department_name, l:d.department_name}))} icon={BookOpen} theme={theme} disabled={!manualProfile.faculty} req />
                       <Select label="วิทยาเขต" val={manualProfile.campus} set={(v: string) => handleProfileChange("campus", v)} options={campuses.map(c => ({v:c.campus_name || c.campusName, l:c.campus_name || c.campusName}))} icon={MapPin} theme={theme} req />
                       <Input label="เกรดเฉลี่ยสะสม (GPA)" val={manualProfile.gpa} set={(v: string) => handleProfileChange("gpa", v)} icon={Percent} theme={theme} req />
-                      <Input label="อีเมลติดต่อ" val={manualProfile.email} set={(v: string) => handleProfileChange("email", v)} icon={Mail} theme={theme} type="email" req />
-                      <Input label="เบอร์โทรศัพท์" val={manualProfile.phone_number} set={(v: string) => handleProfileChange("phone_number", v)} icon={Phone} theme={theme} req max={10} />
+                      <Input label="อีเมลติดต่อนิสิต" val={manualProfile.email} set={(v: string) => handleProfileChange("email", v)} icon={Mail} theme={theme} type="email" req />
+                      <Input label="เบอร์โทรศัพท์นิสิต" val={manualProfile.phone_number} set={(v: string) => handleProfileChange("phone_number", v)} icon={Phone} theme={theme} req max={10} />
                       <Input label="วันเกิด" val={manualProfile.date_of_birth} set={(v: string) => handleProfileChange("date_of_birth", v)} icon={Calendar} theme={theme} type="date" req />
                       <Input label="ชื่ออาจารย์ที่ปรึกษา" val={manualProfile.advisor_name} set={(v: string) => handleProfileChange("advisor_name", v)} icon={GraduationCap} theme={theme} req />
                       <div className="md:col-span-2">
@@ -343,7 +339,7 @@ export default function OrganizationNominationForm() {
                   </Section>
 
                   {/* Step 3: Organization Details */}
-                  <Section num={3} title="ข้อมูลองค์กรผู้เสนอชื่อ (อ้างอิงจากระบบ)" theme={theme}>
+                  <Section num={3} title="ข้อมูลองค์กรผู้เสนอชื่อ (อ้างอิงจากระบบของท่าน)" theme={theme}>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <ReadOnly label="ชื่อหน่วยงาน" val={orgInfo.name} />
                       <ReadOnly label="ประเภทหน่วยงาน" val={orgInfo.type} />
@@ -352,50 +348,8 @@ export default function OrganizationNominationForm() {
                     </div>
                   </Section>
 
-                  {/* Step 4: Specific Details */}
+                  {/* Step 4: Specific Details (Simplified for all types) */}
                   <Section num={4} title="รายละเอียดผลงานและเหตุผลประกอบ" theme={theme}>
-                    {awardType === "activity" && (
-                      <div className="space-y-6 mb-8 pb-8 border-b border-slate-200/60">
-                         <label className="block text-sm font-bold text-slate-700 mb-4">ประเภทกิจกรรม <span className="text-rose-500">*</span></label>
-                         <div className="grid gap-3">
-                            {[
-                              { v: "committee", l: "ดำเนินกิจกรรมเกิดผลดีต่อมหาวิทยาลัยหรือสังคม" },
-                              { v: "competition", l: "แข่งขันทางวิชาการ/ศิลปวัฒนธรรม ได้รับรางวัลระดับชาติ/นานาชาติ" },
-                              { v: "reputation", l: "ดำรงตำแหน่งนายกองค์การ/สภา/ประธานสโมสรนิสิต หรือชมรม" }
-                            ].map(opt => (
-                              <label key={opt.v} onClick={() => setActivityCriteria(opt.v)} className={`flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${activityCriteria === opt.v ? `border-${theme.accent}-500 bg-${theme.accent}-50` : 'border-slate-100 bg-white hover:border-slate-200'}`}>
-                                <input type="radio" className="hidden" checked={activityCriteria === opt.v} readOnly />
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${activityCriteria === opt.v ? `border-${theme.accent}-500` : 'border-slate-300'}`}>
-                                  {activityCriteria === opt.v && <div className={`w-3 h-3 rounded-full bg-${theme.accent}-500`} />}
-                                </div>
-                                <span className={`font-medium ${activityCriteria === opt.v ? `text-${theme.accent}-800` : 'text-slate-600'}`}>{opt.l}</span>
-                              </label>
-                            ))}
-                         </div>
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                            <Input label="ชื่อโครงการ/กิจกรรม" val={projectTitle} set={projectTitle} icon={Trophy} theme={theme} req />
-                            <Input label="วันที่เข้าร่วม" val={dateReceived} set={dateReceived} icon={Calendar} type="date" theme={theme} req />
-                            <Input label="บทบาทหน้าที่/รางวัล" val={prize} set={setPrize} icon={Star} theme={theme} req />
-                            <Input label="หน่วยงานที่จัด" val={organizedBy} set={setOrganizedBy} icon={Building2} theme={theme} req />
-                            <Input label="ชื่อทีม (ถ้ามี)" val={teamName} set={setTeamName} icon={Users} theme={theme} />
-                         </div>
-                      </div>
-                    )}
-                    {awardType === "innovation" && (
-                      <div className="space-y-6 mb-8 pb-8 border-b border-slate-200/60">
-                        <label className={`flex items-center gap-4 p-5 rounded-2xl border-2 cursor-pointer transition-all ${innovationQual ? 'border-purple-500 bg-purple-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
-                           <input type="checkbox" checked={innovationQual} onChange={(e) => setInnovationQual(e.target.checked)} className="w-6 h-6 text-purple-600 rounded-md focus:ring-purple-500" />
-                           <span className="font-bold text-slate-700">ยืนยันว่าผลงานนี้ได้รับรางวัลระดับชาติหรือนานาชาติ <span className="text-rose-500">*</span></span>
-                        </label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                            <Input label="ชื่อผลงานนวัตกรรม" val={projectTitle} set={setProjectTitle} icon={Lightbulb} theme={theme} req />
-                            <Input label="วันที่ได้รับรางวัล" val={dateReceived} set={setDateReceived} icon={Calendar} type="date" theme={theme} req />
-                            <Input label="รางวัลที่ได้รับ" val={prize} set={setPrize} icon={Trophy} theme={theme} req />
-                            <Input label="เวทีการประกวด" val={organizedBy} set={setOrganizedBy} icon={Building2} theme={theme} req />
-                            <Input label="ชื่อทีม (ถ้ามี)" val={teamName} set={setTeamName} icon={Users} theme={theme} />
-                         </div>
-                      </div>
-                    )}
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">เหตุผลในการเสนอชื่อและความโดดเด่นของผลงาน <span className="text-rose-500">*</span></label>
                         <textarea value={otherDetails} onChange={(e) => setOtherDetails(e.target.value)} rows={5} className={`w-full bg-white/50 backdrop-blur-sm border border-slate-200 rounded-2xl px-5 py-4 outline-none transition-all ${theme.ring} hover:border-slate-300 resize-none`} placeholder="บรรยายเหตุผล ผลงาน กิจกรรม บทบาทหน้าที่ หรือคุณงามความดีของนิสิต..." />
@@ -412,7 +366,7 @@ export default function OrganizationNominationForm() {
                       <h4 className="text-xl font-bold text-slate-800 mb-2">ลากไฟล์มาวาง หรือ คลิกเพื่อเลือกไฟล์</h4>
                       <p className="text-slate-500 text-sm">รองรับเฉพาะไฟล์ .PDF (ขนาดรวมไม่เกิน 10MB)</p>
                       
-                      {/* Progress bar mock */}
+                      {/* Progress bar */}
                       <div className="max-w-xs mx-auto mt-6" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between text-xs font-medium text-slate-400 mb-2">
                           <span>พื้นที่ที่ใช้ไป</span>
@@ -480,17 +434,20 @@ const Section = ({ num, title, children, theme }: any) => (
   </motion.div>
 );
 
-const TypeCard = ({ type, active, set, title, sub, icon: Icon, color }: any) => {
+// ✅ แก้ไข: TypeCard ดึงค่าคลาสสีจาก THEME_STYLES ทำให้ใช้งานได้ 100% ไม่มีปัญหา Tailwind ลบสี
+const TypeCard = ({ type, active, set, title, sub, icon: Icon }: any) => {
   const isActive = active === type;
+  const t = THEME_STYLES[type] || THEME_STYLES.default;
+
   return (
-    <motion.div whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => set(type)} className={`relative cursor-pointer rounded-3xl p-6 border-2 transition-all duration-300 flex flex-col items-center justify-center text-center gap-4 overflow-hidden ${isActive ? `border-${color}-500 bg-white shadow-xl shadow-${color}-500/20` : 'border-slate-100 bg-white/60 hover:border-slate-300'}`}>
-      {isActive && <div className={`absolute inset-0 bg-${color}-50/50 pointer-events-none`} />}
-      <div className={`p-4 rounded-2xl transition-colors duration-300 z-10 ${isActive ? `bg-${color}-500 text-white shadow-md shadow-${color}-500/30` : 'bg-slate-100 text-slate-400'}`}>
+    <motion.div whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => set(type)} className={`relative cursor-pointer rounded-3xl p-6 border-2 transition-all duration-300 flex flex-col items-center justify-center text-center gap-4 overflow-hidden ${isActive ? `${t.cardBorder} bg-white shadow-xl ${t.cardShadow}` : 'border-slate-100 bg-white/60 hover:border-slate-300'}`}>
+      {isActive && <div className={`absolute inset-0 ${t.cardBg} opacity-50 pointer-events-none`} />}
+      <div className={`p-4 rounded-2xl transition-colors duration-300 z-10 ${isActive ? `${t.cardIconBg} ${t.cardIconText} shadow-md` : 'bg-slate-100 text-slate-400'}`}>
         <Icon className="w-8 h-8" strokeWidth={isActive ? 2.5 : 2} />
       </div>
       <div className="z-10">
-        <h4 className={`text-lg font-extrabold ${isActive ? `text-${color}-700` : 'text-slate-600'}`}>{title}</h4>
-        <p className={`text-sm font-medium ${isActive ? `text-${color}-500` : 'text-slate-400'}`}>{sub}</p>
+        <h4 className={`text-lg font-extrabold ${isActive ? t.titleText : 'text-slate-600'}`}>{title}</h4>
+        <p className={`text-sm font-medium ${isActive ? t.subText : 'text-slate-400'}`}>{sub}</p>
       </div>
     </motion.div>
   );

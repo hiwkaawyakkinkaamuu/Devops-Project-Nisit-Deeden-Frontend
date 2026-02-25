@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import axios from "axios";
+import { api } from "@/lib/axios"; // ✅ ใช้ api กลางของโปรเจกต์
 import Swal from "sweetalert2";
 
 // ==========================================
 // 0. Configuration & Service Layer
 // ==========================================
 
-const USE_MOCK_DATA = false;
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const USE_MOCK_DATA = false; // ✅ ปิด Mock เพื่อใช้ Backend จริง
 
 // Interface ตรงกับ DTO หลังบ้าน
 interface AcademicYear {
@@ -55,11 +54,12 @@ const systemService = {
         return { academic_year_id: 1, year: 2568, semester: 1, start_date: new Date().toISOString(), end_date: new Date().toISOString(), is_current: true, is_open_register: true };
     }
     try {
-        const res = await axios.get(`${API_BASE_URL}/system/current-term`);
-        return res.data.data;
-    } catch (error) {
+        // ใช้ api.get แทน axios (ระบบจะแนบ Token อัตโนมัติ)
+        const res = await api.get(`/academic-years/current`);
+        return res.data.data || res.data; 
+    } catch (error: any) {
         // ถ้า 404 แปลว่ายังไม่มีปีการศึกษา ให้ return null เพื่อเข้าโหมด Create
-        if (axios.isAxiosError(error) && error.response?.status === 404) {
+        if (error.response?.status === 404) {
             return null;
         }
         throw error;
@@ -68,10 +68,7 @@ const systemService = {
 
   // บันทึกข้อมูล (แยกกรณี Create และ Update)
   saveConfig: async (data: AcademicYear, isNew: boolean) => {
-    const token = localStorage.getItem("token");
-    const headers = { Authorization: `Bearer ${token}` };
-
-    // เตรียม Payload สำหรับ Create/Update (DTO: Year, Semester, StartDate, EndDate)
+    // เตรียม Payload สำหรับ Create/Update
     const payload = {
         year: Number(data.year),
         semester: Number(data.semester),
@@ -83,29 +80,20 @@ const systemService = {
 
     if (isNew) {
         // 1. Create New
-        const res = await axios.post(`${API_BASE_URL}/academic-years/create`, payload, { headers });
-        targetID = res.data.data.academic_year_id;
+        const res = await api.post(`/academic-years/create`, payload);
+        targetID = res.data?.data?.academic_year_id || res.data?.academic_year_id;
     } else {
         // 2. Update Existing
-        await axios.put(`${API_BASE_URL}/academic-years/edit/${targetID}`, payload, { headers });
+        await api.put(`/academic-years/edit/${targetID}`, payload);
     }
 
-    // 3. จัดการ Toggles (API แยก)
-    // หมายเหตุ: ต้องทำหลังจาก Create เสร็จแล้วเพื่อให้มี ID
-    // เช็คว่าต้อง Toggle ไหม (Logic แบบง่ายคือสั่ง Toggle ให้ตรงกับ State ที่ต้องการ)
-    
-    // เนื่องจาก Backend เป็น Toggle (สลับสถานะ) การยิงซ้ำอาจทำให้ค่าเพี้ยน 
-    // ในที่นี้เราจะสมมติว่าถ้าสร้างใหม่ เราต้องมา Toggle ทีหลังถ้า user เลือก true
-    // หรือถ้า Update เราอาจต้องเช็คค่าเดิมก่อน (แต่เพื่อความง่ายใน UI นี้ เราจะเน้น Create/Edit ข้อมูลหลักก่อน)
-    
+    // 3. จัดการ Toggles
     if (isNew && data.is_current) {
-         await axios.put(`${API_BASE_URL}/academic-years/toggle-current/${targetID}`, {}, { headers });
+         await api.put(`/academic-years/toggle-current/${targetID}`);
     }
     if (isNew && data.is_open_register) {
-         await axios.put(`${API_BASE_URL}/academic-years/toggle-registration/${targetID}`, {}, { headers });
+         await api.put(`/academic-years/toggle-registration/${targetID}`);
     }
-    
-    // กรณี Update ถ้าอยากจัดการ Toggle ต้องเปรียบเทียบกับค่าเดิม (ข้ามไปก่อนเพื่อความกระชับ)
     
     return true;
   },
@@ -114,7 +102,7 @@ const systemService = {
   toggleStatus: async (id: number, type: 'current' | 'register') => {
       if(id === 0) return; // ยังไม่ได้เซฟ
       const endpoint = type === 'current' ? 'toggle-current' : 'toggle-registration';
-      await axios.put(`${API_BASE_URL}/academic-years/${endpoint}/${id}`);
+      await api.put(`/academic-years/${endpoint}/${id}`);
   }
 };
 
@@ -149,11 +137,11 @@ export default function SystemSettingsPage() {
             setConfig(data);
         } else {
             // ถ้าไม่มีข้อมูล (404) ให้เป็นโหมดสร้างใหม่
-            setConfig(prev => ({ ...prev, is_current: true })); // Default ให้เป็น Current เลยถ้าสร้างตัวแรก
+            setConfig(prev => ({ ...prev, is_current: true })); 
         }
       } catch (error) {
-        console.error(error);
-        Swal.fire({ icon: 'error', title: 'Error', text: 'ไม่สามารถเชื่อมต่อระบบได้' });
+        console.error("Init config error:", error);
+        Swal.fire({ icon: 'error', title: 'Error', text: 'ไม่สามารถเชื่อมต่อระบบเพื่อดึงข้อมูลได้' });
       } finally {
         setLoading(false);
       }
@@ -187,29 +175,31 @@ export default function SystemSettingsPage() {
         if (refreshed) setConfig(refreshed);
 
     } catch (error: any) {
-        Swal.fire({ icon: 'error', title: 'บันทึกล้มเหลว', text: error.response?.data?.error || error.message });
+        Swal.fire({ icon: 'error', title: 'บันทึกล้มเหลว', text: error.response?.data?.error || error.message || "เกิดข้อผิดพลาด" });
     } finally {
         setSaving(false);
     }
   };
 
   const handleToggle = async (type: 'current' | 'register', value: boolean) => {
-      // อัปเดต UI ทันที
+      // อัปเดต UI ทันทีเพื่อความลื่นไหล
       setConfig(prev => ({ ...prev, [type === 'current' ? 'is_current' : 'is_open_register']: value }));
       
-      // ถ้าเป็น record ที่มีอยู่จริง ให้ยิง API เลย
+      // ถ้าเป็น record ที่มีอยู่จริง ให้ยิง API บันทึกทันที
       if (!isNewRecord) {
           try {
               await systemService.toggleStatus(config.academic_year_id, type);
           } catch (error) {
-              console.error(error);
-              // Revert UI ถ้า error (optional)
+              console.error("Toggle API error:", error);
+              // Revert UI กรณีระบบพัง
+              setConfig(prev => ({ ...prev, [type === 'current' ? 'is_current' : 'is_open_register']: !value }));
+              Swal.fire({ icon: 'error', title: 'Error', text: 'ไม่สามารถเปลี่ยนสถานะได้' });
           }
       }
   };
 
   // --- Render ---
-  if (loading) return <div className="p-10 text-center">Loading System Config...</div>;
+  if (loading) return <div className="p-10 text-center text-slate-500 font-medium">กำลังโหลดข้อมูลระบบ...</div>;
 
   return (
     <div className="min-h-screen bg-[#F8F9FB] p-6 md:p-12 font-sans pb-32">
@@ -232,10 +222,9 @@ export default function SystemSettingsPage() {
             {/* Left Column: Info & Active Toggle */}
             <div className="lg:col-span-1 space-y-6">
                 
-                {/* 1. Year/Semester Inputs (Editable now!) */}
+                {/* 1. Year/Semester Inputs */}
                 <div className="relative overflow-hidden rounded-[32px] p-8 text-white shadow-xl shadow-blue-200 transition-transform duration-500 hover:-translate-y-1">
                     <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700"></div>
-                    {/* Decorative Blobs */}
                     <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -translate-y-10 translate-x-10"></div>
                     
                     <div className="relative z-10">
@@ -250,7 +239,7 @@ export default function SystemSettingsPage() {
                                 <input 
                                     type="number" 
                                     value={config.year}
-                                    onChange={(e) => setConfig({...config, year: parseInt(e.target.value)})}
+                                    onChange={(e) => setConfig({...config, year: parseInt(e.target.value) || 0})}
                                     className="w-full bg-white/20 border border-white/30 rounded-xl px-4 py-3 text-3xl font-black text-white placeholder-white/50 focus:outline-none focus:bg-white/30 transition-all"
                                 />
                             </div>
@@ -259,7 +248,7 @@ export default function SystemSettingsPage() {
                                 <label className="text-blue-100 text-xs font-bold uppercase tracking-wider mb-2 block">ภาคเรียนที่</label>
                                 <select 
                                     value={config.semester}
-                                    onChange={(e) => setConfig({...config, semester: parseInt(e.target.value)})}
+                                    onChange={(e) => setConfig({...config, semester: parseInt(e.target.value) || 1})}
                                     className="w-full bg-white/20 border border-white/30 rounded-xl px-4 py-3 text-2xl font-bold text-white focus:outline-none focus:bg-white/30 transition-all cursor-pointer [&>option]:text-gray-900"
                                 >
                                     <option value={1}>1</option>

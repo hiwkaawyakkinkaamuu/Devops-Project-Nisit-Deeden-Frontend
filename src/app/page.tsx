@@ -11,7 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 // 0. Configuration & Service Layer
 // ==========================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 // Interface
 interface LoginResponse {
@@ -73,8 +73,8 @@ export default function LoginPage() {
       3: "/associate-dean/consider",
       4: "/dean/consider",
       5: "/student-development/verify-submit",
-      6: "/committee/consider",
-      7: "/committee-chairman/consider",
+      6: "/student-development-committee/consider",
+      7: "/chairman-of-student-development-committee/consider",
       8: "/chancellor/dashboard",    // อธิการบดี
       9: "/organization/main/organization-nomination-form",  // หน่วยงานภายนอก
     };

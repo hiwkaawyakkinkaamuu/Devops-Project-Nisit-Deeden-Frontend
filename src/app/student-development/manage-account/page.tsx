@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import axios from "axios";
+import { api } from "@/lib/axios"; // ✅ ใช้ api กลางเพื่อจัดการ Token และ CORS
 import Swal from "sweetalert2";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,91 +10,50 @@ import { motion, AnimatePresence } from "framer-motion";
 // 0. Configuration & Service Layer
 // ==========================================
 
-const USE_MOCK_DATA = true; // Set FALSE to use Real API
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+const USE_MOCK_DATA = false; // ✅ ปิด Mock เพื่อใช้ API จริง
 const ITEMS_PER_PAGE = 6;
 const CENTRAL_ID = 99;
 
-// --- Role Options ---
+// --- Role Options & Mapping ---
 const ROLE_OPTIONS = [
   { value: "student", label: "นิสิต", style: "bg-gray-100 text-gray-600 border-gray-200" },
   { value: "head_of_department", label: "หัวหน้าภาควิชา", style: "bg-indigo-50 text-indigo-600 border-indigo-100" },
-  { value: "dean", label: "คณบดี", style: "bg-orange-50 text-orange-600 border-orange-100" },
   { value: "associate_dean", label: "รองคณบดี", style: "bg-amber-50 text-amber-600 border-amber-100" },
+  { value: "dean", label: "คณบดี", style: "bg-orange-50 text-orange-600 border-orange-100" },
   { value: "student_development", label: "กองพัฒนานิสิต", style: "bg-blue-50 text-blue-600 border-blue-100" },
   { value: "student_development_committee", label: "คณะกรรมการฯ", style: "bg-teal-50 text-teal-600 border-teal-100" },
   { value: "chairman_of_student_development_committee", label: "ประธานคณะกรรมการฯ", style: "bg-emerald-50 text-emerald-600 border-emerald-100" },
+  { value: "organization", label: "หน่วยงานภายนอก", style: "bg-rose-50 text-rose-600 border-rose-100" }
 ];
 
-// --- Hardcoded Faculties ---
+// แปลง Role ID (Backend) เป็น Role Code (Frontend)
+const mapRoleIdToCode = (id: number): string => {
+  const map: Record<number, string> = {
+    1: "student", 2: "head_of_department", 3: "associate_dean", 4: "dean",
+    5: "student_development", 6: "student_development_committee", 
+    7: "chairman_of_student_development_committee", 8: "chancellor", 9: "organization"
+  };
+  return map[id] || "student";
+};
 
+// แปลง Role Code (Frontend) เป็น Role ID (Backend)
+const mapCodeToRoleId = (code: string): number => {
+  const map: Record<string, number> = {
+    "student": 1, "head_of_department": 2, "associate_dean": 3, "dean": 4,
+    "student_development": 5, "student_development_committee": 6, 
+    "chairman_of_student_development_committee": 7, "chancellor": 8, "organization": 9
+  };
+  return map[code] || 1;
+};
+
+// --- Hardcoded Faculties ---
 const KU_FACULTIES = [
-    {id: 1, name: "คณะวิศวกรรมศาสตร์",
-      departments: [
-        { id: 101, name: "วิศวกรรมโยธา" }, { id: 102, name: "วิศวกรรมไฟฟ้า" }, { id: 103, name: "วิศวกรรมเครื่องกล" },
-        { id: 104, name: "วิศวกรรมอุตสาหการ" }, { id: 105, name: "วิศวกรรมคอมพิวเตอร์" }, { id: 106, name: "วิศวกรรมเคมี" },
-        { id: 107, name: "วิศวกรรมสิ่งแวดล้อม" }, { id: 108, name: "วิศวกรรมวัสดุ" }, { id: 109, name: "วิศวกรรมการบินและอวกาศ" }
-        ]
-    },
-    {id: 2, name: "คณะวิทยาศาสตร์",
-      departments: [
-        { id: 201, name: "คณิตศาสตร์" }, { id: 202, name: "เคมี" }, { id: 203, name: "ฟิสิกส์" },
-        { id: 204, name: "ชีววิทยา" }, { id: 205, name: "สถิติ" }, { id: 206, name: "วิทยาการคอมพิวเตอร์" },
-        { id: 207, name: "จุลชีววิทยา" }
-      ]
-    },
-    {id: 3, name: "คณะเกษตร",
-      departments: [
-        { id: 301, name: "กีฏวิทยา" }, { id: 302, name: "โรคพืช" }, { id: 303, name: "ปฐพีวิทยา" },
-        { id: 304, name: "พืชไร่" }, { id: 305, name: "พืชสวน" }, { id: 306, name: "นวัตกรรมเกษตร" }
-      ]
-    },
-    {id: 4, name: "คณะบริหารธุรกิจ",
-      departments: [
-        { id: 401, name: "การเงิน" }, { id: 402, name: "การจัดการ" }, { id: 403, name: "การตลาด" },
-        { id: 404, name: "บัญชี" }, { id: 405, name: "การจัดการการผลิต" }
-      ]
-    },
-    {id: 5, name: "คณะมนุษยศาสตร์",
-      departments: [
-        { id: 501, name: "ภาษาไทย" }, { id: 502, name: "ภาษาอังกฤษ" }, { id: 503, name: "นิเทศศาสตร์" },
-        { id: 504, name: "ภาษาตะวันออก" }, { id: 505, name: "วรรณคดี" }
-      ]
-    },
-    {id: 6, name: "คณะเศรษฐศาสตร์",
-      departments: [{ id: 601, name: "เศรษฐศาสตร์" }, { id: 602, name: "เศรษฐศาสตร์เกษตร" }, { id: 603, name: "สหกรณ์" }]
-    },
-    {id: 7, name: "คณะสังคมศาสตร์",
-      departments: [{ id: 701, name: "จิตวิทยา" }, { id: 702, name: "รัฐศาสตร์" }, { id: 703, name: "นิติศาสตร์" }, { id: 704, name: "สังคมวิทยา" }]
-    },
-    {id: 8, name: "คณะศึกษาศาสตร์",
-      departments: [{ id: 801, name: "พลศึกษา" }, { id: 802, name: "สุขศึกษา" }, { id: 803, name: "การสอน" }]
-    },
-    {id: 9, name: "คณะอุตสาหกรรมเกษตร",
-      departments: [{ id: 901, name: "วิทยาศาสตร์และเทคโนโลยีการอาหาร" }, { id: 902, name: "เทคโนโลยีชีวภาพ" }]
-    },
-    {id: 10, name: "คณะประมง",
-      departments: [{ id: 1001, name: "เพาะเลี้ยงสัตว์น้ำ" }, { id: 1002, name: "ผลิตภัณฑ์ประมง" }]
-    },
-    {id: 11, name: "คณะวนศาสตร์",
-      departments: [{ id: 1101, name: "การจัดการป่าไม้" }, { id: 1102, name: "วนวัฒนวิทยา" }]
-    },
-    {id: 12, name: "คณะสถาปัตยกรรมศาสตร์",
-      departments: [{ id: 1201, name: "สถาปัตยกรรม" }, { id: 1202, name: "ภูมิสถาปัตยกรรม" }]
-    },
-    { id: 13, name: "คณะสัตวแพทยศาสตร์", departments: [{ id: 1301, name: "สัตวแพทยศาสตร์" }] },
-    { id: 14, name: "คณะเทคนิคการสัตวแพทย์", departments: [{ id: 1401, name: "เทคนิคการสัตวแพทย์" }] },
-    { id: 15, name: "คณะสิ่งแวดล้อม", departments: [{ id: 1501, name: "วิทยาศาสตร์สิ่งแวดล้อม" }] },
-    { id: 16, name: "คณะแพทยศาสตร์", departments: [{ id: 1601, name: "แพทยศาสตร์" }] },
-    { id: 17, name: "คณะพยาบาลศาสตร์", departments: [{ id: 1701, name: "พยาบาลศาสตร์" }] },
-    { id: 18, name: "คณะเภสัชศาสตร์", departments: [{ id: 1801, name: "เภสัชศาสตร์" }] },
-    { id: 19, name: "วิทยาลัยบูรณาการศาสตร์", departments: [{ id: 1901, name: "ศาสตร์แห่งแผ่นดิน" }] },
-    {id: 99, name: "กองพัฒนานิสิต (ส่วนกลาง)",
-      departments: [
-        { id: 9901, name: "งานบริการและสวัสดิการ" }, { id: 9902, name: "งานกิจกรรมนิสิต" },
-        { id: 9903, name: "งานแนะแนวและจัดหางาน" }, { id: 9904, name: "งานวินัยและพัฒนานิสิต" }
-      ]
-    }
+    {id: 1, name: "คณะวิศวกรรมศาสตร์", departments: [{ id: 101, name: "วิศวกรรมโยธา" }, { id: 102, name: "วิศวกรรมไฟฟ้า" }, { id: 105, name: "วิศวกรรมคอมพิวเตอร์" }]},
+    {id: 2, name: "คณะวิทยาศาสตร์", departments: [{ id: 201, name: "คณิตศาสตร์" }, { id: 202, name: "เคมี" }, { id: 206, name: "วิทยาการคอมพิวเตอร์" }]},
+    {id: 3, name: "คณะเกษตร", departments: [{ id: 301, name: "กีฏวิทยา" }, { id: 304, name: "พืชไร่" }]},
+    {id: 4, name: "คณะบริหารธุรกิจ", departments: [{ id: 401, name: "การเงิน" }, { id: 402, name: "การจัดการ" }, { id: 403, name: "การตลาด" }]},
+    {id: 5, name: "คณะมนุษยศาสตร์", departments: [{ id: 501, name: "ภาษาไทย" }, { id: 502, name: "ภาษาอังกฤษ" }]},
+    {id: 99, name: "กองพัฒนานิสิต (ส่วนกลาง)", departments: [{ id: 9901, name: "งานบริการและสวัสดิการ" }, { id: 9902, name: "งานกิจกรรมนิสิต" }]}
 ];
 
 // --- Interfaces ---
@@ -124,7 +83,6 @@ const UserSchema = z.object({
   faculty_id: z.number().min(1, "กรุณาเลือกสังกัด/คณะ"),
   department_id: z.number().optional(),
 }).superRefine((data, ctx) => {
-  // 1. Student Validation
   if (data.role_code === 'student') {
     if (!data.student_number || !/^\d{10}$/.test(data.student_number)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "รหัสนิสิตต้องเป็นตัวเลข 10 หลัก", path: ["student_number"] });
@@ -133,64 +91,76 @@ const UserSchema = z.object({
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "กรุณาเลือกสาขา", path: ["department_id"] });
     }
   }
-
-  // 2. Student Development (กองพัฒ) Validation
-  if (data.role_code === 'student_development') {
-      if (data.faculty_id !== CENTRAL_ID) {
-          ctx.addIssue({ code: z.ZodIssueCode.custom, message: "กองพัฒนานิสิต ต้องสังกัดส่วนกลางเท่านั้น", path: ["faculty_id"] });
-      }
+  if (data.role_code === 'student_development' && data.faculty_id !== CENTRAL_ID) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "กองพัฒนานิสิต ต้องสังกัดส่วนกลางเท่านั้น", path: ["faculty_id"] });
   }
-
-  // 3. Other Roles Validation (Prevent selecting Central if not Student Dev)
   if (data.role_code !== 'student_development' && data.faculty_id === CENTRAL_ID) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "ตำแหน่งนี้ไม่สามารถเลือกสังกัดส่วนกลางได้", path: ["faculty_id"] });
   }
 });
 
-// --- Service & Mock Data ---
+// --- Service Layer (Connected to API) ---
 const Toast = Swal.mixin({
-    toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true,
-    didOpen: (toast) => { toast.addEventListener('mouseenter', Swal.stopTimer); toast.addEventListener('mouseleave', Swal.resumeTimer); }
+    toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true
 });
 
-const MOCK_USERS: User[] = [
-    { user_id: 1, firstname: "System", lastname: "Admin", email: "admin@ku.th", role_code: "student_development", faculty_name: "กองพัฒนานิสิต (ส่วนกลาง)", department_name: "งานกิจกรรมนิสิต", faculty_id: 99, department_id: 9901, avatarColor: "bg-purple-500" },
-    { user_id: 2, firstname: "สมชาย", lastname: "ใจดี", email: "somchai@ku.th", role_code: "head_of_department", faculty_name: "คณะวิศวกรรมศาสตร์", department_name: "วิศวกรรมคอมพิวเตอร์", faculty_id: 1, department_id: 105, avatarColor: "bg-blue-500" },
-    { user_id: 3, firstname: "เรียนดี", lastname: "มีวินัย", email: "std6601@ku.th", student_number: "6610401234", role_code: "student", faculty_name: "คณะมนุษยศาสตร์", department_name: "ภาษาอังกฤษ", faculty_id: 5, department_id: 502, avatarColor: "bg-green-500" },
-];
-
 const userService = {
-  getUsers: async () => {
-    if (USE_MOCK_DATA) {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      return MOCK_USERS;
+  getUsers: async (): Promise<User[]> => {
+    try {
+      const res = await api.get(`/users`);
+      const usersData = res.data?.data || res.data || [];
+      
+      // ✅ แปลงข้อมูลจาก Backend ให้อยู่ในฟอร์แมตที่ Frontend ต้องการ
+      return usersData.map((u: any) => ({
+        user_id: u.user_id || u.UserID,
+        firstname: u.firstname || u.Firstname || "ไม่มีชื่อ",
+        lastname: u.lastname || u.Lastname || "",
+        email: u.email || u.Email || "-",
+        role_code: mapRoleIdToCode(u.role_id || u.RoleID),
+        faculty_id: u.campus_id || u.CampusID || 1, // ใช้ campus_id เทียบเคียง faculty ชั่วคราว
+        faculty_name: KU_FACULTIES.find(f => f.id === (u.campus_id || u.CampusID || 1))?.name || "ระบุไม่ได้",
+        student_number: u.student_number || "",
+        avatarColor: "bg-blue-500" // สุ่มสีได้ตามต้องการ
+      }));
+    } catch (error) {
+      throw error;
     }
-    const res = await axios.get(`${API_BASE_URL}/users`);
-    return res.data.data;
   },
   createUser: async (data: Partial<User>) => {
-    if (USE_MOCK_DATA) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return { ...data, user_id: Math.floor(Math.random() * 10000) };
-    }
-    const res = await axios.post(`${API_BASE_URL}/users`, data);
+    // แปลง role_code กลับเป็น role_id ส่งให้ Backend
+    const payload = { 
+        ...data, 
+        role_id: mapCodeToRoleId(data.role_code!),
+        campus_id: data.faculty_id // ส่งค่า faculty เข้า campus_id 
+    };
+    
+    // ⚠️ ปกติระบบหลังบ้านมักจะใช้ /auth/register ในการสร้าง User
+    const res = await api.post(`/auth/register`, payload);
     return res.data;
   },
   updateUser: async (id: number, data: Partial<User>) => {
-    if (USE_MOCK_DATA) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return { ...data, user_id: id };
-    }
-    const res = await axios.put(`${API_BASE_URL}/users/${id}`, data);
+    const payload = { 
+        ...data, 
+        role_id: mapCodeToRoleId(data.role_code!),
+        campus_id: data.faculty_id
+    };
+    // ลบ password ออกถ้าไม่มีการแก้
+    if (!payload.password) delete payload.password;
+
+    const res = await api.put(`/users/${id}`, payload);
     return res.data;
   },
   deleteUser: async (id: number) => {
-    if (USE_MOCK_DATA) {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      return true;
+    try {
+        await api.delete(`/users/${id}`);
+        return true;
+    } catch (error: any) {
+        // ดัก Error ว่าถ้าหลังบ้านยังไม่ทำ API Delete ให้แจ้งเตือนแทนหน้าพัง
+        if (error.response?.status === 404) {
+            throw new Error("ยังไม่มีระบบลบบัญชีในฝั่งหลังบ้าน (API Not Found)");
+        }
+        throw error;
     }
-    await axios.delete(`${API_BASE_URL}/users/${id}`);
-    return true;
   }
 };
 
@@ -229,7 +199,7 @@ export default function StudentDevelopmentPage() {
       const data = await userService.getUsers();
       setUsers(data);
     } catch (error) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'ไม่สามารถโหลดข้อมูลผู้ใช้งานได้' });
+      Swal.fire({ icon: 'error', title: 'Error', text: 'ไม่สามารถโหลดข้อมูลผู้ใช้งานได้ อาจไม่มีสิทธิ์เข้าถึงหรือเกิดข้อผิดพลาด' });
     } finally {
       setLoading(false);
     }
@@ -244,12 +214,11 @@ export default function StudentDevelopmentPage() {
 
   const handleOpenEdit = (user: User) => {
     setModalMode("edit");
-    setFormData({ ...user, password: "" }); // Clear password for security
+    setFormData({ ...user, password: "" }); // Clear password
     setIsModalOpen(true);
   };
 
   const handleRoleChange = (role: string) => {
-      // Auto-set Faculty based on Role logic
       if (role === 'student_development') {
           setFormData(prev => ({ ...prev, role_code: role, faculty_id: CENTRAL_ID, department_id: undefined }));
       } else {
@@ -279,8 +248,8 @@ export default function StudentDevelopmentPage() {
         await userService.deleteUser(id);
         setUsers(prev => prev.filter(u => u.user_id !== id));
         Toast.fire({ icon: 'success', title: 'ดำเนินการสำเร็จ', text: `ลบบัญชี ${name} เรียบร้อยแล้ว` });
-      } catch (error) {
-        Swal.fire({ icon: 'error', title: 'Error', text: 'ลบข้อมูลไม่สำเร็จ' });
+      } catch (error: any) {
+        Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'ลบข้อมูลไม่สำเร็จ' });
       }
     }
   };
@@ -293,13 +262,6 @@ export default function StudentDevelopmentPage() {
     if (!validation.success) {
       const errorMsg = validation.error.issues[0].message;
       Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ถูกต้อง', text: errorMsg, confirmButtonColor: '#F59E0B' });
-      return;
-    }
-
-    // Duplicate Email Check (Mock)
-    const duplicate = users.find(u => u.email === formData.email && u.user_id !== formData.user_id);
-    if (duplicate) {
-      Swal.fire({ icon: 'warning', title: 'ข้อมูลซ้ำ', text: 'อีเมลนี้ถูกใช้งานแล้ว', confirmButtonColor: '#F59E0B' });
       return;
     }
 
@@ -317,22 +279,20 @@ export default function StudentDevelopmentPage() {
       };
 
       if (modalMode === 'create') {
-        const newUser = await userService.createUser(payload);
-        setUsers([newUser as User, ...users]);
+        await userService.createUser(payload);
+        Toast.fire({ icon: 'success', title: 'สร้างบัญชีสำเร็จ', text: `กรุณารีเฟรชหน้าเว็บเพื่อดูการเปลี่ยนแปลง` });
       } else {
-        const updatedUser = await userService.updateUser(formData.user_id!, payload);
-        setUsers(users.map(u => u.user_id === updatedUser.user_id ? updatedUser : u));
+        await userService.updateUser(formData.user_id!, payload);
+        Toast.fire({ icon: 'success', title: 'แก้ไขสำเร็จ', text: `ข้อมูลบัญชี ${fullName} อัปเดตแล้ว` });
       }
 
       setIsModalOpen(false);
-      Toast.fire({ 
-          icon: 'success', 
-          title: modalMode === 'create' ? 'สร้างบัญชีสำเร็จ' : 'แก้ไขสำเร็จ',
-          text: `ดำเนินการกับผู้ใช้: ${fullName}`
-      });
+      fetchData(); // รีโหลดข้อมูลใหม่
 
-    } catch (error) {
-      Swal.fire({ icon: 'error', title: 'Error', text: 'เกิดข้อผิดพลาดในการบันทึก' });
+    } catch (error: any) {
+      console.error(error);
+      const errText = error.response?.data?.error || 'เกิดข้อผิดพลาดในการบันทึก กรุณาตรวจสอบ Console';
+      Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: errText });
     } finally {
       setIsSaving(false);
     }
@@ -431,7 +391,7 @@ export default function StudentDevelopmentPage() {
                             {/* Avatar & Name */}
                             <div className="flex items-center gap-5 flex-1 min-w-0">
                                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl text-white font-bold shadow-lg shadow-gray-200 transform group-hover:scale-105 transition-transform ${user.avatarColor || 'bg-gray-400'}`}>
-                                    {user.firstname.charAt(0)}
+                                    {user.firstname.charAt(0).toUpperCase()}
                                 </div>
                                 <div className="min-w-0">
                                     <div className="flex items-center gap-2 mb-1">

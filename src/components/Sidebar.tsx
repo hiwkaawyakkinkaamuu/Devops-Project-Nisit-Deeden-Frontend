@@ -4,12 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useState, useEffect } from "react";
 import Swal from "sweetalert2";
-// Import Variants เพิ่มเข้ามาเพื่อแก้ปัญหา TypeScript
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/axios";
 
-// Import Icons จาก lucide-react
 import { 
   UserCheck, History, Award, Search, FileText, User, 
   CheckSquare, Users, Menu, X, LogOut, Landmark, BookOpen, 
@@ -31,9 +29,10 @@ type UserRole =
   | "chancellor"
   | "organization";
 
-interface Faculty { faculty_id: number; faculty_name: string; }
-interface Department { department_id: number; department_name: string; }
-interface Campus { campus_id: number; campus_name: string; }
+interface Faculty { faculty_id?: number; facultyID?: number; faculty_name?: string; facultyName?: string; name?: string; }
+interface Department { department_id?: number; departmentID?: number; department_name?: string; departmentName?: string; name?: string; }
+// ✅ แก้ไข Interface ให้รองรับทั้ง camelCase และ snake_case
+interface Campus { campus_id?: number; campusID?: number; campus_name?: string; campusName?: string; }
 
 interface OrganizationData {
   organization_id: number;
@@ -50,7 +49,8 @@ interface UserProfileData {
   lastname: string;
   email: string;
   role_id: number;
-  campus_id: number;
+  campus_id?: number;
+  CampusID?: number; // รองรับกรณี API User ส่งมาเป็น CamelCase
   image_path?: string;
   Student?: any;
   student?: any;
@@ -147,7 +147,6 @@ const MENU_CONFIG: Record<string, MenuItemType[]> = {
     { href: "/student-development/history-verify-submit", label: "ประวัติการเเก้ไขประเภท", icon: Icons.History },
     { href: "/student-development/committee-setup", label: "จัดการคณะกรรมการ", icon: Icons.UsersGroup },
     { href: "/student-development/manage-account", label: "จัดการบัญชีผู้ใช้", icon: Icons.DocumentCheck },
-    { href: "/student-development/master-data", label: "จัดการคณะเเละสาขา", icon: Icons.UsersGroup },
     { href: "/student-development/setting", label: "ตั้งค่าช่วงเวลารับสมัคร", icon: Icons.History },
   ],
   chancellor: [
@@ -241,8 +240,6 @@ function getOrganizationData(data: UserProfileData): OrganizationData | null {
   return data.organization_data || data.Organization || data.organization || null;
 }
 
-// 🎴 Profile Info Row - Card Design 
-// ✅ เพิ่มชนิด : Variants ตรงนี้เพื่อให้ TypeScript เข้าใจโครงสร้างอย่างถูกต้อง
 const itemVariants: Variants = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
@@ -275,30 +272,32 @@ function ProfileModal({ isOpen, onClose, data, faculties, departments, campuses 
   const roleNameTH = ROLE_NAMES_TH[roleKey] || roleKey;
   const isOrganization = roleKey === "organization" || data.role_id === 9;
 
-  const campus = campuses.find(c => c.campus_id === data.campus_id);
-  const campusName = campus ? campus.campus_name : "ไม่ระบุวิทยาเขต";
+  // ✅ แก้ไข: ดักจับข้อมูลวิทยาเขตให้ครอบคลุมทั้ง API ใหม่และเก่า
+  const userCampusId = data.campus_id || data.CampusID;
+  const campus = campuses.find(c => c.campusID === userCampusId || c.campus_id === userCampusId);
+  const campusName = campus ? (campus.campusName || campus.campus_name) : "ไม่ระบุวิทยาเขต";
 
   const orgData = getOrganizationData(data);
   const student = data.Student || data.student || data.student_data;
   const studentNumber = student?.student_number;
 
-  let facultyName = student?.Faculty?.faculty_name || student?.faculty?.faculty_name;
+  let facultyName = student?.Faculty?.faculty_name || student?.faculty?.faculty_name || student?.Faculty?.facultyName;
   if (!facultyName && student?.faculty_id) {
-      const found = faculties.find(f => f.faculty_id === Number(student.faculty_id));
-      facultyName = found ? found.faculty_name : student.faculty_id;
+      const found = faculties.find(f => f.faculty_id === Number(student.faculty_id) || f.facultyID === Number(student.faculty_id));
+      facultyName = found ? (found.faculty_name || found.facultyName || found.name) : student.faculty_id;
   }
 
-  let departmentName = student?.Department?.department_name || student?.department?.department_name;
+  let departmentName = student?.Department?.department_name || student?.department?.department_name || student?.Department?.departmentName;
   if (!departmentName && student?.department_id) {
-      const found = departments.find(d => d.department_id === Number(student.department_id));
-      departmentName = found ? found.department_name : student.department_id;
+      const found = departments.find(d => d.department_id === Number(student.department_id) || d.departmentID === Number(student.department_id));
+      departmentName = found ? (found.department_name || found.departmentName || found.name) : student.department_id;
   }
 
   const imageUrl = getProfileImageUrl(data.image_path);
 
   return (
     <AnimatePresence>
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 overflow-hidden">
             <style dangerouslySetInnerHTML={{__html: `
                 @keyframes gradient-xy { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
                 .animate-gradient-xy { background-size: 400% 400%; animation: gradient-xy 12s ease infinite; }
@@ -311,7 +310,7 @@ function ProfileModal({ isOpen, onClose, data, faculties, departments, campuses 
                 animate={{ opacity: 1, backdropFilter: "blur(12px)" }}
                 exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
                 transition={{ duration: 0.4 }}
-                className="absolute inset-0 bg-slate-900/30"
+                className="absolute inset-0 bg-slate-900/40"
                 onClick={onClose}
             />
             
@@ -422,7 +421,12 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
   const roleKey = getRoleKey(user?.role_id);
   const menuItems = MENU_CONFIG[roleKey] || [];
 
-  const isActive = (path: string) => pathname === path || (path !== "/" && pathname.startsWith(path));
+  const isActive = (path: string) => {
+    if (pathname === path) return true;
+    if (pathname.startsWith(`${path}/`)) return true;
+    return false;
+  };
+
   const footerImageUrl = getProfileImageUrl(fullProfile?.image_path);
 
   useEffect(() => {
@@ -494,7 +498,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
         initial={false}
         animate={{ width: isCollapsed ? 86 : 280 }}
         transition={{ type: "spring", stiffness: 350, damping: 30, mass: 0.8 }}
-        className="bg-slate-50/80 backdrop-blur-3xl h-screen fixed left-0 top-0 flex flex-col z-50 border-r border-slate-200/50 shadow-[8px_0_40px_rgba(0,0,0,0.02)] overflow-hidden"
+        className="bg-white/95 backdrop-blur-3xl h-screen fixed left-0 top-0 flex flex-col z-[60] border-r border-slate-200/80 shadow-[8px_0_40px_rgba(0,0,0,0.04)] overflow-hidden"
       >
         <div className="h-[90px] flex items-center justify-between px-5 shrink-0 relative z-20 bg-transparent">
           <AnimatePresence>

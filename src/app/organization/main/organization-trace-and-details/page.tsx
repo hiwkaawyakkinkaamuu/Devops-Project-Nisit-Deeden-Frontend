@@ -13,7 +13,6 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
-// ฟังก์ชันสำหรับแปลง Path ไฟล์ให้ชี้ไปที่ Backend เสมอ (ป้องกัน 404)
 const getFileUrl = (filePath: string) => {
   if (!filePath) return "#";
   const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api").replace(/\/api$/, "");
@@ -22,7 +21,7 @@ const getFileUrl = (filePath: string) => {
 };
 
 // ==========================================
-// 1. Logic Mapping (ขั้นตอนการติดตามอิงตาม Seed FormStatus)
+// 1. Logic Mapping & Custom Status Naming
 // ==========================================
 const STEP_LOGIC = [
   { id: 1, label: "ยื่นเสนอชื่อ", ids: [], role: "ผู้ยื่นคำร้อง", icon: User },
@@ -35,6 +34,22 @@ const STEP_LOGIC = [
   { id: 8, label: "อธิการบดี", ids: [12, 14, 15], role: "อธิการบดี", icon: CheckCircle2 }
 ];
 
+// ฟังก์ชันแปลสถานะให้เป็นคำที่เข้าใจง่าย (บอกว่าตอนนี้รอใครอยู่)
+const getCustomStatusName = (statusId: number, originalName: string) => {
+  const forwardMapping: Record<number, string> = {
+      1: "รอหัวหน้าภาควิชาพิจารณา",
+      2: "รอรองคณบดีพิจารณา",
+      4: "รอคณบดีพิจารณา",
+      6: "รอกองพัฒนานิสิตตรวจสอบ",
+      8: "รอคณะกรรมการพิจารณา",
+      10: "รอประธานคณะกรรมการลงนาม",
+      12: "รออธิการบดีลงนาม",
+      13: "เสร็จสิ้น (อนุมัติรางวัลแล้ว)"
+  };
+  // ถ้ามีใน Mapping ให้ใช้คำใหม่ ถ้าไม่มี (เช่น พวกโดนปฏิเสธ) ให้ใช้คำเดิมจาก DB
+  return forwardMapping[statusId] || originalName;
+};
+
 // ==========================================
 // 2. Main Page Component
 // ==========================================
@@ -43,7 +58,6 @@ export default function OrganizationTraceAndDetails() {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   
-  // เก็บ Master Data
   const [metaData, setMetaData] = useState<any>({
       faculties: [],
       departments: [],
@@ -58,7 +72,6 @@ export default function OrganizationTraceAndDetails() {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        // Fetch ข้อมูลหลักและ Master Data ทั้งหมดพร้อมกัน
         const [statusRes, subRes, facRes, deptRes, campusRes] = await Promise.all([
           axios.get(`${API_BASE_URL}/form-statuses/`, { headers: { Authorization: `Bearer ${token}` } }),
           axios.get(`${API_BASE_URL}/awards/my/submissions`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -77,7 +90,6 @@ export default function OrganizationTraceAndDetails() {
             statuses: statuses
         });
 
-        // ดึง Logs ย่อยของแต่ละฟอร์ม
         const detailed = await Promise.all(rawSubmissions.map(async (item: any) => {
             try {
                 const logRes = await axios.get(`${API_BASE_URL}/awards/${item.form_id}/logs`, { 
@@ -152,15 +164,6 @@ export default function OrganizationTraceAndDetails() {
             ) : (
                 /* โหมดหน้ารายการปกติ (List View) */
                 <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-12">
-                    
-                    {/* 📋 STATUS SUMMARY */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-                        <StatSmall label="คำร้องทั้งหมด" count={submissions.length} icon={FileText} color="slate" />
-                        <StatSmall label="อยู่ระหว่างตรวจ" count={submissions.filter(s => ![14, 3, 5, 7, 9, 11, 13, 15].includes(s.form_status)).length} icon={Clock} color="blue" />
-                        <StatSmall label="ได้รับการอนุมัติ" count={submissions.filter(s => s.form_status === 14).length} icon={CheckCircle2} color="emerald" />
-                        <StatSmall label="ต้องแก้ไข/ไม่ผ่าน" count={submissions.filter(s => [3, 5, 7, 9, 11, 13, 15].includes(s.form_status)).length} icon={XCircle} color="rose" />
-                    </div>
-
                     <div className="space-y-6">
                         <div className="flex items-center gap-3">
                             <div className="w-1.5 h-6 bg-indigo-600 rounded-full"></div>
@@ -194,10 +197,14 @@ export default function OrganizationTraceAndDetails() {
 
 // --- 3.1 Card ในหน้า List ---
 function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
-  const isRejected = [3, 5, 7, 9, 11, 13, 15].includes(item.form_status);
-  const isAccepted = item.form_status === 14;
+  const isRejected = [3, 5, 7, 9, 11].includes(item.form_status);
+  const isAccepted = item.form_status === 13;
   
-  const statusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name || "ไม่ทราบสถานะ";
+  const rawStatusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name || "ไม่ทราบสถานะ";
+  
+  // ✅ เรียกใช้ฟังก์ชันแปลสถานะ
+  const statusName = getCustomStatusName(item.form_status, rawStatusName);
+
   const facultyName = metaData.faculties.find((f: any) => f.faculty_id === item.faculty_id)?.faculty_name || "ไม่ระบุ";
 
   return (
@@ -243,7 +250,7 @@ function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
                     isRejected ? "bg-rose-50 text-rose-700 border-rose-200" :
                     "bg-indigo-50 text-indigo-700 border-indigo-200"
                 }`}>
-                    {statusName.replace(/_/g, ' ')}
+                    {statusName}
                 </div>
             </div>
             <button className="w-full lg:w-auto px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-indigo-600 transition-all shadow-md flex items-center justify-center gap-2">
@@ -264,17 +271,18 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
   };
   
   const currentStep = getStepProgress(item.form_status);
-  const isRejected = [3, 5, 7, 9, 11, 13, 15].includes(item.form_status);
-  const isAccepted = item.form_status === 14;
+  const isRejected = [3, 5, 7, 9, 11].includes(item.form_status);
+  const isAccepted = item.form_status === 13;
   const currentRole = STEP_LOGIC.find(s => s.id === currentStep)?.role || "ระบบ";
 
-  // แปลง IDs เป็น Names
-  const statusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name?.replace(/_/g, ' ') || "ไม่ทราบสถานะ";
+  const rawStatusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name || "ไม่ทราบสถานะ";
+  // ✅ แปลสถานะ
+  const statusName = getCustomStatusName(item.form_status, rawStatusName);
+
   const facultyName = metaData.faculties.find((f: any) => f.faculty_id === item.faculty_id)?.faculty_name || "ไม่ระบุ";
   const departmentName = metaData.departments.find((d: any) => d.department_id === item.department_id)?.department_name || "ไม่ระบุ";
-  const campusName = metaData.campuses.find((c: any) => c.campus_id === item.campus_id)?.campus_name || "ไม่ระบุ";
+  const campusName = metaData.campuses.find((c: any) => c.campusId === item.campusId)?.campusName || "ไม่ระบุ";
 
-  // Parse ข้อมูลจาก form_detail เผื่อมีการเก็บเป็น JSON
   let detailObj: any = {};
   try {
       detailObj = typeof item.form_detail === 'string' && item.form_detail.startsWith('{') 
@@ -318,10 +326,8 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                 </div>
             </div>
 
-            {/* Progress Bar Timeline (อัปเดตแอนิเมชันใหม่) */}
+            {/* Progress Bar Timeline */}
             <div className="relative mb-16 mt-8 hidden md:block px-2">
-                
-                {/* กลุ่มของเส้นเชื่อมระหว่างแต่ละโหนด */}
                 <div className="absolute top-[26px] left-[28px] right-[28px] h-[6px] flex items-center z-0">
                     {Array.from({ length: 7 }).map((_, i) => {
                         const stepTarget = i + 2; 
@@ -351,7 +357,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                     })}
                 </div>
 
-                {/* กลุ่มของโหนดสถานะ (ไอคอน) */}
                 <div className="relative z-10 flex justify-between">
                     {STEP_LOGIC.map((step, i) => {
                         const stepNum = i + 1;
@@ -363,11 +368,9 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                         return (
                             <div key={i} className="flex flex-col items-center group w-14">
                                 <div className="relative">
-                                    {/* วงแหวนกระพริบดึงดูดสายตา สำหรับจุดที่กำลังรอพิจารณาอยู่ */}
                                     {isActive && !isErr && (
                                         <div className="absolute -inset-2 bg-indigo-400/30 rounded-full animate-ping z-0"></div>
                                     )}
-                                    
                                     <div className={`relative z-10 w-14 h-14 rounded-2xl border-4 flex items-center justify-center transition-all duration-500 shadow-sm ${
                                         isDone ? "bg-indigo-600 border-indigo-600 text-white" :
                                         isErr ? "bg-rose-500 border-rose-500 text-white scale-110 shadow-rose-200" :
@@ -377,7 +380,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                                         <StepIcon size={22} strokeWidth={isDone || isActive ? 2.5 : 2} />
                                     </div>
                                 </div>
-                                
                                 <div className="mt-4 text-center absolute top-14 w-28 -ml-7">
                                     <p className={`text-[11px] font-black uppercase tracking-tight mt-1 ${isActive ? 'text-indigo-700' : isDone ? 'text-slate-600' : 'text-slate-400'}`}>
                                         {step.label}
@@ -389,7 +391,7 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                 </div>
             </div>
 
-            {/* Decision Log Toggle */}
+            {/* ✅ Decision Log Toggle & Display (แปลงข้อความให้อ่านง่าย) */}
             <div className="mt-14 border-t border-slate-100 pt-6 flex flex-col items-center">
                 <button onClick={() => setShowLogs(!showLogs)} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-all bg-slate-50 hover:bg-indigo-50 px-6 py-2.5 rounded-full border border-slate-200">
                     <History size={16} /> 
@@ -400,11 +402,27 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                     {showLogs && (
                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden w-full mt-6">
                             <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-6 space-y-4">
-                                {item.logs?.length > 0 ? item.logs.map((log: any, i: number) => (
+                                {item.logs?.length > 0 ? item.logs.map((log: any, i: number) => {
+                                    
+                                    // 💡 Logic แปลงคำใน Log
+                                    let actionText = "อัปเดตข้อมูล";
+                                    let displayValue = log.new_value;
+
+                                    if (log.field_name === "form_status" || log.field_name === "form_status_id") {
+                                        actionText = "เปลี่ยนสถานะคำร้องเป็น";
+                                        const matchedStatus = metaData.statuses.find((s: any) => String(s.form_status_id) === String(log.new_value));
+                                        if (matchedStatus) {
+                                            displayValue = getCustomStatusName(Number(log.new_value), matchedStatus.form_status_name);
+                                        }
+                                    } else {
+                                        actionText = `เปลี่ยน ${log.field_name} เป็น`;
+                                    }
+
+                                    return (
                                     <div key={i} className="flex gap-4 items-start text-sm bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                                         <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 shrink-0"><UserCheck size={18} /></div>
                                         <div>
-                                            <p className="font-bold text-slate-800">เปลี่ยน {log.field_name} เป็น <span className="text-indigo-600">{log.new_value}</span></p>
+                                            <p className="font-bold text-slate-800">{actionText} <span className="text-indigo-600">{displayValue}</span></p>
                                             <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
                                                 <Clock size={12}/> {new Date(log.created_at).toLocaleString('th-TH')} 
                                                 <span className="w-1 h-1 bg-slate-300 rounded-full"></span> 
@@ -412,7 +430,8 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                                             </p>
                                         </div>
                                     </div>
-                                )) : <p className="text-center text-slate-400 text-sm py-4">-- ไม่มีประวัติการอัปเดต --</p>}
+                                    )
+                                }) : <p className="text-center text-slate-400 text-sm py-4">-- ไม่มีประวัติการอัปเดต --</p>}
                             </div>
                         </motion.div>
                     )}
@@ -429,7 +448,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
 
             <div className="p-8 md:p-10 space-y-12">
                 
-                {/* 1. ข้อมูลนิสิต */}
                 <section>
                     <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
                         <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center"><User size={18} /></div>
@@ -454,7 +472,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                     </div>
                 </section>
 
-                {/* 2. ข้อมูลหน่วยงาน (แสดงเฉพาะถ้ามี org_name) */}
                 {item.org_name && (
                     <section>
                         <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
@@ -470,14 +487,12 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                     </section>
                 )}
 
-                {/* 3. รายละเอียดผลงาน */}
                 <section>
                     <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
                         <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center"><Award size={18} /></div>
                         <h4 className="text-lg font-black text-slate-800">3. รายละเอียดเหตุผลและผลงาน</h4>
                     </div>
                     
-                    {/* หากมีข้อมูล JSON ใน detailObj ดึงมาโชว์ */}
                     {detailObj.project_title && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
                             <ReadOnlyField label="ชื่อโครงการ/ผลงาน" value={detailObj.project_title} className="md:col-span-2" />
@@ -496,7 +511,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                     />
                 </section>
 
-                {/* 4. ไฟล์แนบ */}
                 {item.files && item.files.length > 0 && (
                     <section>
                          <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
@@ -507,7 +521,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                             {item.files.map((file: any, idx: number) => (
                                 <a 
                                     key={idx} 
-                                    // 🚀 เรียกใช้งานฟังก์ชัน getFileUrl ที่สร้างไว้ด้านบน
                                     href={getFileUrl(file.file_path)}
                                     target="_blank" 
                                     rel="noreferrer"
@@ -537,34 +550,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
 }
 
 // --- Helper Components ---
-function StatSmall({ label, count, icon: Icon, color }: any) {
-    const colors: any = {
-        slate: "bg-white text-slate-700 border-slate-200 icon-slate",
-        blue: "bg-white text-blue-700 border-blue-200 icon-blue",
-        emerald: "bg-white text-emerald-700 border-emerald-200 icon-emerald",
-        rose: "bg-white text-rose-700 border-rose-200 icon-rose"
-    };
-
-    const iconColors: any = {
-        slate: "bg-slate-100 text-slate-600",
-        blue: "bg-blue-50 text-blue-600",
-        emerald: "bg-emerald-50 text-emerald-600",
-        rose: "bg-rose-50 text-rose-600"
-    };
-
-    return (
-        <div className={`p-5 rounded-3xl border shadow-sm flex items-center justify-between transition-all hover:shadow-md ${colors[color].split(' ')[0]} ${colors[color].split(' ')[2]}`}>
-            <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-1">{label}</p>
-                <p className={`text-3xl font-black ${colors[color].split(' ')[1]}`}>{count}</p>
-            </div>
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${iconColors[color]}`}>
-                <Icon size={24} />
-            </div>
-        </div>
-    );
-}
-
 function ReadOnlyField({ label, value, className = "", isTextArea = false, icon: Icon }: any) {
     return (
         <div className={`p-4 bg-slate-50 border border-slate-200/60 rounded-2xl ${className}`}>

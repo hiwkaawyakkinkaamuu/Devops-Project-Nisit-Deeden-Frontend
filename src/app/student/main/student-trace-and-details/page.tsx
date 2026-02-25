@@ -158,14 +158,6 @@ export default function StudentTraceAndDetails() {
             ) : (
                 <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-12">
                     
-                    {/* 📋 STATUS SUMMARY */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-                        <StatSmall label="คำร้องของฉัน" count={submissions.length} icon={FileText} color="slate" />
-                        <StatSmall label="อยู่ระหว่างตรวจ" count={submissions.filter(s => ![14, 3, 5, 7, 9, 11, 13, 15].includes(s.form_status)).length} icon={Clock} color="blue" />
-                        <StatSmall label="ได้รับการอนุมัติ" count={submissions.filter(s => s.form_status === 14).length} icon={CheckCircle2} color="emerald" />
-                        <StatSmall label="ต้องแก้ไข/ไม่ผ่าน" count={submissions.filter(s => [3, 5, 7, 9, 11, 13, 15].includes(s.form_status)).length} icon={XCircle} color="rose" />
-                    </div>
-
                     <div className="space-y-6">
                         <div className="flex items-center gap-3">
                             <div className="w-1.5 h-6 bg-indigo-600 rounded-full"></div>
@@ -205,7 +197,12 @@ function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
   const isRejected = [3, 5, 7, 9, 11, 13, 15].includes(item.form_status);
   const isAccepted = item.form_status === 14;
   
-  const statusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name || "ไม่ทราบสถานะ";
+  // ✅ แก้ไข: อัปเดตเงื่อนไขแสดงสถานะฟอร์มใหม่ (ID 1)
+  let statusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name || "ไม่ทราบสถานะ";
+  if (item.form_status === 1) {
+      statusName = "รอหัวหน้าภาควิชาพิจารณา";
+  }
+
   const facultyName = metaData.faculties.find((f: any) => f.faculty_id === item.faculty_id)?.faculty_name || "ไม่ระบุ";
 
   let detailObj: any = {};
@@ -295,7 +292,11 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                   : { other_details: item.form_detail };
   } catch(e) { detailObj = { other_details: item.form_detail }; }
 
-  const statusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name?.replace(/_/g, ' ') || "ไม่ทราบสถานะ";
+  // ✅ แก้ไข: อัปเดตเงื่อนไขแสดงสถานะฟอร์มใหม่ (ID 1)
+  let statusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name?.replace(/_/g, ' ') || "ไม่ทราบสถานะ";
+  if (item.form_status === 1) {
+      statusName = "รอหัวหน้าภาควิชาพิจารณา";
+  }
   
   const showFirstName = detailObj.student_firstname || item.student_firstname;
   const showLastName = detailObj.student_lastname || item.student_lastname;
@@ -303,7 +304,39 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
   const showEmail = detailObj.email || item.student_email;
   const showFaculty = detailObj.faculty || metaData.faculties.find((f: any) => f.faculty_id === item.faculty_id)?.faculty_name || "ไม่ระบุ";
   const showDept = detailObj.department || metaData.departments.find((d: any) => d.department_id === item.department_id)?.department_name || "ไม่ระบุ";
-  const showCampus = detailObj.campus || metaData.campuses.find((c: any) => c.campus_id === item.campus_id)?.campus_name || "ไม่ระบุ";
+  const showCampus = detailObj.campus || metaData.campuses.find((c: any) => c.campusId === item.campusId)?.campusName || "ไม่ระบุ";
+
+  // ✅ Helper Functions สำหรับแปลง Logs ให้เป็นภาษาที่มนุษย์เข้าใจง่าย
+  const translateField = (field: string) => {
+    const dictionary: Record<string, string> = {
+        form_status: "สถานะ",
+        form_status_id: "สถานะ",
+        award_type: "ประเภทรางวัล",
+        award_type_id: "ประเภทรางวัล",
+        faculty_id: "คณะ",
+        department_id: "ภาควิชา"
+    };
+    return dictionary[field] || field;
+  };
+
+  const formatValue = (field: string, value: any) => {
+    if (!value) return "-";
+    if (field === "form_status" || field === "form_status_id") {
+        const id = parseInt(value, 10);
+        if (id === 1) return "รอหัวหน้าภาควิชาพิจารณา";
+        const status = metaData.statuses.find((s: any) => s.form_status_id === id);
+        return status ? status.form_status_name.replace(/_/g, ' ') : value;
+    }
+    if (field === "faculty_id") {
+        const fac = metaData.faculties.find((f: any) => f.faculty_id === parseInt(value, 10));
+        return fac ? fac.faculty_name : value;
+    }
+    if (field === "department_id") {
+        const dept = metaData.departments.find((d: any) => d.department_id === parseInt(value, 10));
+        return dept ? dept.department_name : value;
+    }
+    return value;
+  };
 
   return (
     <div className="space-y-8 animate-fade-in-up">
@@ -347,26 +380,20 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                 {/* กลุ่มของเส้นเชื่อมระหว่างแต่ละโหนด */}
                 <div className="absolute top-[26px] left-[28px] right-[28px] h-[6px] flex items-center z-0">
                     {Array.from({ length: 7 }).map((_, i) => {
-                        const stepTarget = i + 2; // เส้นนี้ชี้ไปยังโหนดที่เท่าไหร่ (เช่น i=0 ชี้ไปโหนด 2)
+                        const stepTarget = i + 2; 
                         
-                        // ถ้าระดับปัจจุบันเกินโหนดที่ชี้ไปแล้ว แปลว่าเดินผ่านเส้นนี้มาแล้วแบบ 100%
                         const isCompleted = currentStep > stepTarget || isAccepted;
-                        // ถ้าระดับปัจจุบันอยู่ที่โหนดที่ชี้ไป แปลว่าคำร้องกำลังวิ่งผ่านเส้นนี้อยู่
                         const isProcessing = currentStep === stepTarget && !isRejected && !isAccepted;
-                        // ถ้าโดนปัดตกที่โหนดนั้น ให้เส้นเป็นสีแดง
                         const isError = currentStep === stepTarget && isRejected;
 
                         return (
                             <div key={i} className="flex-1 h-full bg-slate-100 relative overflow-hidden mx-1 rounded-full">
-                                {/* เส้นสีทึบกรณีที่ผ่านแล้ว */}
                                 {isCompleted && (
                                     <motion.div initial={{ width: 0 }} animate={{ width: "100%" }} transition={{ duration: 0.5 }} className="absolute inset-0 bg-indigo-500" />
                                 )}
-                                {/* เส้นสีแดงกรณีโดนตีกลับ */}
                                 {isError && (
                                     <motion.div initial={{ width: 0 }} animate={{ width: "100%" }} transition={{ duration: 0.5 }} className="absolute inset-0 bg-rose-500" />
                                 )}
-                                {/* เส้นที่กำลังวิ่งแบบแอนิเมชัน กรณีเรื่องกำลังส่งมาที่คนนี้ */}
                                 {isProcessing && (
                                     <div className="absolute inset-0 flex">
                                         <motion.div 
@@ -385,18 +412,14 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                 <div className="relative z-10 flex justify-between">
                     {STEP_LOGIC.map((step, i) => {
                         const stepNum = i + 1;
-                        // โหนดนี้คือจุดที่คำร้องอยู่ ณ ปัจจุบัน
                         const isActive = stepNum === currentStep && !isAccepted;
-                        // โหนดนี้คือจุดที่คำร้องผ่านมาแล้ว
                         const isDone = stepNum < currentStep || isAccepted;
-                        // โหนดนี้คือจุดที่โดนตีกลับ
                         const isErr = isActive && isRejected;
                         const StepIcon = step.icon;
 
                         return (
                             <div key={i} className="flex flex-col items-center group w-14">
                                 <div className="relative">
-                                    {/* วงแหวนกระพริบดึงดูดสายตา สำหรับจุดที่กำลังรอพิจารณาอยู่ */}
                                     {isActive && !isErr && (
                                         <div className="absolute -inset-2 bg-indigo-400/30 rounded-full animate-ping z-0"></div>
                                     )}
@@ -411,7 +434,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                                     </div>
                                 </div>
                                 
-                                {/* ปรับ container ของข้อความให้ไม่ดันโหนดให้เบี้ยว */}
                                 <div className="mt-4 text-center absolute top-14 w-28 -ml-7">
                                     <p className={`text-[11px] font-black uppercase tracking-tight mt-1 ${isActive ? 'text-indigo-700' : isDone ? 'text-slate-600' : 'text-slate-400'}`}>
                                         {step.label}
@@ -438,7 +460,10 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                                     <div key={i} className="flex gap-4 items-start text-sm bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                                         <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 shrink-0"><UserCheck size={18} /></div>
                                         <div>
-                                            <p className="font-bold text-slate-800">อัปเดต {log.field_name} เป็น <span className="text-indigo-600">{log.new_value}</span></p>
+                                            {/* ✅ แก้ไข: แปลง Field และ Value ให้เป็นคำที่มนุษย์เข้าใจ */}
+                                            <p className="font-bold text-slate-800">
+                                                อัปเดต {translateField(log.field_name)} เป็น <span className="text-indigo-600">{formatValue(log.field_name, log.new_value)}</span>
+                                            </p>
                                             <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
                                                 <Clock size={12}/> {new Date(log.created_at).toLocaleString('th-TH')} 
                                                 <span className="w-1 h-1 bg-slate-300 rounded-full"></span> 
@@ -553,34 +578,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
 }
 
 // --- Helper Components ---
-function StatSmall({ label, count, icon: Icon, color }: any) {
-    const colors: any = {
-        slate: "bg-white text-slate-700 border-slate-200 icon-slate",
-        blue: "bg-white text-blue-700 border-blue-200 icon-blue",
-        emerald: "bg-white text-emerald-700 border-emerald-200 icon-emerald",
-        rose: "bg-white text-rose-700 border-rose-200 icon-rose"
-    };
-
-    const iconColors: any = {
-        slate: "bg-slate-100 text-slate-600",
-        blue: "bg-blue-50 text-blue-600",
-        emerald: "bg-emerald-50 text-emerald-600",
-        rose: "bg-rose-50 text-rose-600"
-    };
-
-    return (
-        <div className={`p-5 rounded-3xl border shadow-sm flex items-center justify-between transition-all hover:shadow-md ${colors[color].split(' ')[0]} ${colors[color].split(' ')[2]}`}>
-            <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-1">{label}</p>
-                <p className={`text-3xl font-black ${colors[color].split(' ')[1]}`}>{count}</p>
-            </div>
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${iconColors[color]}`}>
-                <Icon size={24} />
-            </div>
-        </div>
-    );
-}
-
 function ReadOnlyField({ label, value, className = "", isTextArea = false, icon: Icon }: any) {
     return (
         <div className={`p-4 bg-slate-50 border border-slate-200/60 rounded-2xl ${className}`}>
