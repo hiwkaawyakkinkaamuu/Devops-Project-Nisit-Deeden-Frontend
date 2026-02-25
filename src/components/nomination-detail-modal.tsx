@@ -44,7 +44,7 @@ export interface Nomination {
   org_type: string;
   org_location: string;
   org_phone_number: string;
-  form_detail: string | any; // Backend ส่งมาเป็น JSON String
+  form_detail: string | any; // Backend ส่งมาเป็น JSON String หรือ String ธรรมดา
   reject_reason: string;
   files?: FileResponse[];
 }
@@ -149,8 +149,12 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
   // แปลง String JSON ให้เป็น Object อย่างปลอดภัย
   const parsedDetail = useMemo(() => {
       if (!data) return {};
-      if (typeof data.form_detail === 'string' && data.form_detail.trim().startsWith('{')) {
-          try { return JSON.parse(data.form_detail); } catch { return {}; }
+      if (typeof data.form_detail === 'string') {
+          if (data.form_detail.trim().startsWith('{')) {
+              try { return JSON.parse(data.form_detail); } catch { return { other_details: data.form_detail }; }
+          }
+          // ถ้าเป็น string ธรรมดา ให้สร้าง object จำลองคืนไปเพื่อนำไปใช้
+          return { other_details: data.form_detail };
       }
       return data.form_detail || {};
   }, [data]);
@@ -223,6 +227,9 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
       : `${data.student_firstname || ""} ${data.student_lastname || ""}`.trim();
 
   let stepCounter = 1;
+
+  // ดึงข้อความเหตุผลที่จะแสดง
+  const reasonToDisplay = parsedDetail?.other_details || parsedDetail?.behavior_desc || (typeof data.form_detail === 'string' && !data.form_detail.startsWith('{') ? data.form_detail : "");
 
   return (
     <div className="absolute inset-0 z-[50] flex items-center justify-center p-4 md:p-8 overflow-hidden">
@@ -321,75 +328,20 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
                 </div>
             </div>
 
-            {/* === Section รายละเอียดผลงาน (แก้ไขตาม Requirement) === */}
+            {/* === Section รายละเอียดผลงาน (แสดงเฉพาะกล่องเหตุผล) === */}
             <div className={`bg-white p-6 md:p-8 rounded-[24px] ${theme.border} shadow-sm relative overflow-hidden`}>
                 <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${theme.gradient}`}></div>
                 
                 <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
                     <span className={`w-8 h-8 rounded-full flex items-center justify-center ${theme.numberBg} text-white text-sm`}>{stepCounter++}</span>
-                    {isBehavior || isOther ? 'รายละเอียดเหตุผลประกอบ' : 'รายละเอียดกิจกรรมและผลงาน'}
+                    รายละเอียดเหตุผลและผลงาน
                 </h3>
 
-                {/* Activity */}
-                {isActivity && (
-                    <div className="space-y-6 mb-6">
-                        <div className="space-y-3">
-                            <label className="text-sm font-bold text-gray-800">ประเภทกิจกรรม</label>
-                            <div className="grid grid-cols-1 gap-3">
-                                {[
-                                    { val: "committee", text: "เป็นนิสิตที่ดำเนินกิจกรรมและต้องแสดงให้เห็นว่าเมื่อดำเนินกิจกรรมแล้ว... ก่อให้เกิดประโยชน์ต่อส่วนรวม" },
-                                    { val: "competition", text: "เข้าร่วมแข่งขันทางวิชาการหรือศิลปวัฒนธรรม ระดับชาติหรือระดับนานาชาติ" },
-                                    { val: "reputation", text: "ดำรงตำแหน่งนายกองค์การบริหาร องค์การนิสิต ประธานสภาผู้แทนนิสิต หรือชมรม" }
-                                ].map((item) => {
-                                    const isChecked = parsedDetail?.activity_category === item.val || parsedDetail?.qualification_type === item.val;
-                                    return (
-                                        <label key={item.val} className={`flex items-start gap-3 p-4 rounded-xl border transition-all ${isChecked ? `${theme.bgSoft} ${theme.border} shadow-sm` : 'bg-white border-gray-200 opacity-60'}`}>
-                                            <input type="radio" readOnly checked={isChecked} className={`mt-1 w-4 h-4 ${theme.radioColor}`} />
-                                            <span className="text-sm text-gray-700">{item.text}</span>
-                                        </label>
-                                    )
-                                })}
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <InputReadOnly label="ชื่อโครงการ/กิจกรรม" value={parsedDetail?.project_title} />
-                            <InputReadOnly label="วันที่เข้าร่วมกิจกรรม" value={formatDateDisplay(parsedDetail?.date_received)} />
-                            <InputReadOnly label="บทบาท/หน้าที่ (หรือรางวัล)" value={parsedDetail?.prize} />
-                            <InputReadOnly label="หน่วยงานที่จัดกิจกรรม" value={parsedDetail?.organized_by} />
-                            <div className="md:col-span-2">
-                                <InputReadOnly label="ชื่อทีม (ถ้ามี)" value={parsedDetail?.team_name} />
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Innovation (เพิ่มฟิลด์ครบตามที่คุณร้องขอ) */}
-                {isInnovation && (
-                    <div className="space-y-6 mb-6">
-                        <div className="p-4 bg-purple-50 rounded-xl border border-purple-100 flex items-center gap-3">
-                            <input type="checkbox" readOnly checked={parsedDetail?.competition_level === 'National/International' || parsedDetail?.competition_level === 'ระดับนานาชาติ' || parsedDetail?.competition_level === 'ระดับชาติ'} className="w-5 h-5 text-purple-600 rounded border-gray-300 focus:ring-purple-500" />
-                            <span className="text-sm text-purple-900 font-medium">ยืนยันว่าผลงานได้รับรางวัลจากการประกวด/แข่งขัน ระดับชาติหรือนานาชาติ</span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <InputReadOnly label="ชื่อผลงานนวัตกรรม" value={parsedDetail?.project_title} />
-                            <InputReadOnly label="วันที่ได้รับรางวัล" value={formatDateDisplay(parsedDetail?.date_received)} />
-                            <InputReadOnly label="รางวัลที่ได้รับ" value={parsedDetail?.prize} />
-                            <InputReadOnly label="เวทีการประกวด" value={parsedDetail?.organized_by} />
-                            <div className="md:col-span-2">
-                                <InputReadOnly label="ชื่อทีม (ถ้ามี)" value={parsedDetail?.team_name} />
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* ✅ แสดงเหตุผลเพิ่มเติมสำหรับ "ทุกประเภท" */}
-                <div className={isActivity || isInnovation ? "mt-6 pt-6 border-t border-gray-100" : ""}>
-                    <InputReadOnly 
-                        label="เหตุผลในการเสนอชื่อและความโดดเด่นของผลงาน" 
-                        value={parsedDetail?.other_details || parsedDetail?.behavior_desc} 
-                        isTextarea 
-                    />
-                </div>
+                <InputReadOnly 
+                    label="เหตุผลในการเสนอชื่อและความโดดเด่นของผลงาน" 
+                    value={reasonToDisplay} 
+                    isTextarea 
+                />
             </div>
 
             {/* === Section เอกสารประกอบ === */}
