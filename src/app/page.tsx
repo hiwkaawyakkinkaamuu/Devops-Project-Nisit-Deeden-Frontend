@@ -13,7 +13,7 @@ import { useAuth } from "@/context/AuthContext";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
-// Interface
+// แก้ไข Interface ให้รองรับ committee_data
 interface LoginResponse {
   token: string;
   role: string;
@@ -21,7 +21,11 @@ interface LoginResponse {
     firstname: string;
     lastname: string;
     role_id: number;
-    is_first_login: boolean; 
+    is_first_login: boolean;
+    committee_data?: {
+      is_chairman: boolean;
+    };
+    is_chairman?: boolean; // fallback กรณีที่ backend ส่งมาข้างนอก
   };
 }
 
@@ -52,8 +56,12 @@ export default function LoginPage() {
     window.location.href = `${API_BASE_URL}/auth/google/login`;
   };
 
-  // Helper: Role-based Redirect พร้อม Logic First Login
-  const handleRedirect = (roleId: number, firstLogin: boolean) => {
+  // แก้ไข: Helper: Role-based Redirect พร้อม Logic เช็ค isChairman
+  const handleRedirect = (user: LoginResponse["user"]) => {
+    const roleId = Number(user.role_id);
+    const firstLogin = user.is_first_login;
+    const isChairman = user.committee_data?.is_chairman || user.is_chairman || false;
+
     // ตรวจสอบเงื่อนไข First Login สำหรับนิสิต (1) และหน่วยงานภายนอก (9)
     if (firstLogin) {
       if (roleId === 1) {
@@ -66,21 +74,42 @@ export default function LoginPage() {
       }
     }
 
-    // ใช้ Record mapping ด้วย Role ID โดยตรง
-    const routes: Record<number, string> = {
-      1: "/student/main/student-nomination-form",
-      2: "/head-of-department/consider",
-      3: "/associate-dean/consider",
-      4: "/dean/consider",
-      5: "/student-development/verify-submit",
-      6: "/student-development-committee/consider",
-      7: "/chairman-of-student-development-committee/consider",
-      8: "/chancellor/dashboard",    // อธิการบดี
-      9: "/organization/main/organization-nomination-form",  // หน่วยงานภายนอก
-    };
+    // เปลี่ยนไปใช้ Switch Case หรือ IF-ELSE แทน Map เพื่อรองรับ Logic ของ Role 6 ได้สะดวกขึ้น
+    let targetPath = "/";
+
+    switch (roleId) {
+      case 1:
+        targetPath = "/student/main/student-nomination-form";
+        break;
+      case 2:
+        targetPath = "/head-of-department/consider";
+        break;
+      case 3:
+        targetPath = "/associate-dean/consider";
+        break;
+      case 4:
+        targetPath = "/dean/consider";
+        break;
+      case 5:
+        targetPath = "/student-development/verify-submit";
+        break;
+      case 6:
+        // เช็คว่าเป็นประธานกรรมการหรือไม่
+        targetPath = isChairman 
+          ? "/chairman-of-student-development-committee/consider"
+          : "/student-development-committee/consider";
+        break;
+      case 8:
+        targetPath = "/chancellor/dashboard"; // อธิการบดี
+        break;
+      case 9:
+        targetPath = "/organization/main/organization-nomination-form"; // หน่วยงานภายนอก
+        break;
+      default:
+        targetPath = "/";
+    }
     
-    // เปลี่ยนหน้าไปยัง Path ที่กำหนด หรือกลับหน้าหลักถ้าไม่พบ ID
-    router.push(routes[roleId] || "/");
+    router.push(targetPath);
   };
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -103,8 +132,8 @@ export default function LoginPage() {
         showConfirmButton: false,
       });
 
-      // เรียก Redirect ด้วย Role ID
-      handleRedirect(roleId, backendData.user.is_first_login);
+      // แก้ไข: โยน Object User ไปทั้งหมดให้ handleRedirect จัดการ
+      handleRedirect(backendData.user);
     } catch (err: any) {
       console.error("Login Error:", err);
       let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
@@ -128,7 +157,6 @@ export default function LoginPage() {
   };
 
   return (
-    // ✅ โครงสร้างเหมือนหน้า Register
     <div className="h-screen w-full flex font-sans bg-gray-50 overflow-hidden selection:bg-green-200">
       <style jsx global>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }

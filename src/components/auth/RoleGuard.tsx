@@ -14,6 +14,21 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
 
+  // แก้ไข: เพิ่ม Parameter isChairman เพื่อใช้แยกสิทธิ์
+  const getRoleString = (id: number, isChairman: boolean) => {
+     switch(id) {
+        case 1: return "student";
+        case 2: return "head_of_department";
+        case 3: return "associate_dean";
+        case 4: return "dean";
+        case 5: return "student_development";
+        case 6: return isChairman ? "chairman_of_student_development_committee" : "student_development_committee";
+        case 8: return "chancellor";
+        case 9: return "organization";
+        default: return "student";
+     }
+  };
+
   useEffect(() => {
     if (!isLoading) {
       if (!user) {
@@ -21,26 +36,30 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
         return;
       }
 
-      // 🔍 DEBUG: ขอดูไส้ในของ User หน่อยซิ ว่าหน้าตาเป็นยังไงแน่?
-      console.log("🔍 [RoleGuard] User Data Loaded:", user);
+      // DEBUG: ขอดูไส้ในของ User หน่อยซิ ว่าหน้าตาเป็นยังไงแน่?
+      console.log("[RoleGuard] User Data Loaded:", user);
 
-      // ✅ แก้ไข: เช็คว่าถ้าข้อมูลโดนห่อด้วยคำว่า user อีกชั้น ให้ดึงตัวข้างในออกมา
+      // เช็คว่าถ้าข้อมูลโดนห่อด้วยคำว่า user อีกชั้น ให้ดึงตัวข้างในออกมา
       const actualUser = user.user ? user.user : user;
 
       // รองรับชื่อตัวแปรหลายรูปแบบ (กันพลาดเรื่องตัวพิมพ์เล็ก/ใหญ่)
-      // @ts-ignore
-      const userRoleId = user.role_id ?? user.roleId ?? user.RoleId ?? user.RoleID;
+      const userRoleId = actualUser.role_id ?? actualUser.roleId ?? actualUser.RoleId ?? actualUser.RoleID;
 
       // ถ้าหา Role ID ไม่เจอจริงๆ ค่อยดีดออก
       if (userRoleId === undefined || userRoleId === null) {
-         console.warn("❌ [RoleGuard] Role ID missing! Raw user:", user);
+         console.warn("[RoleGuard] Role ID missing! Raw user:", user);
          // อย่าเพิ่งดีดออกทันที ให้ User เห็น Log ก่อน (หรือดีดออกถ้ามั่นใจ)
          router.replace("/");
          return;
       }
 
-      const userRoleStr = getRoleString(Number(userRoleId)); // แปลงเป็นตัวเลขให้ชัวร์
-      console.log(`[RoleGuard] Checking Role: ${userRoleStr} (ID: ${userRoleId})`);
+      // แก้ไข: เช็คสถานะประธานกรรมการ จากโครงสร้างของ Backend (committee_data.is_chairman)
+      // เผื่อโครงสร้าง JSON เป็น is_chairman ที่ชั้นนอกสุดด้วย
+      const isChairman = actualUser?.committee_data?.is_chairman || actualUser?.is_chairman || false;
+
+      // ส่งสถานะ isChairman เข้าไปเช็คใน getRoleString
+      const userRoleStr = getRoleString(Number(userRoleId), isChairman);
+      console.log(`[RoleGuard] Checking Role: ${userRoleStr} (ID: ${userRoleId}, isChairman: ${isChairman})`);
 
       if (!allowedRoles.includes(userRoleStr)) {
         Swal.fire({
@@ -63,26 +82,12 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
             chancellor: "/chancellor/dashboard", // Role 8
             organization: "/organization/main/organization-nomination-form" // Role 9
         };
+        
+        // ส่งกลับไปยังหน้าแรกของสิทธิ์นั้นๆ
         router.replace(dashboardMap[userRoleStr] || "/");
       }
     }
   }, [user, isLoading, router, allowedRoles]);
-
-  const getRoleString = (id: number) => {
-     switch(id) {
-        case 1: return "student";
-        case 2: return "head_of_department";
-        case 3: return "associate_dean";
-        case 4: return "dean";
-        case 5: return "student_development";
-        case 6: return "student_development_committee";
-        case 7: return "chairman_of_student_development_committee";
-        case 8: return "chancellor";
-        case 9: return "organization";
-        
-        default: return "student";
-     }
-  };
 
   if (isLoading || !user) {
     return <div className="flex h-screen w-full items-center justify-center">Loading...</div>;
