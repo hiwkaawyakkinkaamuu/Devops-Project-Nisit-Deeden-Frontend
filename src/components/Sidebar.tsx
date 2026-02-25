@@ -31,7 +31,6 @@ type UserRole =
 
 interface Faculty { faculty_id?: number; facultyID?: number; faculty_name?: string; facultyName?: string; name?: string; }
 interface Department { department_id?: number; departmentID?: number; department_name?: string; departmentName?: string; name?: string; }
-// ✅ แก้ไข Interface ให้รองรับทั้ง camelCase และ snake_case
 interface Campus { campus_id?: number; campusID?: number; campus_name?: string; campusName?: string; }
 
 interface OrganizationData {
@@ -50,7 +49,7 @@ interface UserProfileData {
   email: string;
   role_id: number;
   campus_id?: number;
-  CampusID?: number; // รองรับกรณี API User ส่งมาเป็น CamelCase
+  CampusID?: number;
   image_path?: string;
   Student?: any;
   student?: any;
@@ -58,6 +57,10 @@ interface UserProfileData {
   Organization?: OrganizationData;
   organization?: OrganizationData;
   organization_data?: OrganizationData; 
+  committee_data?: {
+    is_chairman: boolean;
+  };
+  is_chairman?: boolean;
 }
 
 interface MenuItemType { href: string; label: string; icon: ReactNode; isAction?: boolean; }
@@ -86,11 +89,16 @@ const getProfileImageUrl = (imagePath: string | undefined | null) => {
   return `${cleanPath}`;
 };
 
-const getRoleKey = (roleId: number | undefined): UserRole => {
+const getRoleKey = (roleId: number | undefined, isChairman: boolean = false): UserRole => {
   switch (roleId) {
-    case 1: return "student"; case 2: return "head_of_department"; case 3: return "associate_dean";
-    case 4: return "dean"; case 5: return "student_development"; case 6: return "student_development_committee";
-    case 7: return "chairman_of_student_development_committee"; case 8: return "chancellor"; case 9: return "organization";
+    case 1: return "student"; 
+    case 2: return "head_of_department"; 
+    case 3: return "associate_dean";
+    case 4: return "dean"; 
+    case 5: return "student_development"; 
+    case 6: return isChairman ? "chairman_of_student_development_committee" : "student_development_committee";
+    case 8: return "chancellor"; 
+    case 9: return "organization";
     default: return "student";
   }
 };
@@ -139,7 +147,7 @@ const MENU_CONFIG: Record<string, MenuItemType[]> = {
     { href: "/chairman-of-student-development-committee/consider", label: "รับรองผลการคัดเลือก", icon: Icons.CheckUser }
   ],
   student_development_committee: [
-    { href: "/student-development-committee/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
+    { href: "/student-development-committee/consider", label: "พิจารณาอนุมัติ/ไม่อนุมัติ", icon: Icons.CheckUser },
     { href: "/student-development-committee/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History }
   ],
   student_development: [
@@ -175,7 +183,6 @@ function MenuItem({ href, label, icon, active, collapsed, onClick, index }: any)
             ${collapsed ? 'justify-center' : 'gap-3.5'}
         `}
       >
-        {/* Magic Glass Active Background */}
         {active && (
           <motion.div
             layoutId="active-menu-bg-magic"
@@ -186,33 +193,28 @@ function MenuItem({ href, label, icon, active, collapsed, onClick, index }: any)
           </motion.div>
         )}
 
-        {/* Hover Highlight (Non-active) */}
         {!active && (
             <div className="absolute inset-0 bg-slate-100/60 rounded-[16px] opacity-0 group-hover/menu:opacity-100 transition-opacity duration-300 -z-10 backdrop-blur-md"></div>
         )}
 
-        {/* Icon */}
         <span className={`relative z-10 shrink-0 transition-transform duration-500 ease-out 
             ${active ? 'text-white drop-shadow-md scale-110' : 'text-slate-400 group-hover/menu:text-teal-500 group-hover/menu:scale-110 group-hover/menu:rotate-[4deg]'}
         `}>
           {icon}
         </span>
 
-        {/* Text */}
         {!collapsed && (
           <span className="relative z-10 truncate tracking-wide flex-1">
               {label}
           </span>
         )}
 
-        {/* Chevron for active state */}
         {!collapsed && active && (
             <motion.div initial={{ opacity:0, x: -10 }} animate={{ opacity:1, x: 0 }} className="shrink-0 text-white/80">
                 <ChevronRight className="w-3.5 h-3.5 stroke-[3px]" />
             </motion.div>
         )}
 
-        {/* Tooltip for Collapsed State */}
         {collapsed && (
             <div className="absolute left-[110%] ml-4 px-3 py-1.5 bg-slate-800 text-white text-[11px] font-bold rounded-xl opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all duration-300 whitespace-nowrap shadow-xl z-50">
                 {label}
@@ -265,14 +267,13 @@ function ProfileInfoRow({ icon, label, value }: { icon: ReactNode; label: string
   );
 }
 
-function ProfileModal({ isOpen, onClose, data, faculties, departments, campuses }: { isOpen: boolean; onClose: () => void; data: UserProfileData | null; faculties: Faculty[]; departments: Department[]; campuses: Campus[] }) {
+// เพิ่ม Props roleNameTH เข้ามารับชื่อที่ประมวลผลเสร็จแล้วจาก Sidebar
+function ProfileModal({ isOpen, onClose, data, faculties, departments, campuses, roleNameTH }: { isOpen: boolean; onClose: () => void; data: UserProfileData | null; faculties: Faculty[]; departments: Department[]; campuses: Campus[]; roleNameTH: string }) {
   if (!isOpen || !data) return null;
 
-  const roleKey = getRoleKey(data.role_id);
-  const roleNameTH = ROLE_NAMES_TH[roleKey] || roleKey;
+  const roleKey = getRoleKey(data.role_id, data.committee_data?.is_chairman || data.is_chairman || false);
   const isOrganization = roleKey === "organization" || data.role_id === 9;
 
-  // ✅ แก้ไข: ดักจับข้อมูลวิทยาเขตให้ครอบคลุมทั้ง API ใหม่และเก่า
   const userCampusId = data.campus_id || data.CampusID;
   const campus = campuses.find(c => c.campusID === userCampusId || c.campus_id === userCampusId);
   const campusName = campus ? (campus.campusName || campus.campus_name) : "ไม่ระบุวิทยาเขต";
@@ -362,6 +363,7 @@ function ProfileModal({ isOpen, onClose, data, faculties, departments, campuses 
                                 <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full shadow-[0_4px_14px_rgba(20,184,166,0.25)]">
                                     <Sparkles className="w-3.5 h-3.5 text-white" />
                                     <span className="text-[11px] font-black uppercase tracking-[0.15em] text-white">
+                                        {/* ใช้ RoleName จาก API แทนของเดิม */}
                                         {roleNameTH}
                                     </span>
                                 </div>
@@ -418,7 +420,9 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
   const [campuses, setCampuses] = useState<Campus[]>([]);
   const [roleNameTH, setRoleNameTH] = useState("");
 
-  const roleKey = getRoleKey(user?.role_id);
+  const currentUserData = fullProfile || user;
+  const isChairman = currentUserData?.committee_data?.is_chairman || currentUserData?.is_chairman || false;
+  const roleKey = getRoleKey(currentUserData?.role_id, isChairman);
   const menuItems = MENU_CONFIG[roleKey] || [];
 
   const isActive = (path: string) => {
@@ -445,15 +449,35 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
                 api.get("/campus", { headers })
             ]);
 
-            if(resMe.data && resMe.data.user) setFullProfile(resMe.data.user);
+            const fetchedUser = resMe.data?.user || resMe.data;
+            if(fetchedUser) setFullProfile(fetchedUser);
             if(resFac.data) setFaculties(resFac.data.data || resFac.data);
             if(resDept.data) setDepartments(resDept.data.data || resDept.data);
             if(resCampus.data) setCampuses(resCampus.data.data || resCampus.data);
 
-            const rolesList = resRoles.data.data || [];
-            const currentRole = rolesList.find((r: any) => r.role_id === user.role_id);
-            if (currentRole) setRoleNameTH(currentRole.role_name_th);
-            else setRoleNameTH(ROLE_NAMES_TH[getRoleKey(user.role_id)] || "");
+            const fetchedIsChairman = fetchedUser?.committee_data?.is_chairman || fetchedUser?.is_chairman || false;
+            const targetRoleId = fetchedUser?.role_id || user.role_id;
+            
+            // Logic ใหม่: ดึงข้อมูลชื่อ Role จาก API (Fallback หากไม่มีชื่อไทยให้ใช้ชื่ออังกฤษ หรือ Map หน้าบ้าน)
+            const rolesList = resRoles.data?.data || resRoles.data || [];
+            const currentRole = rolesList.find((r: any) => r.role_id === targetRoleId || r.id === targetRoleId);
+            
+            let displayRoleName = "";
+
+            if (targetRoleId === 6 && fetchedIsChairman) {
+                // ถ้าเป็น Role 6 แต่เป็นประธาน ต้อง Map เอง เพราะใน DB อาจมีแค่ชื่อกรรมการธรรมดา
+                displayRoleName = ROLE_NAMES_TH["chairman_of_student_development_committee"];
+            } else if (currentRole) {
+                // พยายามดึงชื่อจาก API (ลองรองรับหลายๆ Key เผื่อโครงสร้าง Backend มีการเปลี่ยนแปลง)
+                displayRoleName = currentRole.role_name_th || currentRole.role_name || currentRole.name || "";
+            }
+            
+            // Fallback ถ้ายิง API มาแล้วไม่เจอชื่อ หรือยังว่างอยู่ ให้ใช้ MAP จากหน้าบ้าน
+            if (!displayRoleName) {
+                displayRoleName = ROLE_NAMES_TH[getRoleKey(targetRoleId, fetchedIsChairman)] || "ไม่ทราบสิทธิ์";
+            }
+
+            setRoleNameTH(displayRoleName);
 
         } catch (error) {
             console.error("Failed to fetch data:", error);
@@ -492,6 +516,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
       <ProfileModal 
         isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} 
         data={fullProfile} faculties={faculties} departments={departments} campuses={campuses}
+        roleNameTH={roleNameTH} // ส่งชื่อเข้าไปให้ Profile Modal ใช้งานโดยตรง
       />
 
       <motion.aside
