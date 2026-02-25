@@ -97,8 +97,8 @@ const getRoleKey = (roleId: number | undefined, isChairman: boolean = false): Us
     case 4: return "dean"; 
     case 5: return "student_development"; 
     case 6: return isChairman ? "chairman_of_student_development_committee" : "student_development_committee";
-    case 8: return "chancellor"; 
-    case 9: return "organization";
+    case 7: return "chancellor"; 
+    case 8: return "organization";
     default: return "student";
   }
 };

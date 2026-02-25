@@ -19,7 +19,7 @@ import {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
-// ✅ เพิ่มคลาสสีแบบเต็ม เพื่อป้องกันบัค Tailwind ไม่ยอม Render สีตามประเภท
+// เพิ่มคลาสสีแบบเต็ม เพื่อป้องกันบัค Tailwind ไม่ยอม Render สีตามประเภท
 const THEME_STYLES: Record<string, any> = {
   activity: {
     accent: "orange", border: "border-orange-200/50", gradient: "from-orange-400 to-rose-500", shadow: "shadow-orange-500/20", text: "text-orange-600", ring: "focus:ring-orange-500/30",
@@ -243,10 +243,10 @@ export default function OrganizationNominationForm() {
       fd.append("org_phone_number", orgInfo.phone);
 
       // 3. ข้อมูลรายละเอียดตามประเภทรางวัล
-      // ✅ ส่ง text ไปตรงๆ แทน Object หากเป็น awardType แบบปกติ
+      // ส่ง text ไปตรงๆ แทน Object หากเป็น awardType แบบปกติ
       let formDetailValue = otherDetails;
       
-      // ✅ คงรูปแบบ Object ไว้เฉพาะกรณีที่เป็น "อื่นๆ" เพราะต้องส่งชื่อรางวัลไปด้วย
+      // คงรูปแบบ Object ไว้เฉพาะกรณีที่เป็น "อื่นๆ" เพราะต้องส่งชื่อรางวัลไปด้วย
       if (awardType === "other") {
           formDetailValue = JSON.stringify({
             award_title: otherTitle,
@@ -434,7 +434,7 @@ const Section = ({ num, title, children, theme }: any) => (
   </motion.div>
 );
 
-// ✅ แก้ไข: TypeCard ดึงค่าคลาสสีจาก THEME_STYLES ทำให้ใช้งานได้ 100% ไม่มีปัญหา Tailwind ลบสี
+// แก้ไข: TypeCard ดึงค่าคลาสสีจาก THEME_STYLES ทำให้ใช้งานได้ 100% ไม่มีปัญหา Tailwind ลบสี
 const TypeCard = ({ type, active, set, title, sub, icon: Icon }: any) => {
   const isActive = active === type;
   const t = THEME_STYLES[type] || THEME_STYLES.default;

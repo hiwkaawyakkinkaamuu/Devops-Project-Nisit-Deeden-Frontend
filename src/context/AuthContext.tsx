@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { api } from "@/lib/axios"; 
 
-// ✅ 1. สร้าง Interface สำหรับ User Data เพื่อให้ TypeScript รู้จักโครงสร้างข้อมูล
+// 1. สร้าง Interface สำหรับ User Data เพื่อให้ TypeScript รู้จักโครงสร้างข้อมูล
 export interface UserData {
   user_id?: number;
   role_id?: number;
@@ -21,7 +21,7 @@ export interface UserData {
   [key: string]: any; // อนุญาตให้รับฟิลด์อื่นๆ เพิ่มเติมจาก Backend ได้โดยไม่ติด Error
 }
 
-// ✅ 2. นำ UserData มาใช้แทน any ใน Context Type
+// 2. นำ UserData มาใช้แทน any ใน Context Type
 interface AuthContextType {
   user: UserData | null;
   login: (token: string, role: string, userData: any) => void;
@@ -32,7 +32,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  // ✅ 3. อัปเดต Type ของ State จาก <any> เป็น <UserData | null>
+  // 3. อัปเดต Type ของ State จาก <any> เป็น <UserData | null>
   const [user, setUser] = useState<UserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
@@ -66,7 +66,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         window.location.pathname.includes("/google-callback") || 
         urlParams.has("token")
       ) {
-        console.log("🛠️ AuthContext: Google process detected, skipping...");
+        console.log("AuthContext: Google process detected, skipping...");
         return; // ออกจากฟังก์ชันเลย ไม่ต้องทำข้างล่างต่อ
       }
       
@@ -79,7 +79,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const isFirstLoginPage = pathname.includes("/student/auth/first-login");
 
         if (!isPublicPage && !isFirstLoginPage) {
-          console.log(`🚫 AuthContext: No token on [${pathname}], redirecting...`);
+          console.log(`AuthContext: No token on [${pathname}], redirecting...`);
           router.push("/");
         }
         setIsLoading(false);

@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import axios from "axios";
+// ✅ เปลี่ยนมาใช้ api instance ของโปรเจกต์แทน axios ดิบ
+import { api } from "@/lib/axios"; 
 import { 
   CheckCircle2, XCircle, Clock, Award, FileText, 
   History, UserCheck, ShieldCheck, Landmark, GraduationCap,
@@ -10,8 +11,6 @@ import {
   User, Building2, Search, CalendarDays, Phone, Mail, MapPin, Map
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 const getFileUrl = (filePath: string) => {
   if (!filePath) return "#";
@@ -69,15 +68,14 @@ export default function OrganizationTraceAndDetails() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem("token");
-        if (!token) return;
-
+        // ✅ ใช้ Promise.all ควบคู่กับ .catch() ด้านใน เพื่อให้เวลาติด 403 Forbidden ที่ Master Data ระบบจะไม่พัง (กันหน้าขาว)
+        // ✅ ตัด Slash ท้าย URL ออก เพื่อป้องกันปัญหา Header สูญหายตอน Redirect
         const [statusRes, subRes, facRes, deptRes, campusRes] = await Promise.all([
-          axios.get(`${API_BASE_URL}/form-statuses/`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/awards/my/submissions`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/faculty/`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/department/`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/campus/`, { headers: { Authorization: `Bearer ${token}` } })
+          api.get(`/form-statuses`).catch((e) => { console.warn("Cannot fetch statuses", e); return { data: { data: [] } }; }),
+          api.get(`/awards/my/submissions`), // อันนี้ถ้าพังให้โยน Error เข้า Catch ตัวใหญ่ด้านล่างเลย
+          api.get(`/faculty`).catch((e) => { console.warn("Cannot fetch faculty", e); return { data: { data: [] } }; }),
+          api.get(`/department`).catch((e) => { console.warn("Cannot fetch department", e); return { data: { data: [] } }; }),
+          api.get(`/campus`).catch((e) => { console.warn("Cannot fetch campus", e); return { data: { data: [] } }; })
         ]);
 
         const statuses = statusRes.data?.data || [];
@@ -92,9 +90,8 @@ export default function OrganizationTraceAndDetails() {
 
         const detailed = await Promise.all(rawSubmissions.map(async (item: any) => {
             try {
-                const logRes = await axios.get(`${API_BASE_URL}/awards/${item.form_id}/logs`, { 
-                    headers: { Authorization: `Bearer ${token}` } 
-                });
+                // ✅ เปลี่ยนมาใช้ api.get เหมือนกัน
+                const logRes = await api.get(`/awards/${item.form_id}/logs`);
                 return {
                     ...item,
                     logs: logRes.data?.data || [],
@@ -108,7 +105,7 @@ export default function OrganizationTraceAndDetails() {
 
         setSubmissions(detailed);
       } catch (e) { 
-          console.error("Error fetching data:", e); 
+          console.error("Critical Error fetching submissions:", e); 
       } finally { 
           setLoading(false); 
       }
