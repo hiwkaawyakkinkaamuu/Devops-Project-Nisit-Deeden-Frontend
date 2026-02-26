@@ -229,14 +229,13 @@ export default function SDDHistoryPage() {
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 bg-white/70 backdrop-blur-xl p-8 rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/80 animate-fade-in-up">
                     <div>
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 mb-3 text-blue-600">
-                            <History className="w-4 h-4" />
-                            <span className="text-[11px] font-black uppercase tracking-[0.15em]">System Audit Trail</span>
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 text-xs font-bold mb-3 border border-blue-200 shadow-sm">
+                            <History className="w-3.5 h-3.5" />ระบบประวัติการดำเนินการ
                         </div>
-                        <h1 className="text-3xl lg:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 flex items-center gap-3 tracking-tight">
+                        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
                            ประวัติการดำเนินการ
                         </h1>
-                        <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
+                        <p className="text-slate-500 mt-1 text-sm font-medium">
                            ติดตามสถานะการแก้ไข ตรวจสอบ และการส่งต่อข้อมูลในระบบทั้งหมด
                         </p>
                     </div>

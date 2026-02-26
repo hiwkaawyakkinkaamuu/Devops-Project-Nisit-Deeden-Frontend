@@ -118,45 +118,66 @@ export default function AssociateDeanApprovalPage() {
       }
     };
 
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        if (USE_MOCK_DATA) {
-          setTimeout(() => { if(isMounted) { setItems([]); setLoading(false); } }, 800);
-          return;
-        }
+    // ✅ แก้ไขเฉพาะฟังก์ชัน fetchData ภายใน useEffect
+const fetchData = async () => {
+  setLoading(true);
+  try {
+    if (USE_MOCK_DATA) {
+      setTimeout(() => { if(isMounted) { setItems([]); setLoading(false); } }, 800);
+      return;
+    }
 
-        const params: Record<string, string> = { limit: "100" };
-        if (searchTerm) params.keyword = searchTerm;
-        if (filterCategory) params.award_type = filterCategory;
-        if (filterYear) params.student_year = filterYear;
-
-        const response = await api.get(`/awards/search`, { params });
-        const rawData = response.data?.data || response.data || [];
-
-        const mappedData = rawData.map((item: any) => {
-            const isOrgNominated = item.org_name && item.org_name.trim() !== "";
-            return {
-                ...item,
-                award_type_name: item.award_type,
-                is_organization_nominated: isOrgNominated, 
-                organization_name: item.org_name 
-            };
-        });
-
-        const TARGET_STATUS_ID = 1; 
-        const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID);
-
-        if (isMounted) setItems(filteredData);
-      } catch (error) {
-        console.error("API Error:", error);
-        if (isMounted) {
-          Swal.fire({ icon: 'error', title: 'ไม่สามารถดึงข้อมูลได้', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
-        }
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+    // 1. ปรับการส่ง Params ให้เป็นระเบียบ และใช้เลขจริง (Number) แทน String
+    const params: any = { 
+      limit: 100 
     };
+
+    if (searchTerm && searchTerm.trim() !== "") params.keyword = searchTerm;
+    if (filterCategory && filterCategory !== "") params.award_type = filterCategory;
+    
+    // 2. ตรวจสอบว่าชั้นปีเป็นตัวเลขหรือไม่ก่อนส่ง
+    if (filterYear && filterYear !== "") {
+      const yearNum = Number(filterYear);
+      if (!isNaN(yearNum)) params.student_year = yearNum;
+    }
+
+    const response = await api.get(`/awards/search`, { params });
+    const rawData = response.data?.data || response.data || [];
+
+    const mappedData = rawData.map((item: any) => {
+        const isOrgNominated = item.org_name && item.org_name.trim() !== "";
+        return {
+            ...item,
+            award_type_name: item.award_type,
+            is_organization_nominated: isOrgNominated, 
+            organization_name: item.org_name 
+        };
+    });
+
+    const TARGET_STATUS_ID = 1; 
+    const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID);
+
+    if (isMounted) setItems(filteredData);
+  } catch (error: any) {
+    // 3. ปรับการแสดง Error ให้เอาข้อความจาก Backend มาโชว์ (ถ้ามี) จะได้รู้ว่าพังที่บรรทัดไหนใน SQL
+    console.error("🚨 API Error Details:", error.response?.data);
+    
+    if (isMounted) {
+      const serverMsg = error.response?.data?.error || error.response?.data?.message || "เกิดข้อผิดพลาดภายในระบบ (500)";
+      Swal.fire({ 
+        icon: 'error', 
+        title: 'โหลดข้อมูลไม่สำเร็จ', 
+        text: serverMsg,
+        toast: true, 
+        position: 'top-end', 
+        showConfirmButton: false, 
+        timer: 4000 
+      });
+    }
+  } finally {
+    if (isMounted) setLoading(false);
+  }
+};
 
     fetchAwardTypes();
     fetchData();

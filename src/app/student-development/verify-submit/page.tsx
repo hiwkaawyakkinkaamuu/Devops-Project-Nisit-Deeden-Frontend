@@ -329,14 +329,13 @@ export default function SDDVerifyPage() {
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white/70 backdrop-blur-xl p-8 rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/80 animate-fade-in-up">
               <div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 mb-3 text-blue-600">
-                      <Sparkles className="w-4 h-4" />
-                      <span className="text-[11px] font-black uppercase tracking-[0.15em]">Student Development Div.</span>
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 text-xs font-bold mb-3 border border-blue-200 shadow-sm">
+                      <Sparkles className="w-4 h-4" />ระบบตรวจสอบความถูกต้อง
                   </div>
-                  <h1 className="text-3xl lg:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-600 flex items-center gap-3 tracking-tight">
+                  <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
                     ตรวจสอบความถูกต้อง
                   </h1>
-                  <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
+                  <p className="text-slate-500 mt-1 text-sm font-medium flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-blue-400" /> กองพัฒนานิสิต - คัดกรองและประเมินผลงาน
                   </p>
               </div>
