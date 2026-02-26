@@ -68,7 +68,7 @@ export default function LoginPage() {
         router.push("/student/auth/first-login");
         return;
       }
-      if (roleId === 9) {
+      if (roleId === 8) {
         router.push("/organization/auth/first-login");
         return;
       }

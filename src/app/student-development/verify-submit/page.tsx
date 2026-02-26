@@ -259,7 +259,7 @@ export default function SDDVerifyPage() {
     if (result.isConfirmed) {
       try {
         // ✅ ยิง API เปลี่ยนสถานะเป็น 8 (อนุมัติโดยกองพัฒนานิสิต) ทันที
-        await api.put(`/awards/${selectedItem.form_id}/form-status`, { 
+        await api.put(`/awards/form-status/change/${selectedItem.form_id}`, { 
             form_status: 8, 
             reject_reason: "" 
         });
@@ -283,7 +283,7 @@ export default function SDDVerifyPage() {
 
     try {
       // ✅ เปลี่ยนสถานะเป็น 9 (ปฏิเสธ/ตีกลับ โดยกองพัฒนานิสิต)
-      await api.put(`/awards/${selectedItem.form_id}/form-status`, { 
+      await api.put(`/awards/form-status/change/${selectedItem.form_id}`, { 
           form_status: 9, 
           reject_reason: rejectReason 
       });

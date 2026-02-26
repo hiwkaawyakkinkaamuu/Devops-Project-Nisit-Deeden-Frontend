@@ -73,7 +73,7 @@ const modalVariants: Variants = {
 export default function AssociateDeanApprovalPage() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Nomination[]>([]);
-  const [awardTypes, setAwardTypes] = useState<string[]>([]); // สำหรับเก็บประเภทรางวัลจาก DB
+  const [awardTypes, setAwardTypes] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   // Modals
@@ -118,6 +118,7 @@ export default function AssociateDeanApprovalPage() {
       }
     };
 
+    // ✅ ฟังก์ชัน fetchData ที่เอา parameter ออกตามที่ต้องการ
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -126,12 +127,8 @@ export default function AssociateDeanApprovalPage() {
           return;
         }
 
-        const params: Record<string, string> = { limit: "100" };
-        if (searchTerm) params.keyword = searchTerm;
-        if (filterCategory) params.award_type = filterCategory;
-        if (filterYear) params.student_year = filterYear;
-
-        const response = await api.get(`/awards/search`, { params });
+        // ยิง API เปล่าๆ ไม่ต้องส่ง params
+        const response = await api.get(`/awards/search`);
         const rawData = response.data?.data || response.data || [];
 
         const mappedData = rawData.map((item: any) => {
@@ -148,10 +145,19 @@ export default function AssociateDeanApprovalPage() {
         const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID);
 
         if (isMounted) setItems(filteredData);
-      } catch (error) {
-        console.error("API Error:", error);
+      } catch (error: any) {
+        
         if (isMounted) {
-          Swal.fire({ icon: 'error', title: 'ไม่สามารถดึงข้อมูลได้', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
+          const serverMsg = error.response?.data?.error || error.response?.data?.message || "เกิดข้อผิดพลาดภายในระบบ (500)";
+          Swal.fire({ 
+            icon: 'error', 
+            title: 'โหลดข้อมูลไม่สำเร็จ', 
+            text: serverMsg,
+            toast: true, 
+            position: 'top-end', 
+            showConfirmButton: false, 
+            timer: 4000 
+          });
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -161,19 +167,41 @@ export default function AssociateDeanApprovalPage() {
     fetchAwardTypes();
     fetchData();
     return () => { isMounted = false; };
-  }, [searchTerm, filterCategory, filterYear]);
+  }, []); // ลบ dependency ของ params ออก เพื่อดึงแค่รอบแรก
 
   // ==========================================
-  // 4. Filtering & Sorting Logic
+  // 4. Filtering & Sorting Logic (ฝั่ง Frontend)
   // ==========================================
   const processedData = useMemo(() => {
     let filtered = items;
-    if (filterCategory) filtered = filtered.filter(item => item.award_type_name === filterCategory);
+    
+    // ค้นหาตามชื่อหรือรหัส (Frontend search)
+    if (searchTerm) {
+      const lowerTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(item => 
+        item.student_firstname?.toLowerCase().includes(lowerTerm) || 
+        item.student_lastname?.toLowerCase().includes(lowerTerm) ||
+        item.student_number?.includes(lowerTerm)
+      );
+    }
+    
+    // กรองประเภทรางวัล
+    if (filterCategory) {
+      filtered = filtered.filter(item => item.award_type_name === filterCategory);
+    }
+    
+    // กรองชั้นปี
+    if (filterYear) {
+      filtered = filtered.filter(item => String(item.student_year) === filterYear);
+    }
+
+    // กรองวันที่
     if (filterDate) {
       const filterTime = new Date(filterDate).setHours(23, 59, 59, 999);
       filtered = filtered.filter(item => new Date(item.created_at).getTime() <= filterTime);
     }
     
+    // เรียงข้อมูล
     if (sortConfig.key) {
       filtered.sort((a: any, b: any) => {
         let valA = sortConfig.key ? a[sortConfig.key] : '';
@@ -191,7 +219,7 @@ export default function AssociateDeanApprovalPage() {
       });
     }
     return filtered;
-  }, [items, filterDate, filterCategory, sortConfig]);
+  }, [items, searchTerm, filterYear, filterDate, filterCategory, sortConfig]);
 
   const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
   const currentItems = processedData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -209,7 +237,7 @@ export default function AssociateDeanApprovalPage() {
   const submitVote = async (id: number, statusId: number, reason: string, studentName: string) => {
     try {
       if (!USE_MOCK_DATA) {
-        await api.put(`/awards/${id}/form-status`, { form_status: statusId, reject_reason: reason });
+        await api.put(`/awards/form-status/change/${id}`, { form_status: statusId, reject_reason: reason });
       }
       setItems(prev => prev.filter(c => c.form_id !== id));
       setSelectedId(null);
@@ -243,7 +271,6 @@ export default function AssociateDeanApprovalPage() {
     const selectedItem = items.find(c => c.form_id === selectedId);
     if (selectedId && selectedItem) {
       const displayName = getDisplayName(selectedItem);
-      // ถูกปฏิเสธ
       const REJECT_STATUS_ID = 5; 
       await submitVote(selectedId, REJECT_STATUS_ID, rejectReason, displayName);
     }
@@ -282,7 +309,6 @@ export default function AssociateDeanApprovalPage() {
                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><Award className="h-4 w-4 text-slate-400" /></div>
               <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 pr-10 text-sm text-slate-600 outline-none appearance-none cursor-pointer">
                 <option value="">ทุกประเภทรางวัล</option>
-                {/* ✅ ดึงข้อมูลประเภทรางวัลทั้งหมดจาก API */}
                 {awardTypes.map((type) => (
                   <option key={type} value={type}>{type}</option>
                 ))}

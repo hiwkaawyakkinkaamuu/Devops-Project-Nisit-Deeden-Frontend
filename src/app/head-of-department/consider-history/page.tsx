@@ -72,7 +72,7 @@ const modalVariants: Variants = {
 // ==========================================
 // 2. Main Component
 // ==========================================
-export default function AssociateDeanHistoryPage() { 
+export default function HeadOfDepartmentHistoryPage() { 
   
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Nomination[]>([]);
@@ -115,6 +115,7 @@ export default function AssociateDeanHistoryPage() {
     return `${item.student_firstname || ""} ${item.student_lastname || ""}`.trim();
   };
 
+  // ✅ แก้ไข: เอา Dependencies ออก เพื่อให้ดึง API แค่รอบเดียว
   useEffect(() => {
     let isMounted = true;
 
@@ -137,12 +138,8 @@ export default function AssociateDeanHistoryPage() {
           return;
         }
 
-        const params: Record<string, string> = { limit: "200" };
-        if (searchTerm) params.keyword = searchTerm;
-        if (filterCategory) params.award_type = filterCategory;
-        if (filterYear) params.student_year = filterYear;
-
-        const response = await api.get(`/awards/search`, { params });
+        // ✅ ลบการแนบ params ออกตามที่ต้องการ ยิงตรงๆ ไปเลย
+        const response = await api.get(`/awards/my/approval-logs`);
         const rawData = response.data?.data || response.data || [];
 
         const mappedData = rawData.map((item: any) => {
@@ -170,17 +167,39 @@ export default function AssociateDeanHistoryPage() {
     fetchAwardTypes();
     fetchData();
     return () => { isMounted = false; };
-  }, [searchTerm, filterCategory, filterYear]);
+  }, []); // <-- ลบ dependencies ออกให้ยิงรอบเดียว
 
+  // ✅ แก้ไข: ย้ายการกรองข้อมูลทั้งหมดมาทำที่ฝั่ง Frontend
   const processedData = useMemo(() => {
     let filtered = items;
     
-    if (filterCategory) filtered = filtered.filter(item => item.award_type_name === filterCategory);
+    // กรองตามคำค้นหา
+    if (searchTerm) {
+      const lowerTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(item => 
+        item.student_firstname?.toLowerCase().includes(lowerTerm) || 
+        item.student_lastname?.toLowerCase().includes(lowerTerm) ||
+        item.student_number?.includes(lowerTerm)
+      );
+    }
+    
+    // กรองตามหมวดหมู่รางวัล
+    if (filterCategory) {
+      filtered = filtered.filter(item => item.award_type_name === filterCategory);
+    }
+
+    // กรองตามชั้นปี
+    if (filterYear) {
+      filtered = filtered.filter(item => String(item.student_year) === filterYear);
+    }
+
+    // กรองตามวันที่อัปเดต
     if (filterDate) {
       const filterTime = new Date(filterDate).setHours(23, 59, 59, 999);
       filtered = filtered.filter(item => new Date(item.latest_update || item.created_at).getTime() <= filterTime);
     }
     
+    // จัดเรียง
     if (sortConfig.key) {
       filtered.sort((a, b) => {
         let valA: any = sortConfig.key ? a[sortConfig.key] : '';
@@ -200,7 +219,7 @@ export default function AssociateDeanHistoryPage() {
       });
     }
     return filtered;
-  }, [items, filterDate, filterCategory, sortConfig]);
+  }, [items, searchTerm, filterYear, filterDate, filterCategory, sortConfig]);
 
   const filteredDataCount = processedData.length;
   const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);

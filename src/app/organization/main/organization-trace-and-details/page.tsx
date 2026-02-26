@@ -70,7 +70,7 @@ export default function OrganizationTraceAndDetails() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // 🌟 เพิ่มการดึงข้อมูลปีการศึกษาเข้าไปใน Promise.all
+        // เพิ่มการดึงข้อมูลปีการศึกษาเข้าไปใน Promise.all
         const [statusRes, subRes, facRes, deptRes, campusRes, yearsRes] = await Promise.all([
           api.get(`/form-statuses`).catch((e) => { console.warn("Cannot fetch statuses", e); return { data: { data: [] } }; }),
           api.get(`/awards/my/submissions`), 

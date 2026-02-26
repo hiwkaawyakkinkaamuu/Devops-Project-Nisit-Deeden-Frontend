@@ -98,13 +98,14 @@ export default function AssociateDeanHistoryPage() {
     return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute:'2-digit' });
   };
 
+  // ✅ ปรับ Badge ให้ตรงกับสถานะของ "รองคณบดี"
   const getStatusBadge = (statusId: number) => {
-      // 4 = ตีกลับ/ไม่เห็นชอบ
-      if (statusId === 4 || statusId === 99) { 
+      // 5 = ปฏิเสธโดยรองคณบดี
+      if (statusId === 5) { 
           return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-600 text-xs font-bold border border-rose-200"><XCircle className="w-3.5 h-3.5"/> ไม่เห็นชอบ</span>;
       } 
-      // ✅ เปลี่ยนเป็น > 3 เพราะสถานะ 3 คือกำลังรอรองคณบดีตรวจ ถ้ามากกว่า 3 คือรองคณบดีให้ผ่านแล้ว
-      else if (statusId > 3) {
+      // 4 = อนุมัติโดยรองคณบดี, หรือ 6+ คือผ่านรองคณบดีไปให้ขั้นถัดไปแล้ว
+      else if (statusId >= 4) {
           return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs font-bold border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5"/> เห็นชอบแล้ว</span>;
       }
       return <span className="px-3 py-1 rounded-full bg-slate-50 text-slate-600 text-xs font-medium border border-slate-200">สถานะ {statusId}</span>;
@@ -137,12 +138,7 @@ export default function AssociateDeanHistoryPage() {
           return;
         }
 
-        const params: Record<string, string> = { limit: "200" };
-        if (searchTerm) params.keyword = searchTerm;
-        if (filterCategory) params.award_type = filterCategory;
-        if (filterYear) params.student_year = filterYear;
-
-        const response = await api.get(`/awards/search`, { params });
+        const response = await api.get(`/awards/my/approval-logs`);
         const rawData = response.data?.data || response.data || [];
 
         const mappedData = rawData.map((item: any) => {
@@ -155,9 +151,8 @@ export default function AssociateDeanHistoryPage() {
             };
         });
 
-        // ✅ ประวัติของรองคณบดี = เอาเฉพาะที่ผ่านรองคณบดีไปแล้ว (สถานะต้องไม่ใช่ 1 และ ไม่ใช่ 2) 
-        // หรืออาจจะเป็น 4 (โดนปฏิเสธ) ก็ให้แสดงในประวัติด้วย
-        const filteredData = mappedData.filter((item: any) => item.form_status > 2 || item.form_status === 5);
+        // ✅ ประวัติของรองคณบดี = สถานะต้องเป็น 4 ขึ้นไป (อนุมัติโดยรองคณบดี, ปฏิเสธโดยรองคณบดี หรืออื่นๆ ที่มากกว่า)
+        const filteredData = mappedData.filter((item: any) => item.form_status >= 4);
 
         if (isMounted) setItems(filteredData);
       } catch (error) {
@@ -170,17 +165,38 @@ export default function AssociateDeanHistoryPage() {
     fetchAwardTypes();
     fetchData();
     return () => { isMounted = false; };
-  }, [searchTerm, filterCategory, filterYear]);
+  }, []); 
 
   const processedData = useMemo(() => {
     let filtered = items;
     
-    if (filterCategory) filtered = filtered.filter(item => item.award_type_name === filterCategory);
+    // กรองตามคำค้นหา
+    if (searchTerm) {
+      const lowerTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(item => 
+        item.student_firstname?.toLowerCase().includes(lowerTerm) || 
+        item.student_lastname?.toLowerCase().includes(lowerTerm) ||
+        item.student_number?.includes(lowerTerm)
+      );
+    }
+    
+    // กรองตามหมวดหมู่รางวัล
+    if (filterCategory) {
+      filtered = filtered.filter(item => item.award_type_name === filterCategory);
+    }
+
+    // กรองตามชั้นปี
+    if (filterYear) {
+      filtered = filtered.filter(item => String(item.student_year) === filterYear);
+    }
+
+    // กรองตามวันที่อัปเดต
     if (filterDate) {
       const filterTime = new Date(filterDate).setHours(23, 59, 59, 999);
       filtered = filtered.filter(item => new Date(item.latest_update || item.created_at).getTime() <= filterTime);
     }
     
+    // จัดเรียง
     if (sortConfig.key) {
       filtered.sort((a, b) => {
         let valA: any = sortConfig.key ? a[sortConfig.key] : '';
@@ -200,7 +216,7 @@ export default function AssociateDeanHistoryPage() {
       });
     }
     return filtered;
-  }, [items, filterDate, filterCategory, sortConfig]);
+  }, [items, searchTerm, filterYear, filterDate, filterCategory, sortConfig]);
 
   const filteredDataCount = processedData.length;
   const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
@@ -236,7 +252,7 @@ export default function AssociateDeanHistoryPage() {
                 <CheckCircle2 className="w-8 h-8 text-emerald-500" />
                 ประวัติการพิจารณา
               </h1>
-              {/* ✅ เปลี่ยนเป็น รองคณบดี */}
+              {/* ✅ เปลี่ยนข้อความเป็นรองคณบดี */}
               <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
                 สำหรับรองคณบดี (รายการที่ดำเนินการเรียบร้อยแล้ว)
@@ -337,7 +353,7 @@ export default function AssociateDeanHistoryPage() {
                 ) : (
                   currentItems.map((item, index) => (
                     <tr 
-                      key={item.form_id} 
+                      key={`${item.form_id}-${index}`} 
                       className="transition-colors hover:bg-slate-50 group cursor-pointer animate-fade-in-up"
                       style={{ opacity: 0, animationDelay: `${index * 50}ms`, animationFillMode: 'forwards' }}
                     >

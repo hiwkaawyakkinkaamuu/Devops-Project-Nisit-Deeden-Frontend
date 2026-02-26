@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useMemo } from "react";
 import axios from "axios";
+// ✅ นำเข้า Icon เพิ่มเติมเพื่อใช้ในกล่องแสดงผลการปฏิเสธ
+import { AlertCircle, Clock } from "lucide-react";
 
 // ==========================================
 // 1. Interfaces (ปรับให้ตรงกับ Backend)
@@ -44,7 +46,7 @@ export interface Nomination {
   org_type: string;
   org_location: string;
   org_phone_number: string;
-  form_detail: string | any; // Backend ส่งมาเป็น JSON String หรือ String ธรรมดา
+  form_detail: string | any;
   reject_reason: string;
   files?: FileResponse[];
 }
@@ -68,6 +70,17 @@ interface ModalProps {
   departments: MasterDepartment[];
 }
 
+// ✅ เพิ่ม Interface สำหรับ Approval Log
+interface ApprovalLog {
+  approval_log_id: number;
+  form_id: number;
+  reviewer_user_id: number;
+  role_name: string;
+  operation: string;
+  reject_reason?: string;
+  operation_date: string;
+}
+
 // ==========================================
 // 2. Helpers & Themes
 // ==========================================
@@ -77,6 +90,14 @@ const formatDateDisplay = (isoDate: string) => {
     const date = new Date(isoDate);
     if (isNaN(date.getTime())) return isoDate;
     return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
+// ✅ เพิ่ม Helper สำหรับแสดงวันที่พร้อมเวลาใน Log
+const formatDateTimeDisplay = (isoDate: string) => {
+    if (!isoDate) return "-";
+    const date = new Date(isoDate);
+    if (isNaN(date.getTime())) return isoDate;
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
 const calculateAge = (isoDate: string) => {
@@ -145,15 +166,16 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
   const [deptName, setDepartmentName] = useState("-");
   const [campusName, setCampusName] = useState("-");
   const [isVisible, setIsVisible] = useState(false);
+  
+  // ✅ State สำหรับเก็บประวัติการพิจารณา
+  const [approvalLogs, setApprovalLogs] = useState<ApprovalLog[]>([]);
 
-  // แปลง String JSON ให้เป็น Object อย่างปลอดภัย
   const parsedDetail = useMemo(() => {
       if (!data) return {};
       if (typeof data.form_detail === 'string') {
           if (data.form_detail.trim().startsWith('{')) {
               try { return JSON.parse(data.form_detail); } catch { return { other_details: data.form_detail }; }
           }
-          // ถ้าเป็น string ธรรมดา ให้สร้าง object จำลองคืนไปเพื่อนำไปใช้
           return { other_details: data.form_detail };
       }
       return data.form_detail || {};
@@ -194,11 +216,21 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
                 }).catch(() => setCampusName(`(ID: ${data.campus_id})`))
             : setCampusName(parsedDetail?.campus || "-");
 
+        // ✅ Fetch Approval Logs สำหรับฟอร์มนี้โดยเฉพาะ
+        axios.get(`${API_BASE_URL}/awards/approval-logs/${data.form_id}`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(res => {
+                setApprovalLogs(res.data?.data || []);
+            }).catch(err => {
+                console.error("Failed to fetch approval logs:", err);
+                setApprovalLogs([]);
+            });
+
     } else {
         setIsVisible(false);
         setFacultyName("-");
         setDepartmentName("-");
         setCampusName("-");
+        setApprovalLogs([]);
     }
   }, [isOpen, data, parsedDetail]);
 
@@ -218,18 +250,20 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
   if (isOther && awardStr) themeKey = "other";
   const theme = THEME_STYLES[themeKey];
 
-  // เช็คว่าใครเป็นผู้เสนอชื่อ (อ้างอิงจาก org_name)
   const isOrganization = (data.org_name && data.org_name.trim() !== "") || data.student_lastname === "-";
 
-  // ชื่อที่แสดง ถ้านามสกุลเป็น "-" ให้ซ่อนนามสกุล
   const displayStudentName = data.student_lastname === "-" 
       ? data.student_firstname 
       : `${data.student_firstname || ""} ${data.student_lastname || ""}`.trim();
 
   let stepCounter = 1;
 
-  // ดึงข้อความเหตุผลที่จะแสดง
   const reasonToDisplay = parsedDetail?.other_details || parsedDetail?.behavior_desc || (typeof data.form_detail === 'string' && !data.form_detail.startsWith('{') ? data.form_detail : "");
+
+  // ✅ กรองเฉพาะประวัติการ "ปฏิเสธ" (เรียงล่าสุดขึ้นก่อน)
+  const rejectedLogs = approvalLogs
+    .filter(log => log.operation === "reject")
+    .sort((a, b) => new Date(b.operation_date).getTime() - new Date(a.operation_date).getTime());
 
   return (
     <div className="absolute inset-0 z-[50] flex items-center justify-center p-4 md:p-8 overflow-hidden">
@@ -268,6 +302,31 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
 
         {/* Scrollable Body */}
         <div className="overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar">
+
+            {/* ✅ กล่องแสดงเหตุผลการปฏิเสธ (จะแสดงก็ต่อเมื่อมีประวัติ reject) */}
+            {rejectedLogs.length > 0 && (
+                <div className="space-y-4">
+                    {rejectedLogs.map((log) => (
+                        <div key={log.approval_log_id} className="bg-rose-50 border border-rose-200 p-6 md:p-8 rounded-[24px] shadow-sm relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-rose-400 to-red-600"></div>
+                            <h3 className="text-lg md:text-xl font-bold text-rose-800 mb-2 flex items-center gap-3">
+                                <AlertCircle className="w-6 h-6 text-rose-600" />
+                                ฟอร์มถูกส่งกลับแก้ไขโดย: {log.role_name}
+                            </h3>
+                            <p className="text-sm font-bold text-rose-500 mb-5 flex items-center gap-2">
+                                <Clock className="w-4 h-4" />
+                                เมื่อวันที่: {formatDateTimeDisplay(log.operation_date)}
+                            </p>
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-rose-700">ข้อเสนอแนะ / เหตุผลที่ปฏิเสธ:</label>
+                                <div className="w-full bg-white border border-rose-200 rounded-xl px-4 py-4 text-sm text-gray-800 whitespace-pre-wrap shadow-inner">
+                                    {log.reject_reason || "ไม่มีการระบุเหตุผลประกอบ"}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
             
             {/* === Section 1 (เฉพาะ Other) === */}
             {isOther && (
@@ -281,7 +340,7 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
                 </div>
             )}
 
-            {/* === Section ข้อมูลองค์กร (แสดงเฉพาะถ้ามี org_name) === */}
+            {/* === Section ข้อมูลองค์กร === */}
             {isOrganization && (
                 <div className={`bg-white p-6 md:p-8 rounded-[24px] border border-blue-100 shadow-sm relative overflow-hidden`}>
                     <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 to-indigo-500`}></div>
@@ -328,7 +387,7 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
                 </div>
             </div>
 
-            {/* === Section รายละเอียดผลงาน (แสดงเฉพาะกล่องเหตุผล) === */}
+            {/* === Section รายละเอียดผลงาน === */}
             <div className={`bg-white p-6 md:p-8 rounded-[24px] ${theme.border} shadow-sm relative overflow-hidden`}>
                 <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${theme.gradient}`}></div>
                 
@@ -361,7 +420,6 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
                             if (safePath.startsWith("/api/")) safePath = safePath.replace("/api/", "");
                             if (!safePath.startsWith("/")) safePath = "/" + safePath;
 
-                            // จัดการชื่อไฟล์ กรณี file_name ว่าง ให้ดึงจาก path
                             const fileName = file.file_name || safePath.split('/').pop() || `Document_${idx + 1}.pdf`;
 
                             return (

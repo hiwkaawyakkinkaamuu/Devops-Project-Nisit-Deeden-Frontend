@@ -1,66 +1,41 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import NominationDetailModal from "@/components/Nomination-detail-modal"; 
-import Swal from "sweetalert2";
+import { useState, useEffect } from "react";
+// ✅ แก้ไขตัว n พิมพ์เล็กให้ตรงกับชื่อไฟล์จริง เพื่อแก้บัค IntrinsicAttributes
+import NominationDetailModal from "@/components/Nomination-detail-modal";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
-  Search, Calendar, Filter, GraduationCap, CheckCircle2, XCircle,
-  Eye, AlertCircle, Award, Clock, FileText, Check, X, Building2, UserCircle2,
+  Search, Calendar, CheckCircle2, XCircle,
+  Eye, Award, Building2,
   ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown
 } from "lucide-react";
-
 import { api } from "@/lib/axios";
 
 // ==========================================
-// 0. Configuration & Types
+// 0. Types (อัปเดตให้ตรงกับ Backend DTO ล่าสุด)
 // ==========================================
-const USE_MOCK_DATA = false;
-
-export interface FileResponse {
-  file_dir_id: number;
-  file_name?: string;
-  file_type: string;
-  file_size: number;
-  file_path: string;
-}
-
 export interface Nomination {
+  approval_log_id: number;   // ✅ ใช้ตัวนี้เป็น Key เพื่อไม่ให้ซ้ำกัน
   form_id: number;
-  user_id: number;
+  reviewer_user_id: number;
+  operation: string;         // 'approve' หรือ 'reject'
+  operation_date: string;    // วันที่ดำเนินการ
   student_firstname: string;
   student_lastname: string;
-  student_email: string;
   student_number: string;
-  faculty_id: number;
-  department_id: number;
-  campus_id: number;
   academic_year: number;
-  semester: number;
-  form_status: number;
   award_type: string;
-  award_type_name?: string;
-  created_at: string;
-  latest_update: string;
-  student_year: number;
-  advisor_name: string;
-  student_phone_number: string;
-  student_address: string;
-  gpa: number;
-  student_date_of_birth: string;
-  org_name: string;
-  org_type: string;
-  org_location: string;
-  org_phone_number: string;
-  form_detail: string | any;
-  reject_reason: string;
-  files?: FileResponse[];
+  campus_id: number;
+  
+  // Custom mapped สำหรับ UI
+  award_type_name?: string; 
   is_organization_nominated?: boolean; 
   organization_name?: string;
 }
 
-const ITEMS_PER_PAGE = 8; 
-
+// ==========================================
+// 1. Framer Motion Variants
+// ==========================================
 const modalVariants: Variants = {
   hidden: { opacity: 0, scale: 0.95 },
   show: { opacity: 1, scale: 1, transition: { type: "spring", duration: 0.3 } },
@@ -70,175 +45,52 @@ const modalVariants: Variants = {
 // ==========================================
 // 2. Main Component
 // ==========================================
-export default function AssociateDeanApprovalPage() {
+export default function HeadOfDepartmentHistoryPage() { 
+  
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Nomination[]>([]);
-  const [awardTypes, setAwardTypes] = useState<string[]>([]); // สำหรับเก็บประเภทรางวัลจาก DB
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-
-  // Modals
+  const [awardTypes, setAwardTypes] = useState<string[]>([]);
+  
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [modalData, setModalData] = useState<Nomination | null>(null);
-  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-
-  // Filters & Sort
+  const [modalData, setModalData] = useState<any | null>(null);
+  
+  // State สำหรับ Server-Side Filtering
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [filterDate, setFilterDate] = useState("");
-  const [filterYear, setFilterYear] = useState("");
+  
+  // State สำหรับ Server-Side Pagination & Sorting
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortConfig, setSortConfig] = useState<{ key: keyof Nomination | 'award_type_name' | null, direction: 'asc' | 'desc' | null }>({ key: 'created_at', direction: 'desc' });
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
 
+  // Debounce ค้นหา ป้องกันการยิง API รัวๆ
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // รีเซ็ตไปหน้า 1 เสมอเวลาเปลี่ยนตัวกรอง
   useEffect(() => {
     setCurrentPage(1);
-    setSelectedId(null);
-  }, [searchTerm, filterCategory, filterDate, filterYear]);
+  }, [debouncedSearch, filterCategory, filterDate]);
 
   const formatDateTh = (isoDate: string) => {
     if (!isoDate) return "-";
     const date = new Date(isoDate);
-    return date.toLocaleDateString('th-TH', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute:'2-digit' });
   };
 
-  // ==========================================
-  // 3. Data Fetching
-  // ==========================================
-  useEffect(() => {
-    let isMounted = true;
-    
-    // ดึงประเภทรางวัลทั้งหมดที่มีใน DB
-    const fetchAwardTypes = async () => {
-      try {
-        const response = await api.get("/awards/types");
-        const types = response.data?.data || response.data || [];
-        if (isMounted) setAwardTypes(types);
-      } catch (error) {
-        console.error("Error fetching award types:", error);
+  // ✅ ใช้ operation จาก Backend โดยตรง (approve / reject)
+  const getStatusBadge = (operation: string) => {
+      if (operation === "reject") { 
+          return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-600 text-xs font-bold border border-rose-200"><XCircle className="w-3.5 h-3.5"/> ไม่เห็นชอบ</span>;
+      } else if (operation === "approve") {
+          return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs font-bold border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5"/> เห็นชอบแล้ว</span>;
       }
-    };
-
-    // ✅ แก้ไขเฉพาะฟังก์ชัน fetchData ภายใน useEffect
-const fetchData = async () => {
-  setLoading(true);
-  try {
-    if (USE_MOCK_DATA) {
-      setTimeout(() => { if(isMounted) { setItems([]); setLoading(false); } }, 800);
-      return;
-    }
-
-    // 1. ปรับการส่ง Params ให้เป็นระเบียบ และใช้เลขจริง (Number) แทน String
-    const params: any = { 
-      limit: 100 
-    };
-
-    if (searchTerm && searchTerm.trim() !== "") params.keyword = searchTerm;
-    if (filterCategory && filterCategory !== "") params.award_type = filterCategory;
-    
-    // 2. ตรวจสอบว่าชั้นปีเป็นตัวเลขหรือไม่ก่อนส่ง
-    if (filterYear && filterYear !== "") {
-      const yearNum = Number(filterYear);
-      if (!isNaN(yearNum)) params.student_year = yearNum;
-    }
-
-    const response = await api.get(`/awards/search`, { params });
-    const rawData = response.data?.data || response.data || [];
-
-    const mappedData = rawData.map((item: any) => {
-        const isOrgNominated = item.org_name && item.org_name.trim() !== "";
-        return {
-            ...item,
-            award_type_name: item.award_type,
-            is_organization_nominated: isOrgNominated, 
-            organization_name: item.org_name 
-        };
-    });
-
-    const TARGET_STATUS_ID = 1; 
-    const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID);
-
-    if (isMounted) setItems(filteredData);
-  } catch (error: any) {
-    // 3. ปรับการแสดง Error ให้เอาข้อความจาก Backend มาโชว์ (ถ้ามี) จะได้รู้ว่าพังที่บรรทัดไหนใน SQL
-    console.error("🚨 API Error Details:", error.response?.data);
-    
-    if (isMounted) {
-      const serverMsg = error.response?.data?.error || error.response?.data?.message || "เกิดข้อผิดพลาดภายในระบบ (500)";
-      Swal.fire({ 
-        icon: 'error', 
-        title: 'โหลดข้อมูลไม่สำเร็จ', 
-        text: serverMsg,
-        toast: true, 
-        position: 'top-end', 
-        showConfirmButton: false, 
-        timer: 4000 
-      });
-    }
-  } finally {
-    if (isMounted) setLoading(false);
-  }
-};
-
-    fetchAwardTypes();
-    fetchData();
-    return () => { isMounted = false; };
-  }, [searchTerm, filterCategory, filterYear]);
-
-  // ==========================================
-  // 4. Filtering & Sorting Logic
-  // ==========================================
-  const processedData = useMemo(() => {
-    let filtered = items;
-    if (filterCategory) filtered = filtered.filter(item => item.award_type_name === filterCategory);
-    if (filterDate) {
-      const filterTime = new Date(filterDate).setHours(23, 59, 59, 999);
-      filtered = filtered.filter(item => new Date(item.created_at).getTime() <= filterTime);
-    }
-    
-    if (sortConfig.key) {
-      filtered.sort((a: any, b: any) => {
-        let valA = sortConfig.key ? a[sortConfig.key] : '';
-        let valB = sortConfig.key ? b[sortConfig.key] : '';
-        if (sortConfig.key === 'student_firstname') {
-          valA = `${a.student_firstname} ${a.student_lastname}`;
-          valB = `${b.student_firstname} ${b.student_lastname}`;
-        } else if (sortConfig.key === 'created_at') {
-          valA = new Date(a.created_at).getTime();
-          valB = new Date(b.created_at).getTime();
-        }
-        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-    return filtered;
-  }, [items, filterDate, filterCategory, sortConfig]);
-
-  const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
-  const currentItems = processedData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-  // ==========================================
-  // 5. Handlers
-  // ==========================================
-  const handleSort = (key: keyof Nomination | 'award_type_name') => {
-    setSortConfig(prev => {
-      if (prev.key === key) return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
-      return { key, direction: 'asc' };
-    });
-  };
-
-  const submitVote = async (id: number, statusId: number, reason: string, studentName: string) => {
-    try {
-      if (!USE_MOCK_DATA) {
-        await api.put(`/awards/${id}/form-status`, { form_status: statusId, reject_reason: reason });
-      }
-      setItems(prev => prev.filter(c => c.form_id !== id));
-      setSelectedId(null);
-      setIsRejectModalOpen(false);
-      Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, icon: reason.length > 0 ? 'info' : 'success', title: 'บันทึกผลสำเร็จ', text: `จัดการข้อมูลของ: ${studentName} เรียบร้อย` });
-    } catch (error) {
-      Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ดำเนินการไม่สำเร็จ' });
-    }
+      return <span className="px-3 py-1 rounded-full bg-slate-50 text-slate-600 text-xs font-medium border border-slate-200">ดำเนินการแล้ว</span>;
   };
 
   const getDisplayName = (item: Nomination) => {
@@ -246,102 +98,170 @@ const fetchData = async () => {
     return `${item.student_firstname || ""} ${item.student_lastname || ""}`.trim();
   };
 
-  const handleApprove = async () => {
-    if (selectedId === null) return;
-    const selectedItem = items.find(c => c.form_id === selectedId);
-    if (!selectedItem) return;
-    const displayName = getDisplayName(selectedItem);
-    const result = await Swal.fire({ title: `ยืนยันการ "เห็นชอบ"?`, html: `ยืนยันความเห็นชอบให้กับ <b>${displayName}</b>`, icon: 'question', showCancelButton: true, confirmButtonText: 'ยืนยัน', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#10B981' });
-    
-    if (result.isConfirmed) {
-      const NEXT_STATUS_ID = 2; 
-      await submitVote(selectedId, NEXT_STATUS_ID, "", displayName);
-    }
+  // ดึงประเภทรางวัล
+  useEffect(() => {
+    let isMounted = true;
+    const fetchAwardTypes = async () => {
+      try {
+        const response = await api.get("/awards/types");
+        if (isMounted) setAwardTypes(response.data?.data || []);
+      } catch (error) {
+        console.error("Error fetching award types:", error);
+      }
+    };
+    fetchAwardTypes();
+    return () => { isMounted = false; };
+  }, []);
+
+  // ✅ ยิง API ขอข้อมูลประวัติ (Server-Side)
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // เตรียม Params
+        const params: Record<string, any> = {
+            page: currentPage,
+            sort_by: sortConfig.key,       // name, studentNumber, awardType, date
+            sort_order: sortConfig.direction
+        };
+        
+        if (debouncedSearch) params.keyword = debouncedSearch;
+        if (filterCategory) params.award_type = filterCategory;
+        if (filterDate) params.date = filterDate;
+
+        const response = await api.get(`/awards/my/approval-logs`, { params });
+        const rawData = response.data?.data || [];
+        const pagination = response.data?.pagination;
+
+        // แปลงข้อมูลให้อยู่ในฟอร์มที่ตาราง UI เข้าใจ
+        const mappedData = rawData.map((item: any) => {
+            const isOrg = item.student_lastname === "-";
+            return {
+                ...item,
+                award_type_name: item.award_type, 
+                is_organization_nominated: isOrg, 
+                organization_name: isOrg ? item.student_firstname : "" 
+            };
+        });
+
+        if (isMounted) {
+            setItems(mappedData);
+            if (pagination) {
+                setTotalPages(pagination.total_pages || 1);
+                setTotalItems(pagination.total_items || 0);
+            }
+        }
+      } catch (error) {
+        console.warn("API Error:", error);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchData();
+    return () => { isMounted = false; };
+  }, [currentPage, debouncedSearch, filterCategory, filterDate, sortConfig]);
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev.key === key) return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      return { key, direction: 'desc' };
+    });
   };
 
-  const handleConfirmReject = async () => {
-    if (!rejectReason.trim()) return Swal.fire({ icon: 'warning', title: 'กรุณาระบุเหตุผล' });
-    const selectedItem = items.find(c => c.form_id === selectedId);
-    if (selectedId && selectedItem) {
-      const displayName = getDisplayName(selectedItem);
-      // ถูกปฏิเสธ
-      const REJECT_STATUS_ID = 3; 
-      await submitVote(selectedId, REJECT_STATUS_ID, rejectReason, displayName);
-    }
+  // ✅ เวลากดรูปตา ให้ไปดึง Detail ฟอร์มเต็มมาแสดงใน Modal แทน
+  const openDetailModal = async (formId: number) => {
+      try {
+          const response = await api.get(`/awards/${formId}`);
+          setModalData(response.data?.data);
+          setIsDetailModalOpen(true);
+      } catch (err) {
+          console.error("Failed to load form details", err);
+      }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 lg:p-10 font-sans pb-24">
+    <div className="min-h-screen bg-slate-50/50 p-6 pt-24 lg:p-10 lg:pt-28 font-sans pb-24">
+      <style jsx global>{`
+          @keyframes fadeInUp { 
+              from { opacity: 0; transform: translateY(10px); } 
+              to { opacity: 1; transform: translateY(0); } 
+          }
+          .animate-fade-in-up { 
+              animation: fadeInUp 0.4s ease-out forwards; 
+          }
+      `}</style>
+
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header Section */}
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white/70 backdrop-blur-xl border border-white shadow-sm rounded-3xl p-8">
+        <div className="bg-white/70 backdrop-blur-xl border border-white shadow-sm rounded-3xl p-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
-              <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 flex items-center gap-3">
-                <CheckCircle2 className="w-8 h-8 text-emerald-500" /> พิจารณาคัดเลือกนิสิตดีเด่น
+              <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-slate-700 to-slate-900 flex items-center gap-3">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                ประวัติการพิจารณา
               </h1>
               <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
-                <Building2 className="w-4 h-4" /> สำหรับรองคณบดี
+                <Building2 className="w-4 h-4" />
+                สำหรับหัวหน้าภาควิชา (รายการที่ดำเนินการเรียบร้อยแล้ว)
               </p>
             </div>
           </div>
 
-          {/* Filters Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
+          {/* Filters Grid (เอาชั้นปีออก) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
             <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400" /></div>
-              <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 text-sm outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm" />
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+              </div>
+              <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm" />
             </div>
             
             <div className="relative group">
-               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><Calendar className="h-4 w-4 text-slate-400" /></div>
-              <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 text-sm text-slate-600 outline-none cursor-pointer" />
+               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                <Calendar className="h-4 w-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+              </div>
+              <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 text-sm text-slate-600 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm cursor-pointer" />
             </div>
             
             <div className="relative group">
-               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><Award className="h-4 w-4 text-slate-400" /></div>
-              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 pr-10 text-sm text-slate-600 outline-none appearance-none cursor-pointer">
+               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                <Award className="h-4 w-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+              </div>
+              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 pr-10 text-sm text-slate-600 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm cursor-pointer appearance-none">
                 <option value="">ทุกประเภทรางวัล</option>
-                {/* ✅ ดึงข้อมูลประเภทรางวัลทั้งหมดจาก API */}
                 {awardTypes.map((type) => (
-                  <option key={type} value={type}>{type}</option>
+                    <option key={type} value={type}>{type}</option>
                 ))}
               </select>
               <ChevronDown className="w-4 h-4 absolute right-4 top-3.5 text-slate-400 pointer-events-none" />
             </div>
-            
-            <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><GraduationCap className="h-4 w-4 text-slate-400" /></div>
-              <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 pr-10 text-sm text-slate-600 outline-none appearance-none cursor-pointer">
-                <option value="">ทุกระดับชั้นปี</option>
-                <option value="1">ชั้นปีที่ 1</option><option value="2">ชั้นปีที่ 2</option><option value="3">ชั้นปีที่ 3</option><option value="4">ชั้นปีที่ 4</option>
-              </select>
-              <ChevronDown className="w-4 h-4 absolute right-4 top-3.5 text-slate-400 pointer-events-none" />
-            </div>
           </div>
-        </motion.div>
+        </div>
 
         {/* Data Table */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto min-h-[400px]">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/80 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
-                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('student_firstname')}>
-                    <div className="flex items-center gap-1">ชื่อ-นามสกุล {sortConfig.key === 'student_firstname' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
+                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('name')}>
+                    <div className="flex items-center gap-1">ชื่อ-นามสกุล {sortConfig.key === 'name' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
                   </th>
-                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors text-center" onClick={() => handleSort('student_number')}>
-                    <div className="flex items-center justify-center gap-1">รหัสนิสิต {sortConfig.key === 'student_number' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
+                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors text-center" onClick={() => handleSort('studentNumber')}>
+                    <div className="flex items-center justify-center gap-1">รหัสนิสิต {sortConfig.key === 'studentNumber' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
                   </th>
-                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors text-center" onClick={() => handleSort('award_type_name')}>
-                     <div className="flex items-center justify-center gap-1">รางวัล {sortConfig.key === 'award_type_name' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
+                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors text-center" onClick={() => handleSort('awardType')}>
+                     <div className="flex items-center justify-center gap-1">รางวัลที่เสนอ {sortConfig.key === 'awardType' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
                   </th>
                   <th className="p-5 text-center">ผู้เสนอชื่อ</th>
-                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors text-center" onClick={() => handleSort('created_at')}>
-                     <div className="flex items-center justify-center gap-1">วันที่ส่ง {sortConfig.key === 'created_at' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
+                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors text-center" onClick={() => handleSort('date')}>
+                     <div className="flex items-center justify-center gap-1">วันที่พิจารณา {sortConfig.key === 'date' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
                   </th>
-                  <th className="p-5 text-center">สถานะ</th>
+                  <th className="p-5 text-center">สถานะการตัดสิน</th>
                   <th className="p-5 text-center">จัดการ</th>
                 </tr>
               </thead>
@@ -349,75 +269,117 @@ const fetchData = async () => {
                 {loading ? (
                   [1, 2, 3, 4, 5].map((i) => (
                     <tr key={i} className="animate-pulse border-b border-slate-100">
-                      <td colSpan={7} className="p-5"><div className="h-4 bg-slate-200 rounded w-full"></div></td>
+                      <td className="p-5"><div className="h-4 bg-slate-200 rounded w-32"></div></td>
+                      <td className="p-5"><div className="h-4 bg-slate-200 rounded w-24 mx-auto"></div></td>
+                      <td className="p-5"><div className="h-6 bg-slate-200 rounded-full w-32 mx-auto"></div></td>
+                      <td className="p-5"><div className="h-4 bg-slate-200 rounded w-20 mx-auto"></div></td>
+                      <td className="p-5"><div className="h-4 bg-slate-200 rounded w-24 mx-auto"></div></td>
+                      <td className="p-5"><div className="h-6 bg-slate-200 rounded-full w-24 mx-auto"></div></td>
+                      <td className="p-5"><div className="h-8 w-8 bg-slate-200 rounded-full mx-auto"></div></td>
                     </tr>
                   ))
-                ) : currentItems.length === 0 ? (
-                  <tr><td colSpan={7} className="p-16 text-center text-slate-400 font-medium">ไม่พบรายการรอพิจารณา</td></tr>
+                ) : items.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-16 text-center">
+                      <div className="flex flex-col items-center justify-center text-slate-400">
+                        <div className="bg-slate-50 p-4 rounded-full mb-3">
+                          <CheckCircle2 className="w-10 h-10 text-slate-300" />
+                        </div>
+                        <p className="text-lg font-medium text-slate-600">ไม่มีประวัติการพิจารณา</p>
+                        <p className="text-sm mt-1">รายการที่พิจารณาแล้วจะแสดงที่นี่</p>
+                      </div>
+                    </td>
+                  </tr>
                 ) : (
-                  currentItems.map((item, index) => (
-                    <motion.tr key={item.form_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: index * 0.05 }} onClick={() => setSelectedId(item.form_id)} className={`transition-colors cursor-pointer group ${selectedId === item.form_id ? "bg-emerald-50/50" : "hover:bg-slate-50"}`}>
+                  items.map((item, index) => (
+                    <tr 
+                      // ✅ แก้บัค Key ซ้ำ โดยใช้ approval_log_id
+                      key={item.approval_log_id} 
+                      className="transition-colors hover:bg-slate-50 group cursor-pointer animate-fade-in-up"
+                      style={{ opacity: 0, animationDelay: `${index * 50}ms`, animationFillMode: 'forwards' }}
+                    >
                       <td className="p-5">
                         <div className="flex items-center gap-3">
-                           <div className={`w-2 h-2 rounded-full shrink-0 ${selectedId === item.form_id ? 'bg-emerald-500' : 'bg-transparent'}`}></div>
-                           <div><p className="text-sm font-bold text-slate-800">{getDisplayName(item)}</p><p className="text-xs text-slate-500">{item.student_lastname === "-" ? 'หน่วยงาน' : `ปี ${item.student_year || "-"}`}</p></div>
+                           <div className="w-2 h-2 rounded-full shrink-0 bg-slate-300 group-hover:bg-emerald-500 transition-colors"></div>
+                           <div>
+                             <p className="text-sm font-bold text-slate-800">
+                                {getDisplayName(item)}
+                             </p>
+                             {/* ✅ เอาปีการศึกษาออก แสดงแค่ นิสิต หรือ องค์กร */}
+                             <p className="text-xs text-slate-500">
+                                {(!item.student_lastname || item.student_lastname === "-") ? 'องค์กร/หน่วยงาน' : `นิสิต`}
+                             </p>
+                           </div>
                         </div>
                       </td>
-                      <td className="p-5 text-sm text-center text-slate-600 font-mono">{item.student_lastname === "-" ? "-" : (item.student_number || "-")}</td>
-                      <td className="p-5 text-center"><span className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200">{item.award_type_name || "-"}</span></td>
-                      <td className="p-5 text-center">
-                          {item.is_organization_nominated ? (<span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">องค์กร: {item.organization_name}</span>) : (<span className="text-xs font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">เสนอตัวเอง</span>)}
+                      <td className="p-5 text-sm text-center text-slate-600 font-mono">
+                        {(!item.student_lastname || item.student_lastname === "-") ? "-" : (item.student_number || "-")}
                       </td>
-                      <td className="p-5 text-sm text-center text-slate-500">{formatDateTh(item.created_at)}</td>
-                      <td className="p-5 text-center"><span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-600 border border-amber-200"><Clock className="w-3.5 h-3.5" /> รอพิจารณา</span></td>
-                      <td className="p-5 text-center" onClick={(e) => e.stopPropagation()}><button onClick={() => { setModalData(item); setIsDetailModalOpen(true); }} className="p-2 rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"><Eye className="w-5 h-5" /></button></td>
-                    </motion.tr>
+                      <td className="p-5 text-center">
+                         <span className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200 group-hover:bg-white transition-colors">
+                           {item.award_type_name || item.award_type || "-"}
+                         </span>
+                      </td>
+                      <td className="p-5 text-center">
+                          {item.is_organization_nominated ? (
+                              <span className="inline-flex flex-col items-center">
+                                  <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">องค์กรภายนอก</span>
+                                  <span className="text-[10px] text-slate-400 mt-1">{item.organization_name || 'ไม่ระบุชื่อ'}</span>
+                              </span>
+                          ) : (
+                              <span className="text-xs font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">เสนอตัวเอง</span>
+                          )}
+                      </td>
+                      <td className="p-5 text-sm text-center text-slate-500">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5" />
+                          {/* ✅ ใช้วันที่อนุมัติจาก operation_date */}
+                          {formatDateTh(item.operation_date)}
+                        </div>
+                      </td>
+                      <td className="p-5 text-center">
+                         {/* ✅ ใช้สถานะจาก operation (Approve/Reject) */}
+                         {getStatusBadge(item.operation)}
+                      </td>
+                      <td className="p-5 text-center" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          onClick={() => openDetailModal(item.form_id)} 
+                          className="inline-flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all focus:ring-2 focus:ring-emerald-100 outline-none"
+                          title="ดูรายละเอียดข้อมูล"
+                        >
+                          <Eye className="w-5 h-5" />
+                        </button>
+                      </td>
+                    </tr>
                   ))
                 )}
               </tbody>
             </table>
           </div>
 
-          {/* Footer Actions */}
+          {/* Table Footer / Pagination */}
           <div className="bg-slate-50 border-t border-slate-200 p-5 flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-2">
-              <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2 rounded-xl bg-white border border-slate-200 disabled:opacity-50 shadow-sm"><ChevronLeft className="w-4 h-4" /></button>
+              <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronLeft className="w-4 h-4" /></button>
               <span className="text-sm font-medium text-slate-600 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">หน้า {currentPage} จาก {totalPages || 1}</span>
-              <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-xl bg-white border border-slate-200 disabled:opacity-50 shadow-sm"><ChevronRight className="w-4 h-4" /></button>
+              <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronRight className="w-4 h-4" /></button>
             </div>
-
-            <div className="flex items-center gap-3">
-              <button onClick={() => { setRejectReason(""); setIsRejectModalOpen(true); }} disabled={selectedId === null} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${selectedId === null ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-white border-rose-100 text-rose-600 hover:bg-rose-50 hover:border-rose-200"}`}><XCircle className="w-4 h-4" /> ไม่เห็นชอบ</button>
-              <button onClick={handleApprove} disabled={selectedId === null} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-all shadow-lg ${selectedId === null ? "bg-slate-300 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"}`}><CheckCircle2 className="w-4 h-4" /> เห็นชอบ</button>
+            <div className="text-sm text-slate-500 font-medium">
+                พบข้อมูลทั้งหมด {totalItems} รายการ
             </div>
           </div>
-        </motion.div>
+        </div>
 
         {/* Modal: Nomination Detail */}
-        <NominationDetailModal isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} data={modalData} faculties={[]} departments={[]} />
-
-        {/* Modal: Reject Reason */}
-        <AnimatePresence>
-          {isRejectModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsRejectModalOpen(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
-              <motion.div variants={modalVariants} initial="hidden" animate="show" exit="exit" className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100">
-                <div className="bg-rose-50/50 px-6 py-5 border-b border-rose-100 flex items-center justify-between">
-                  <h3 className="text-xl font-bold text-rose-800 flex items-center gap-2"><AlertCircle className="w-6 h-6 text-rose-500" /> ระบุเหตุผล "ไม่เห็นชอบ"</h3>
-                  <button onClick={() => setIsRejectModalOpen(false)} className="text-rose-400 hover:text-rose-600 bg-white p-1.5 rounded-full hover:bg-rose-100 transition-colors"><X className="w-5 h-5"/></button>
-                </div>
-                <div className="p-6">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">เหตุผลที่ตีกลับเอกสาร <span className="text-rose-500">*</span></label>
-                  <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} className="w-full border border-slate-300 rounded-xl p-4 text-sm outline-none transition-all h-32 resize-none bg-slate-50/50 focus:ring-4 focus:ring-rose-100 focus:border-rose-400" placeholder="ระบุเหตุผล..." autoFocus />
-                  <div className="mt-6 flex justify-end gap-3">
-                    <button onClick={() => setIsRejectModalOpen(false)} className="px-5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-medium">ยกเลิก</button>
-                    <button onClick={handleConfirmReject} className="px-6 py-2.5 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-lg shadow-rose-600/20">ยืนยันไม่เห็นชอบ</button>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+        {modalData && (
+            <NominationDetailModal 
+              isOpen={isDetailModalOpen} 
+              onClose={() => setIsDetailModalOpen(false)} 
+              data={modalData} 
+              faculties={[]} 
+              departments={[]}
+            />
+        )}
 
       </div>
     </div>
