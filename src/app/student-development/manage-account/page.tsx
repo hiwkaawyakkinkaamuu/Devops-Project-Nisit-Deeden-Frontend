@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Search, Award, Users, Mail, ChevronDown, 
   ShieldCheck, AlertTriangle, Sparkles, CheckCircle2,
-  Building2, GraduationCap, X, Edit2, Trash2, Plus, ImageIcon, MapPin
+  Building2, GraduationCap, X, Edit2, Trash2, Plus, MapPin
 } from "lucide-react";
 
 // ==========================================
@@ -52,8 +52,8 @@ interface User {
 // --- Validation Schemas (Zod) ---
 const UserSchema = z.object({
   prefix: z.string().optional(),
-  firstname: z.string().min(1, "กรุณากรอกชื่อจริง"),
-  lastname: z.string().min(1, "กรุณากรอกนามสกุล"),
+  firstname: z.string().min(1, "กรุณากรอกชื่อจริงหรือชื่อผู้ติดต่อ"),
+  lastname: z.string().optional(), // เปลี่ยนเป็น optional เพราะองค์กรไม่มีนามสกุล
   email: z.string().email("รูปแบบอีเมลไม่ถูกต้อง"),
   role_id: z.number().min(1, "กรุณาเลือกตำแหน่ง"),
   campus_id: z.number().min(1, "กรุณาเลือกวิทยาเขต"),
@@ -68,6 +68,12 @@ const UserSchema = z.object({
   
   image_path: z.string().optional(),
 }).superRefine((data, ctx) => {
+  
+  // บังคับนามสกุล สำหรับคนที่ไม่ใช่องค์กร
+  if (data.role_id !== 8 && (!data.lastname || data.lastname.trim() === "")) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "กรุณากรอกนามสกุล", path: ["lastname"] });
+  }
+
   // กฎตาม Role
   if (data.role_id === 1) { // Student
     if (!data.student_number || !/^\d{10}$/.test(data.student_number)) {
@@ -249,7 +255,15 @@ export default function UserManagementPage() {
 
   const handleRoleChange = (roleIdStr: string) => {
       const roleId = Number(roleIdStr);
-      setFormData(prev => ({ ...prev, role_id: roleId, department_id: undefined, faculty_id: undefined }));
+      setFormData(prev => ({ 
+        ...prev, 
+        role_id: roleId, 
+        department_id: undefined, 
+        faculty_id: undefined,
+        // ถ้าเปลี่ยนเป็นองค์กร ให้เคลียร์คำนำหน้าและนามสกุลทิ้ง
+        prefix: roleId === 8 ? "-" : (prev.prefix === "-" ? "นาย" : prev.prefix),
+        lastname: roleId === 8 ? "-" : prev.lastname,
+      }));
   };
 
   const handleDelete = async (id: number, name: string) => {
@@ -291,19 +305,19 @@ export default function UserManagementPage() {
 
     setIsSaving(true);
     try {
-      // 🎯 สร้าง Payload เฉพาะฟิลด์ที่กำหนดตาม Role
+      // 🎯 สร้าง Payload
       const payload: any = { 
         email: formData.email,
         role_id: formData.role_id,
         campus_id: formData.campus_id,
-        prefix: formData.prefix || "นาย",
+        prefix: formData.role_id === 8 ? "-" : (formData.prefix || "นาย"),
         firstname: formData.firstname,
-        lastname: formData.lastname,
+        lastname: formData.role_id === 8 ? "-" : formData.lastname,
       };
 
       if (formData.password) {
         payload.password = formData.password;
-        payload.confirmPassword = formData.confirm_password; // ใช้ confirmPassword ตัวพิมพ์ใหญ่
+        payload.confirmPassword = formData.confirm_password; 
       }
 
       // 🎯 เงื่อนไขเฉพาะ Role
@@ -324,8 +338,6 @@ export default function UserManagementPage() {
         payload.organization_location = formData.organization_location;
         payload.organization_phone = formData.organization_phone;
       }
-
-      console.log("📤 Sending Payload:", payload);
 
       if (modalMode === 'create') {
         await api.post(`/auth/register`, payload);
@@ -424,7 +436,10 @@ export default function UserManagementPage() {
                                 <div className="min-w-0 flex-1 space-y-1">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <h3 className="font-bold text-slate-900 text-[1.1rem] truncate group-hover:text-blue-700 transition-colors">
-                                          {`${user.prefix || ''}${user.firstname} ${user.lastname}`.trim()}
+                                          {user.role_id === 8 
+                                            ? `${user.firstname}` // หน่วยงาน ไม่แสดงคำนำหน้าและนามสกุล
+                                            : `${user.prefix && user.prefix !== "-" ? user.prefix : ''}${user.firstname} ${user.lastname}`.trim()
+                                          }
                                         </h3>
                                         {user.role_id === 1 && user.student_number && (
                                             <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-mono border border-slate-200 font-bold">{user.student_number}</span>
@@ -486,27 +501,39 @@ export default function UserManagementPage() {
                 {/* Form Body */}
                 <form id="userForm" onSubmit={handleSave} className="flex-1 overflow-y-auto p-8 space-y-6">
                     
-                    {/* ข้อมูลส่วนตัว (ทุกคนต้องมี) */}
+                    {/* ข้อมูลส่วนตัว */}
                     <div className="bg-slate-50/50 p-6 rounded-[1.5rem] border border-slate-100 space-y-5">
                       <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Users className="w-4 h-4 text-slate-400" /> ข้อมูลส่วนตัวพื้นฐาน</h4>
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
-                            <div className="sm:col-span-4 space-y-1.5">
-                                <label className="text-[13px] font-bold text-slate-600">คำนำหน้า</label>
-                                <div className="relative">
-                                  <select className="w-full bg-white border border-slate-300 rounded-lg pl-3 pr-8 py-2.5 text-sm focus:border-slate-400 outline-none transition-all appearance-none" value={formData.prefix || 'นาย'} onChange={e => setFormData({...formData, prefix: e.target.value})}>
-                                    {PREFIX_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-                                  </select>
-                                  <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            
+                            {/* ถ้าเป็นองค์กร ซ่อนคำนำหน้า */}
+                            {formData.role_id !== 8 && (
+                                <div className="sm:col-span-4 space-y-1.5">
+                                    <label className="text-[13px] font-bold text-slate-600">คำนำหน้า</label>
+                                    <div className="relative">
+                                      <select className="w-full bg-white border border-slate-300 rounded-lg pl-3 pr-8 py-2.5 text-sm focus:border-slate-400 outline-none transition-all appearance-none" value={formData.prefix || 'นาย'} onChange={e => setFormData({...formData, prefix: e.target.value})}>
+                                        {PREFIX_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                                      </select>
+                                      <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    </div>
                                 </div>
+                            )}
+
+                            {/* ชื่อจริง / ชื่อผู้ติดต่อ */}
+                            <div className={formData.role_id === 8 ? "sm:col-span-12 space-y-1.5" : "sm:col-span-4 space-y-1.5"}>
+                                <label className="text-[13px] font-bold text-slate-600">
+                                    {formData.role_id === 8 ? "ชื่อผู้ติดต่อ / ตัวแทนองค์กร" : "ชื่อจริง"} <span className="text-red-500">*</span>
+                                </label>
+                                <input type="text" className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:border-slate-400 outline-none transition-all" value={formData.firstname || ''} onChange={e => setFormData({...formData, firstname: e.target.value})} placeholder={formData.role_id === 8 ? "ชื่อตัวแทนผู้ประสานงาน" : "สมชาย"} />
                             </div>
-                            <div className="sm:col-span-4 space-y-1.5">
-                                <label className="text-[13px] font-bold text-slate-600">ชื่อจริง <span className="text-red-500">*</span></label>
-                                <input type="text" className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:border-slate-400 outline-none transition-all" value={formData.firstname || ''} onChange={e => setFormData({...formData, firstname: e.target.value})} placeholder="สมชาย" />
-                            </div>
-                            <div className="sm:col-span-4 space-y-1.5">
-                                <label className="text-[13px] font-bold text-slate-600">นามสกุล <span className="text-red-500">*</span></label>
-                                <input type="text" className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:border-slate-400 outline-none transition-all" value={formData.lastname || ''} onChange={e => setFormData({...formData, lastname: e.target.value})} placeholder="ใจดี" />
-                            </div>
+
+                            {/* ถ้าเป็นองค์กร ซ่อนนามสกุล */}
+                            {formData.role_id !== 8 && (
+                                <div className="sm:col-span-4 space-y-1.5">
+                                    <label className="text-[13px] font-bold text-slate-600">นามสกุล <span className="text-red-500">*</span></label>
+                                    <input type="text" className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:border-slate-400 outline-none transition-all" value={formData.lastname || ''} onChange={e => setFormData({...formData, lastname: e.target.value})} placeholder="ใจดี" />
+                                </div>
+                            )}
                       </div>
 
                       {/* ข้อมูลพิเศษสำหรับ Organization (Role 8) */}
@@ -540,7 +567,7 @@ export default function UserManagementPage() {
                           <div className="space-y-1.5">
                               <label className="text-[13px] font-bold text-slate-600">ตำแหน่ง (Role) <span className="text-red-500">*</span></label>
                               <div className="relative">
-                                <select className="w-full bg-white border border-slate-300 rounded-lg pl-3 pr-10 py-2.5 text-sm focus:border-slate-400 outline-none transition-all font-bold text-slate-700 disabled:bg-slate-50 disabled:text-slate-400 appearance-none" value={formData.role_id || ''} onChange={e => handleRoleChange(e.target.value)} disabled={modalMode === 'edit'}>
+                                <select className="w-full bg-white border border-slate-300 rounded-lg pl-3 pr-10 py-2.5 text-sm focus:border-slate-400 outline-none transition-all font-bold text-slate-700 disabled:bg-slate-100 disabled:text-slate-400 appearance-none" value={formData.role_id || ''} onChange={e => handleRoleChange(e.target.value)} disabled={modalMode === 'edit'}>
                                     <option value="" disabled>-- เลือกตำแหน่ง --</option>
                                     {roles.map((r: any) => <option key={r.role_id} value={r.role_id}>{r.role_name_th}</option>)}
                                 </select>
@@ -551,10 +578,19 @@ export default function UserManagementPage() {
                           <div className="space-y-1.5">
                               <label className="text-[13px] font-bold text-slate-600 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> วิทยาเขต <span className="text-red-500">*</span></label>
                               <div className="relative">
-                                <select className="w-full bg-white border border-slate-300 rounded-lg pl-3 pr-10 py-2.5 text-sm focus:border-slate-400 outline-none transition-all font-medium disabled:bg-slate-50 disabled:text-slate-400 appearance-none" value={formData.campus_id || ''} onChange={e => setFormData({...formData, campus_id: Number(e.target.value)})}>
-                                    <option value="">-- เลือกวิทยาเขต --</option>
-                                    {campuses.map((c: any) => <option key={c.campus_id} value={c.campus_id}>{c.campus_name}</option>)}
-                                </select>
+                                <select 
+                                  className="w-full bg-white border border-slate-300 rounded-lg pl-3 pr-10 py-2.5 text-sm focus:border-slate-400 outline-none transition-all font-medium appearance-none cursor-pointer" 
+                                  value={formData.campus_id || ''} 
+                                  onChange={e => setFormData({...formData, campus_id: Number(e.target.value)})}
+                                  >
+                                      <option value="" disabled>-- เลือกวิทยาเขต --</option>
+                                      {/* แก้ไขให้รองรับทั้ง campusID (API ใหม่) และ campus_id */}
+                                      {campuses.map((c: any) => (
+                                          <option key={c.campusID || c.campus_id} value={c.campusID || c.campus_id}>
+                                              {c.campusName || c.campus_name}
+                                          </option>
+                                      ))}
+                                  </select>
                                 <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                               </div>
                           </div>

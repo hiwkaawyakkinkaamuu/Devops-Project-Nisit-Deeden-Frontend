@@ -99,10 +99,10 @@ export default function LoginPage() {
           ? "/chairman-of-student-development-committee/consider"
           : "/student-development-committee/consider";
         break;
-      case 8:
+      case 7:
         targetPath = "/chancellor/dashboard"; // อธิการบดี
         break;
-      case 9:
+      case 8:
         targetPath = "/organization/main/organization-nomination-form"; // หน่วยงานภายนอก
         break;
       default:

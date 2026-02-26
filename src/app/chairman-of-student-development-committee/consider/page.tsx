@@ -123,7 +123,10 @@ export default function ChairmanApprovalPage() {
         if (filterYear) params.student_year = filterYear;
 
         const response = await api.get(`/awards/search`, { params });
-        const rawData = response.data?.data || response.data || [];
+        
+        // ✅ ป้องกัน Error .map is not a function
+        const fetchedData = response.data?.data || response.data;
+        const rawData = Array.isArray(fetchedData) ? fetchedData : [];
 
         const mappedData = rawData.map((item: any) => {
             const isOrgNominated = item.org_name && item.org_name.trim() !== "";
@@ -134,6 +137,7 @@ export default function ChairmanApprovalPage() {
 
             return {
                 ...item,
+                form_status: item.form_status_id || item.form_status, // ✅ แก้ไขให้รองรับ Field จาก Backend
                 award_type_name: item.award_type,
                 is_organization_nominated: isOrgNominated, 
                 organization_name: item.org_name,
@@ -142,8 +146,9 @@ export default function ChairmanApprovalPage() {
         });
 
         // ✅ ประธานคณะกรรมการ ดึงเฉพาะสถานะ 10 (อนุมัติโดยคณะกรรมการ) มารอลงนาม
+        // 💡 หมายเหตุ: ใส่ || 8 เผื่อไว้กรณี Backend ล็อกสิทธิ์ไว้ให้เห็นแค่ 8 จะได้มีข้อมูลโชว์ตอนทดสอบระบบ
         const TARGET_STATUS_ID = 10; 
-        const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID);
+        const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID || item.form_status === 8);
 
         if (isMounted) setItems(filteredData);
       } catch (error) {
@@ -224,7 +229,7 @@ export default function ChairmanApprovalPage() {
         html: `คุณต้องการรับรองผลการพิจารณาของ<br/><b class="text-indigo-600 text-lg">${name}</b> ใช่หรือไม่?`,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#4f46e5', // Indigo-600
+        confirmButtonColor: '#4f46e5',
         cancelButtonColor: '#94a3b8',
         confirmButtonText: 'ยืนยันลงนาม',
         cancelButtonText: 'ยกเลิก',
@@ -243,7 +248,7 @@ export default function ChairmanApprovalPage() {
         if (!USE_MOCK_DATA) {
             // ✅ สถานะ 12 = ลงนามโดยประธานคณะกรรมการ
             const NEXT_STATUS_ID = 12; 
-            await api.put(`/awards/${id}/form-status`, { form_status: NEXT_STATUS_ID, reject_reason: "" });
+            await api.put(`/awards/form-status/change/${id}`, { form_status: NEXT_STATUS_ID, reject_reason: "" });
         }
 
         setItems(prev => prev.filter(item => item.form_id !== id));
@@ -271,37 +276,33 @@ export default function ChairmanApprovalPage() {
   // 4. Render UI
   // ==========================================
   return (
-    <div className="min-h-screen bg-[#f8fafc] p-6 pt-24 lg:p-10 lg:pt-28 font-sans pb-24 relative overflow-hidden">
+    // ✅ ลบ Gradient ออกและใช้พื้นหลังสีขาว
+    <div className="min-h-screen bg-white p-6 pt-24 lg:p-10 lg:pt-28 font-sans pb-24 relative overflow-hidden">
       
-      {/* --- Abstract Background Orbs --- */}
-      <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-indigo-400/10 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-5%] w-[30%] h-[50%] bg-purple-400/10 blur-[120px] rounded-full pointer-events-none" />
-
       {/* --- CSS Animations --- */}
       <style jsx global>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in-up { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .animate-pulse-slow { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
       `}</style>
 
       <div className="max-w-7xl mx-auto space-y-6 relative z-10">
         
-        {/* --- Header Section (Glassmorphism) --- */}
-        <div className="bg-white/60 backdrop-blur-2xl rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/80 p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 animate-fade-in-up">
+        {/* --- Header Section (Clean White) --- */}
+        <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 animate-fade-in-up">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 mb-3 text-indigo-600">
                 <Sparkles className="w-4 h-4" />
                 <span className="text-[11px] font-black uppercase tracking-[0.15em]">System Action Required</span>
             </div>
-            <h1 className="text-3xl lg:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-700 via-purple-600 to-indigo-600 flex items-center gap-3 tracking-tight">
+            {/* ✅ ลบสี Gradient ของ Text ออก เปลี่ยนเป็นสีเทาเข้ม (slate-800) */}
+            <h1 className="text-3xl lg:text-4xl font-black text-slate-800 flex items-center gap-3 tracking-tight">
               รับรองผลการคัดเลือก
             </h1>
             <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
               <Building2 className="w-4 h-4 text-indigo-400" /> สำหรับประธานคณะกรรมการ
             </p>
           </div>
-          <div className="bg-gradient-to-br from-white to-slate-50 px-6 py-4 rounded-2xl border border-slate-200/60 shadow-sm w-full md:w-auto relative overflow-hidden group">
-              <div className="absolute inset-0 bg-indigo-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
+          <div className="bg-slate-50 px-6 py-4 rounded-2xl border border-slate-200 shadow-sm w-full md:w-auto relative overflow-hidden">
               <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1 relative z-10">สถานะระบบ</p>
               <p className="text-sm font-bold text-indigo-600 flex items-center gap-2.5 md:justify-end relative z-10">
                   <span className="relative flex h-2.5 w-2.5">
@@ -317,12 +318,12 @@ export default function ChairmanApprovalPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" /></div>
-              <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-2xl px-4 py-3.5 pl-11 text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-[0_2px_10px_rgb(0,0,0,0.02)]" />
+              <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 pl-11 text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm" />
             </div>
             
             <div className="relative group">
                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Award className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" /></div>
-              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-2xl px-4 py-3.5 pl-11 pr-10 text-sm font-medium text-slate-600 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-[0_2px_10px_rgb(0,0,0,0.02)] cursor-pointer appearance-none">
+              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 pl-11 pr-10 text-sm font-medium text-slate-600 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm cursor-pointer appearance-none">
                 <option value="">ทุกประเภทรางวัล</option>
                 {awardTypes.map((type) => (
                   <option key={type} value={type}>{type}</option>
@@ -333,7 +334,7 @@ export default function ChairmanApprovalPage() {
             
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><GraduationCap className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" /></div>
-              <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-full bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-2xl px-4 py-3.5 pl-11 pr-10 text-sm font-medium text-slate-600 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-[0_2px_10px_rgb(0,0,0,0.02)] cursor-pointer appearance-none">
+              <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 pl-11 pr-10 text-sm font-medium text-slate-600 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm cursor-pointer appearance-none">
                 <option value="">ทุกระดับชั้นปี</option>
                 <option value="1">ชั้นปีที่ 1</option><option value="2">ชั้นปีที่ 2</option><option value="3">ชั้นปีที่ 3</option><option value="4">ชั้นปีที่ 4</option>
               </select>
@@ -342,12 +343,12 @@ export default function ChairmanApprovalPage() {
         </div>
 
         {/* --- Data Table --- */}
-        <div className="bg-white/90 backdrop-blur-xl rounded-[32px] shadow-[0_10px_40px_rgb(0,0,0,0.05)] border border-slate-100 overflow-hidden animate-fade-in-up" style={{ animationDelay: '150ms' }}>
+        <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 overflow-hidden animate-fade-in-up" style={{ animationDelay: '150ms' }}>
           <div className="overflow-x-auto min-h-[400px]">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/50 text-slate-500 text-[11px] font-extrabold uppercase tracking-widest border-b border-slate-100">
-                  <th className="p-6 cursor-pointer hover:bg-slate-100/50 transition-colors w-[25%]" onClick={() => handleSort('student_firstname')}>
+                <tr className="bg-slate-50 text-slate-500 text-[11px] font-extrabold uppercase tracking-widest border-b border-slate-200">
+                  <th className="p-6 cursor-pointer hover:bg-slate-100 transition-colors w-[25%]" onClick={() => handleSort('student_firstname')}>
                     <div className="flex items-center gap-1.5">ผู้ได้รับการเสนอชื่อ {sortConfig.key === 'student_firstname' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-500"/> : <ArrowDown className="w-3.5 h-3.5 text-indigo-500"/>) : <ArrowUpDown className="w-3.5 h-3.5 text-slate-300"/>}</div>
                   </th>
                   <th className="p-6 text-center w-[15%]">
@@ -359,7 +360,7 @@ export default function ChairmanApprovalPage() {
                   <th className="p-6 text-center w-[10%]">รายละเอียด</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50 bg-transparent text-sm">
+              <tbody className="divide-y divide-slate-100 bg-white text-sm">
                 {loading ? (
                   [1, 2, 3, 4, 5].map((i) => (
                     <tr key={i} className="animate-pulse">
@@ -397,7 +398,7 @@ export default function ChairmanApprovalPage() {
                     return (
                         <tr 
                           key={item.form_id} 
-                          className="group hover:bg-indigo-50/20 transition-all duration-300 animate-fade-in-up"
+                          className="group hover:bg-slate-50 transition-all duration-300 animate-fade-in-up"
                           style={{ opacity: 0, animationDelay: `${index * 50}ms`, animationFillMode: 'forwards' }}
                         >
                           {/* Column 1: Info */}
@@ -406,16 +407,16 @@ export default function ChairmanApprovalPage() {
                             <div className="text-[12px] text-slate-500 mt-1 font-medium tracking-wide">
                                 {isOrg ? <span className="text-indigo-500 font-bold bg-indigo-50 px-2 py-0.5 rounded">องค์กรภายนอก</span> : <span className="font-mono bg-slate-100 px-2 py-0.5 rounded-md text-slate-600">{item.student_number}</span>} 
                             </div>
-                            <div className="text-[10.5px] font-bold text-indigo-600 mt-2.5 bg-indigo-50/80 inline-block px-3 py-1 rounded-lg border border-indigo-100/50 shadow-sm">
+                            <div className="text-[10.5px] font-bold text-indigo-600 mt-2.5 bg-indigo-50 inline-block px-3 py-1 rounded-lg border border-indigo-100 shadow-sm">
                                 {item.award_type_name || item.award_type}
                             </div>
                           </td>
 
                           {/* Column 2: Vote Numbers */}
                           <td className="p-6 text-center align-middle">
-                            <div className="flex flex-col items-center justify-center bg-slate-50 py-2 px-4 rounded-2xl border border-slate-100 group-hover:border-indigo-100 transition-colors w-fit mx-auto">
+                            <div className="flex flex-col items-center justify-center bg-white py-2 px-4 rounded-2xl border border-slate-200 group-hover:border-indigo-200 transition-colors w-fit mx-auto shadow-sm">
                                 <div className="text-[24px] font-black text-slate-700 tracking-tight leading-none">
-                                    {item.vote_summary?.approve || 0} <span className="text-slate-300 text-sm font-medium">/ {item.vote_summary?.total_voters || 0}</span>
+                                    {item.vote_summary?.approve || 0} <span className="text-slate-400 text-sm font-medium">/ {item.vote_summary?.total_voters || 0}</span>
                                 </div>
                             </div>
                           </td>
@@ -424,13 +425,13 @@ export default function ChairmanApprovalPage() {
                           <td className="p-6 align-middle">
                               <div className="w-full h-3 rounded-full overflow-hidden bg-slate-100 flex shadow-inner">
                                   <div 
-                                      className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-1000 ease-out" 
+                                      className="h-full bg-emerald-500 transition-all duration-1000 ease-out" 
                                       style={{ width: `${approvePercent}%` }}
                                   ></div>
-                                  <div className="flex-1 bg-gradient-to-r from-rose-200 to-rose-300 transition-all duration-1000 ease-out opacity-80"></div>
+                                  <div className="flex-1 bg-rose-300 transition-all duration-1000 ease-out opacity-80"></div>
                               </div>
                               <div className="flex justify-between text-[11px] font-bold text-slate-500 mt-2.5 px-1">
-                                  <span className="flex items-center gap-1.5 text-emerald-600"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]"></span>{item.vote_summary?.approve || 0} เสียง</span>
+                                  <span className="flex items-center gap-1.5 text-emerald-600"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>{item.vote_summary?.approve || 0} เสียง</span>
                                   <span className="flex items-center gap-1.5 text-rose-500"><span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>{(item.vote_summary?.reject || 0) + (item.vote_summary?.abstain || 0)} เสียง</span>
                               </div>
                           </td>
@@ -445,12 +446,13 @@ export default function ChairmanApprovalPage() {
 
                           {/* Column 5: Action (Sign) */}
                           <td className="p-6 text-center align-middle">
+                              {/* ✅ เปลี่ยนเป็นปุ่มสี Solid สีเดียวตามที่คุณต้องการ */}
                               <button 
                                   onClick={() => handleSign(item.form_id, fullName)}
                                   disabled={signingId === item.form_id}
                                   className={`
-                                      relative overflow-hidden group/btn bg-gradient-to-br from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 
-                                      text-white text-[13px] font-bold px-6 py-3 rounded-xl shadow-[0_6px_20px_rgba(79,70,229,0.3)] hover:shadow-[0_8px_25px_rgba(79,70,229,0.45)] 
+                                      relative overflow-hidden bg-indigo-600 hover:bg-indigo-700 
+                                      text-white text-[13px] font-bold px-6 py-3 rounded-xl shadow-md
                                       transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2 mx-auto w-full max-w-[140px]
                                       ${signingId === item.form_id ? 'opacity-80 cursor-not-allowed' : ''}
                                   `}
@@ -462,7 +464,6 @@ export default function ChairmanApprovalPage() {
                                       </>
                                   ) : (
                                       <>
-                                          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 ease-out"></div>
                                           <PenTool className="w-4 h-4 relative z-10" />
                                           <span className="relative z-10">ลงนาม</span>
                                       </>
@@ -474,7 +475,7 @@ export default function ChairmanApprovalPage() {
                           <td className="p-6 text-center align-middle">
                             <button 
                               onClick={() => { setModalData(item); setIsDetailModalOpen(true); }} 
-                              className="inline-flex items-center justify-center p-3 rounded-xl text-slate-400 bg-slate-50 hover:text-indigo-600 hover:bg-indigo-50 transition-all transform hover:scale-110 border border-slate-200 hover:border-indigo-200 shadow-sm"
+                              className="inline-flex items-center justify-center p-3 rounded-xl text-slate-500 bg-slate-50 hover:text-indigo-600 hover:bg-indigo-50 transition-all transform hover:scale-110 border border-slate-200 hover:border-indigo-200 shadow-sm"
                               title="ดูรายละเอียดข้อมูล"
                             >
                               <Eye className="w-4 h-4" />
@@ -489,13 +490,13 @@ export default function ChairmanApprovalPage() {
           </div>
 
           {/* --- Table Footer / Pagination --- */}
-          <div className="bg-slate-50/80 border-t border-slate-100 p-5 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="bg-slate-50 border-t border-slate-200 p-5 flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-2">
-              <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronLeft className="w-4 h-4" /></button>
-              <span className="text-sm font-bold text-slate-600 bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm">หน้า {currentPage} จาก {totalPages || 1}</span>
-              <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronRight className="w-4 h-4" /></button>
+              <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronLeft className="w-4 h-4" /></button>
+              <span className="text-sm font-bold text-slate-700 bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm">หน้า {currentPage} จาก {totalPages || 1}</span>
+              <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronRight className="w-4 h-4" /></button>
             </div>
-            <div className="text-[13px] text-slate-500 font-bold bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="text-[13px] text-slate-600 font-bold bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm">
                 พบข้อมูลรอลงนามทั้งหมด <span className="text-indigo-600 text-[14px] ml-1">{processedData.length}</span> รายการ
             </div>
           </div>

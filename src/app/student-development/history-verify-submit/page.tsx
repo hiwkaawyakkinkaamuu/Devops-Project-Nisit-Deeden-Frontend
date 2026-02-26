@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { api } from "@/lib/axios"; // ✅ กลับมาใช้ Axios ส่วนกลางของโปรเจกต์
+import { api } from "@/lib/axios"; 
 import { Search, ChevronDown, CheckCircle2, History, User, ChevronLeft, ChevronRight } from "lucide-react";
 
 // ==========================================
@@ -13,20 +13,17 @@ const USE_MOCK_DATA = false;
 const ITEMS_PER_PAGE = 8;
 
 export interface LogEntry {
-  log_id: number;
-  form_id: number;
-  changed_by: number;
-  field_name: string;
-  old_value: string;
-  new_value: string;
-  created_at: string;
-  
-  // Custom Fields (Mapped from API)
-  operator_name?: string;
-  target_student_name?: string;
-  target_student_id?: string;
-  action_type?: string;
-  detail_text?: string;
+    log_id: number;
+    form_id: number;
+    changed_by: number;
+    created_at: string;
+    
+    // Custom Fields (Mapped from API)
+    operator_name?: string;
+    target_student_name?: string;
+    target_student_id?: string;
+    action_type?: string;
+    detail_text?: string;
 }
 
 // ==========================================
@@ -53,10 +50,8 @@ const formatTimeTh = (isoDate: string) => {
 
 const ActionBadge = ({ action }: { action: string }) => {
     const config: Record<string, { bg: string, text: string, border: string, label: string, dot: string }> = {
-        update_category: { bg: "bg-blue-50", text: "text-blue-600", border: "border-blue-200", label: "แก้ไขข้อมูล", dot: "bg-blue-500" },
-        verify_student: { bg: "bg-emerald-50", text: "text-emerald-600", border: "border-emerald-200", label: "ตรวจสอบแล้ว", dot: "bg-emerald-500" },
-        submit_committee: { bg: "bg-purple-50", text: "text-purple-600", border: "border-purple-200", label: "เปลี่ยนสถานะ", dot: "bg-purple-500" },
-        reject_student: { bg: "bg-rose-50", text: "text-rose-600", border: "border-rose-200", label: "ตีกลับ/ปฏิเสธ", dot: "bg-rose-500" },
+        approve: { bg: "bg-emerald-50", text: "text-emerald-600", border: "border-emerald-200", label: "ตรวจสอบ/เห็นชอบ", dot: "bg-emerald-500" },
+        reject: { bg: "bg-rose-50", text: "text-rose-600", border: "border-rose-200", label: "ตีกลับ/ปฏิเสธ", dot: "bg-rose-500" },
         other: { bg: "bg-gray-50", text: "text-gray-600", border: "border-gray-200", label: "อื่นๆ", dot: "bg-gray-400" }
     };
 
@@ -78,18 +73,31 @@ export default function SDDHistoryPage() {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [loading, setLoading] = useState(true);
     
-    // Filters
+    // Master Data สำหรับจับคู่ชื่อ User
+    const [usersList, setUsersList] = useState<any[]>([]);
+
+    // Filters (Server-Side)
     const [searchTerm, setSearchTerm] = useState("");
+    const [debouncedSearch, setDebouncedSearch] = useState("");
     const [filterAction, setFilterAction] = useState("all");
     const [sortBy, setSortBy] = useState("date_desc");
 
-    // Pagination
+    // Pagination (Server-Side)
     const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
 
-    // Reset Page on Filter Change
-    useEffect(() => { setCurrentPage(1); }, [searchTerm, filterAction, sortBy]);
+    // Debounce ค้นหา ป้องกันการยิง API รัวๆ เวลาพิมพ์
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
 
-    // Fetch Data
+    // รีเซ็ตกลับไปหน้าแรกเสมอเมื่อมีการเปลี่ยนตัวกรอง
+    useEffect(() => { 
+        setCurrentPage(1); 
+    }, [debouncedSearch, filterAction, sortBy]);
+
+    // Fetch Data หลัก
     useEffect(() => {
         let isMounted = true;
 
@@ -98,80 +106,70 @@ export default function SDDHistoryPage() {
             try {
                 if (USE_MOCK_DATA) return;
 
-                // 1. ใช้ api.get() ของ Axios (ระบบจะแนบ Token ให้อัตโนมัติจาก Interceptor)
-                // ใส่ .catch เอาไว้กันหน้าพังกรณีที่ API บางตัว Error
-                const [userRes, statusRes, formRes] = await Promise.all([
-                    api.get("/users").catch(() => ({ data: { data: [] } })),
-                    api.get("/form-statuses").catch(() => ({ data: { data: [] } })),
-                    api.get("/awards/search?limit=1000").catch(() => ({ data: { data: [] } }))
-                ]);
-
-                // 1. ดึงข้อมูลออกมาก่อน
-                const fetchedUsers = userRes.data?.data || userRes.data;
-                const fetchedStatus = statusRes.data?.data || statusRes.data;
-                const fetchedForms = formRes.data?.data || formRes.data;
-
-                // 2. เช็คว่าเป็น Array ไหม ถ้าเป็นให้ใช้ ถ้าไม่เป็นให้ใช้ค่าว่าง []
-                const usersList = Array.isArray(fetchedUsers) ? fetchedUsers : [];
-                const statusList = Array.isArray(fetchedStatus) ? fetchedStatus : [];
-                const formsList = Array.isArray(fetchedForms) ? fetchedForms : [];
-
-                // 2. ดึง Log ของแต่ละฟอร์ม (ตอนนี้ formsList เป็น Array ชัวร์ๆ แล้ว จะไม่พังแน่นอน)
-                const logPromises = formsList.map((form: any) => 
-                api.get(`/awards/${form.form_id}/logs`)
-                    .then(res => res.data?.data || res.data || [])
-                    .catch(() => []) 
-            );;
-
-                const logsArrays = await Promise.all(logPromises);
-                
-                // รวม Array ที่ได้มาเป็นก้อนเดียว
-                const rawLogs = logsArrays
-                    .flat()
-                    .filter(log => log && typeof log === 'object');
-
-                // 3. Mapping ข้อมูล (จับคู่ ID ของ User กับชื่อ)
-                const mappedLogs = rawLogs.map((log: any) => {
-                    const operator = usersList.find((u: any) => u.user_id === log.changed_by);
-                    const form = formsList.find((f: any) => f.form_id === log.form_id);
-                    
-                    let actionType = "other";
-                    let detailText = `เปลี่ยน ${log.field_name} เป็น ${log.new_value}`;
-
-                    // วิเคราะห์ Action จาก Field Name
-                    if (log.field_name === "form_status" || log.field_name === "form_status_id") {
-                        actionType = "submit_committee";
-                        const oldStatus = statusList.find((s: any) => String(s.form_status_id) === String(log.old_value))?.form_status_name || log.old_value;
-                        const newStatus = statusList.find((s: any) => String(s.form_status_id) === String(log.new_value))?.form_status_name || log.new_value;
-                        detailText = `เปลี่ยนสถานะเป็น: ${newStatus ? newStatus.replace(/_/g, ' ') : log.new_value}`;
-                        
-                        // ถ้ารหัสสถานะตรงกับการตีกลับ
-                        if (['3', '5', '7', '9', '11'].includes(String(log.new_value))) {
-                            actionType = "reject_student";
-                        } else if (String(log.new_value) === '8') {
-                            actionType = "verify_student";
-                        }
-                    } else if (log.field_name === "award_type" || log.field_name === "award_type_id") {
-                        actionType = "update_category";
-                        detailText = `แก้ไขประเภทรางวัล: ${log.old_value} -> ${log.new_value}`;
+                // โหลด Master Data ของ User ก่อน (ถ้ายังไม่มี) เพื่อเอาไว้โชว์ชื่อ
+                let currentUsers = usersList;
+                if (currentUsers.length === 0) {
+                    const userRes = await api.get("/users").catch(() => null);
+                    if (userRes && Array.isArray(userRes.data?.data)) {
+                        currentUsers = userRes.data.data;
+                        setUsersList(currentUsers);
                     }
+                }
 
-                    // เอาชื่อ User มาใส่ ถ้าไม่เจอจริงๆ ค่อยโชว์เป็น ID
+                // เตรียมพารามิเตอร์สำหรับส่งไปให้ Backend
+                const params: Record<string, any> = {
+                    page: currentPage,
+                    limit: ITEMS_PER_PAGE,
+                    sortBy: "date",
+                    sortOrder: sortBy === "date_desc" ? "desc" : "asc"
+                };
+
+                if (debouncedSearch) params.keyword = debouncedSearch;
+                if (filterAction !== "all") params.operation = filterAction; // 'approve' หรือ 'reject'
+
+                // เรียกใช้ API History ตัวใหม่
+                const res = await api.get("/awards/my/approval-logs", { params });
+                const rawLogs = res.data?.data || [];
+                const pagination = res.data?.pagination;
+
+                // 3. Map ข้อมูลให้เข้ากับรูปแบบของ UI
+                const mappedLogs = rawLogs.map((log: any) => {
+                    // หาชื่อผู้ดำเนินการ
+                    const operator = currentUsers.find((u: any) => String(u.user_id) === String(log.reviewer_user_id));
                     const operatorDisplayName = operator 
-                        ? `${operator.firstname} ${operator.lastname}` 
-                        : `รหัสผู้ดำเนินการ: ${log.changed_by}`;
+                        ? `${operator.prefix || ""}${operator.firstname || ""} ${operator.lastname || ""}`.trim()
+                        : `รหัสผู้ดำเนินการ: ${log.reviewer_user_id || "?"}`;
+
+                    // เช็คว่าฟอร์มนี้เป็นของนิสิตหรือองค์กร
+                    const isOrg = log.student_lastname === "-" || !log.student_lastname;
+                    const targetName = isOrg 
+                        ? (log.student_firstname || "องค์กรภายนอก")
+                        : `${log.student_firstname || ""} ${log.student_lastname || ""}`.trim();
+
+                    // เตรียมข้อความรายละเอียด
+                    const actionType = log.operation === "approve" || log.operation === "reject" ? log.operation : "other";
+                    let detailText = log.operation === "approve" ? "ตรวจสอบและเห็นชอบข้อมูลแบบฟอร์ม" : 
+                                     log.operation === "reject"  ? "ตีกลับ/ไม่เห็นชอบแบบฟอร์ม" : "อัปเดตข้อมูล";
 
                     return {
-                        ...log,
+                        log_id: log.approval_log_id || Math.random(),
+                        form_id: log.form_id,
+                        changed_by: log.reviewer_user_id,
+                        created_at: log.operation_date,
                         operator_name: operatorDisplayName,
-                        target_student_name: form ? `${form.student_firstname} ${form.student_lastname}` : `Form #${log.form_id}`,
-                        target_student_id: form ? form.student_number : "-",
+                        target_student_name: targetName || `Form #${log.form_id}`,
+                        target_student_id: isOrg ? "-" : (log.student_number || "-"),
                         action_type: actionType,
                         detail_text: detailText
                     };
                 });
 
-                if (isMounted) setLogs(mappedLogs);
+                if (isMounted) {
+                    setLogs(mappedLogs);
+                    if (pagination) {
+                        setTotalPages(pagination.total_pages || 1);
+                    }
+                }
 
             } catch (error) {
                 console.error("Failed to fetch logs:", error);
@@ -179,35 +177,10 @@ export default function SDDHistoryPage() {
                 if (isMounted) setLoading(false);
             }
         };
+
         fetchData();
         return () => { isMounted = false; };
-    }, []);
-
-    // Logic: Filter & Sort
-    const processedLogs = useMemo(() => {
-        let result = logs.filter(log => {
-            const searchLower = searchTerm.toLowerCase();
-            const matchSearch = (log.operator_name || "").toLowerCase().includes(searchLower) || 
-                                (log.target_student_name || "").toLowerCase().includes(searchLower) ||
-                                (log.target_student_id || "").includes(searchLower) ||
-                                (String(log.form_id)).includes(searchLower);
-            
-            const matchAction = filterAction === "all" ? true : log.action_type === filterAction;
-            return matchSearch && matchAction;
-        });
-
-        // Sort
-        result.sort((a, b) => {
-            if (sortBy === 'date_desc') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-            if (sortBy === 'date_asc') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-            return 0;
-        });
-
-        return result;
-    }, [logs, searchTerm, filterAction, sortBy]);
-
-    const totalPages = Math.ceil(processedLogs.length / ITEMS_PER_PAGE);
-    const paginatedLogs = processedLogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    }, [currentPage, debouncedSearch, filterAction, sortBy]);
 
     // ==========================================
     // Render UI
@@ -236,7 +209,7 @@ export default function SDDHistoryPage() {
                            ประวัติการดำเนินการ
                         </h1>
                         <p className="text-slate-500 mt-1 text-sm font-medium">
-                           ติดตามสถานะการแก้ไข ตรวจสอบ และการส่งต่อข้อมูลในระบบทั้งหมด
+                           ติดตามสถานะการพิจารณา ตรวจสอบ และการส่งต่อข้อมูลในระบบทั้งหมด
                         </p>
                     </div>
                 </div>
@@ -252,7 +225,7 @@ export default function SDDHistoryPage() {
                                 <Search className="w-4 h-4 absolute left-4 top-3.5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
                                 <input 
                                     type="text" 
-                                    placeholder="ค้นหาชื่อเจ้าหน้าที่, นิสิต, หรือ ID..." 
+                                    placeholder="ค้นหาชื่อนิสิต หรือ รหัสนิสิต..." 
                                     className="w-full bg-white border border-slate-200/80 rounded-2xl pl-11 pr-4 py-3 text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 outline-none transition-all shadow-sm"
                                     value={searchTerm}
                                     onChange={e => setSearchTerm(e.target.value)}
@@ -267,10 +240,8 @@ export default function SDDHistoryPage() {
                                     onChange={e => setFilterAction(e.target.value)}
                                 >
                                     <option value="all">ทุกกิจกรรม</option>
-                                    <option value="verify_student">การตรวจสอบ (Verify)</option>
-                                    <option value="submit_committee">เปลี่ยนสถานะ</option>
-                                    <option value="reject_student">ตีกลับ/ปฏิเสธ</option>
-                                    <option value="update_category">แก้ไขข้อมูล</option>
+                                    <option value="approve">การตรวจสอบและเห็นชอบ (Approve)</option>
+                                    <option value="reject">การตีกลับ/ปฏิเสธ (Reject)</option>
                                 </select>
                                 <ChevronDown className="w-4 h-4 absolute right-4 top-3.5 text-slate-400 pointer-events-none" />
                             </div>
@@ -313,7 +284,7 @@ export default function SDDHistoryPage() {
                                             <td className="p-6"><div className="h-4 bg-slate-200 rounded-md w-48"></div></td>
                                         </tr>
                                     ))
-                                ) : paginatedLogs.length === 0 ? (
+                                ) : logs.length === 0 ? (
                                     <tr>
                                         <td colSpan={5} className="p-20 text-center text-slate-400 flex flex-col items-center">
                                             <span className="bg-slate-50 p-5 rounded-full mb-4 shadow-sm border border-slate-100">
@@ -324,7 +295,7 @@ export default function SDDHistoryPage() {
                                     </tr>
                                 ) : (
                                     <AnimatePresence>
-                                        {paginatedLogs.map((log, index) => (
+                                        {logs.map((log, index) => (
                                             <motion.tr 
                                                 key={`${log.log_id}-${index}`}
                                                 initial={{ opacity: 0, y: 10 }}

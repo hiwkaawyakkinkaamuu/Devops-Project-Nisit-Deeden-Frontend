@@ -1,15 +1,12 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import axios from "axios";
-// ✅ นำเข้า Icon เพิ่มเติมเพื่อใช้ในกล่องแสดงผลการปฏิเสธ
 import { AlertCircle, Clock } from "lucide-react";
+import { api } from "@/lib/axios";
 
 // ==========================================
-// 1. Interfaces (ปรับให้ตรงกับ Backend)
+// 1. Interfaces
 // ==========================================
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 interface FileResponse {
   file_dir_id: number;
@@ -47,7 +44,7 @@ export interface Nomination {
   org_location: string;
   org_phone_number: string;
   form_detail: string | any;
-  reject_reason: string;
+  reject_reason?: string; // ใช้เป็น Optional เผื่อไม่มี
   files?: FileResponse[];
 }
 
@@ -70,15 +67,17 @@ interface ModalProps {
   departments: MasterDepartment[];
 }
 
-// ✅ เพิ่ม Interface สำหรับ Approval Log
 interface ApprovalLog {
-  approval_log_id: number;
+  approval_log_id?: number;
+  id?: number;
   form_id: number;
-  reviewer_user_id: number;
-  role_name: string;
-  operation: string;
+  reviewer_user_id?: number;
+  role_name?: string;
+  operation?: string; 
+  action?: string;
   reject_reason?: string;
-  operation_date: string;
+  operation_date?: string;
+  created_at?: string;
 }
 
 // ==========================================
@@ -92,7 +91,6 @@ const formatDateDisplay = (isoDate: string) => {
     return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
-// ✅ เพิ่ม Helper สำหรับแสดงวันที่พร้อมเวลาใน Log
 const formatDateTimeDisplay = (isoDate: string) => {
     if (!isoDate) return "-";
     const date = new Date(isoDate);
@@ -166,8 +164,6 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
   const [deptName, setDepartmentName] = useState("-");
   const [campusName, setCampusName] = useState("-");
   const [isVisible, setIsVisible] = useState(false);
-  
-  // ✅ State สำหรับเก็บประวัติการพิจารณา
   const [approvalLogs, setApprovalLogs] = useState<ApprovalLog[]>([]);
 
   const parsedDetail = useMemo(() => {
@@ -184,42 +180,49 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
   useEffect(() => {
     if (isOpen && data) {
         setIsVisible(true);
-        const token = localStorage.getItem("token");
 
         // Fetch Faculty
-        const fetchFaculty = data.faculty_id 
-            ? axios.get(`${API_BASE_URL}/faculty`, { headers: { Authorization: `Bearer ${token}` } })
+        if (data.faculty_id) {
+            api.get(`/faculty`)
                 .then(res => {
                     const list = res.data?.data || res.data || [];
-                    const found = list.find((item: any) => String(item.facultyID || item.faculty_id || item.id) === String(data.faculty_id));
+                    const found = Array.isArray(list) ? list.find((item: any) => String(item.facultyID || item.faculty_id || item.id) === String(data.faculty_id)) : null;
                     setFacultyName(found ? (found.facultyName || found.faculty_name || found.name) : `(ID: ${data.faculty_id})`);
-                }).catch(() => setFacultyName(`(ID: ${data.faculty_id})`))
-            : setFacultyName(parsedDetail?.faculty || "-");
+                }).catch(() => setFacultyName(`(ID: ${data.faculty_id})`));
+        } else {
+            setFacultyName(parsedDetail?.faculty || "-");
+        }
 
         // Fetch Department
-        const fetchDept = data.department_id 
-            ? axios.get(`${API_BASE_URL}/department`, { headers: { Authorization: `Bearer ${token}` } })
+        if (data.department_id) {
+            api.get(`/department`)
                 .then(res => {
                     const list = res.data?.data || res.data || [];
-                    const found = list.find((item: any) => String(item.departmentID || item.department_id || item.id) === String(data.department_id));
+                    const found = Array.isArray(list) ? list.find((item: any) => String(item.departmentID || item.department_id || item.id) === String(data.department_id)) : null;
                     setDepartmentName(found ? (found.departmentName || found.department_name || found.name) : `(ID: ${data.department_id})`);
-                }).catch(() => setDepartmentName(`(ID: ${data.department_id})`))
-            : setDepartmentName(parsedDetail?.department || "-");
+                }).catch(() => setDepartmentName(`(ID: ${data.department_id})`));
+        } else {
+            setDepartmentName(parsedDetail?.department || "-");
+        }
 
         // Fetch Campus
-        const fetchCampus = data.campus_id 
-            ? axios.get(`${API_BASE_URL}/campus`, { headers: { Authorization: `Bearer ${token}` } })
+        if (data.campus_id) {
+            api.get(`/campus`)
                 .then(res => {
                     const list = res.data?.data || res.data || [];
-                    const found = list.find((item: any) => String(item.campusID || item.campus_id || item.id) === String(data.campus_id));
+                    const found = Array.isArray(list) ? list.find((item: any) => String(item.campusID || item.campus_id || item.id) === String(data.campus_id)) : null;
                     setCampusName(found ? (found.campusName || found.campus_name || found.name) : `(ID: ${data.campus_id})`);
-                }).catch(() => setCampusName(`(ID: ${data.campus_id})`))
-            : setCampusName(parsedDetail?.campus || "-");
+                }).catch(() => setCampusName(`(ID: ${data.campus_id})`));
+        } else {
+            setCampusName(parsedDetail?.campus || "-");
+        }
 
-        // ✅ Fetch Approval Logs สำหรับฟอร์มนี้โดยเฉพาะ
-        axios.get(`${API_BASE_URL}/awards/approval-logs/${data.form_id}`, { headers: { Authorization: `Bearer ${token}` } })
+        // ✅ แก้ไข: Fetch Approval Logs ป้องกัน Array Filter พัง
+        api.get(`/awards/approval-logs/${data.form_id}`)
             .then(res => {
-                setApprovalLogs(res.data?.data || []);
+                const logs = res.data?.data || res.data;
+                // เช็คให้ชัวร์ว่าเป็น Array เท่านั้น ถ้าเป็น Object (เช่น 404 response) ให้เป็น []
+                setApprovalLogs(Array.isArray(logs) ? logs : []);
             }).catch(err => {
                 console.error("Failed to fetch approval logs:", err);
                 setApprovalLogs([]);
@@ -260,10 +263,29 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
 
   const reasonToDisplay = parsedDetail?.other_details || parsedDetail?.behavior_desc || (typeof data.form_detail === 'string' && !data.form_detail.startsWith('{') ? data.form_detail : "");
 
-  // ✅ กรองเฉพาะประวัติการ "ปฏิเสธ" (เรียงล่าสุดขึ้นก่อน)
-  const rejectedLogs = approvalLogs
-    .filter(log => log.operation === "reject")
-    .sort((a, b) => new Date(b.operation_date).getTime() - new Date(a.operation_date).getTime());
+  // ✅ แก้ไข: ป้องกัน Filter แตก และสร้าง Fallback ดึงข้อมูลจากการตีกลับของฟอร์มหลัก
+  const safeLogs = Array.isArray(approvalLogs) ? approvalLogs : [];
+  
+  // 1. ดึงจากประวัติ Logs (ถ้ามี)
+  let rejectedLogs = safeLogs
+    .filter(log => 
+        (log.operation && String(log.operation).toLowerCase().includes("reject")) ||
+        (log.action && String(log.action).toLowerCase().includes("reject")) ||
+        (log.reject_reason && String(log.reject_reason).trim() !== "")
+    )
+    .sort((a, b) => new Date(b.operation_date || b.created_at || 0).getTime() - new Date(a.operation_date || a.created_at || 0).getTime());
+
+  // 2. ถ้า Logs API Error(404) แต่ตัวฟอร์มหลักบอกว่าโดนปฏิเสธ ให้ใช้ข้อมูลจากฟอร์มหลักแสดงผล
+  if (rejectedLogs.length === 0 && data.reject_reason && data.reject_reason.trim() !== "") {
+      rejectedLogs = [{
+          approval_log_id: 999999, // Dummy ID
+          form_id: data.form_id,
+          role_name: "คณะกรรมการพิจารณา",
+          operation: "reject",
+          operation_date: data.latest_update || data.created_at,
+          reject_reason: data.reject_reason
+      }];
+  }
 
   return (
     <div className="absolute inset-0 z-[50] flex items-center justify-center p-4 md:p-8 overflow-hidden">
@@ -303,19 +325,19 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
         {/* Scrollable Body */}
         <div className="overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar">
 
-            {/* ✅ กล่องแสดงเหตุผลการปฏิเสธ (จะแสดงก็ต่อเมื่อมีประวัติ reject) */}
+            {/* ✅ กล่องแสดงเหตุผลการปฏิเสธ */}
             {rejectedLogs.length > 0 && (
                 <div className="space-y-4">
-                    {rejectedLogs.map((log) => (
-                        <div key={log.approval_log_id} className="bg-rose-50 border border-rose-200 p-6 md:p-8 rounded-[24px] shadow-sm relative overflow-hidden">
+                    {rejectedLogs.map((log, index) => (
+                        <div key={log.approval_log_id || index} className="bg-rose-50 border border-rose-200 p-6 md:p-8 rounded-[24px] shadow-sm relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-rose-400 to-red-600"></div>
                             <h3 className="text-lg md:text-xl font-bold text-rose-800 mb-2 flex items-center gap-3">
                                 <AlertCircle className="w-6 h-6 text-rose-600" />
-                                ฟอร์มถูกส่งกลับแก้ไขโดย: {log.role_name}
+                                ฟอร์มถูกตีกลับให้แก้ไขโดย: {log.role_name || "คณะกรรมการ"}
                             </h3>
                             <p className="text-sm font-bold text-rose-500 mb-5 flex items-center gap-2">
                                 <Clock className="w-4 h-4" />
-                                เมื่อวันที่: {formatDateTimeDisplay(log.operation_date)}
+                                เมื่อวันที่: {formatDateTimeDisplay(log.operation_date || log.created_at || data.latest_update)}
                             </p>
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-rose-700">ข้อเสนอแนะ / เหตุผลที่ปฏิเสธ:</label>

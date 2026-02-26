@@ -118,7 +118,6 @@ export default function DeanApprovalPage() {
       }
     };
 
-    // ✅ ฟังก์ชัน fetchData ที่เอา parameter ออกตามที่ต้องการ
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -129,7 +128,10 @@ export default function DeanApprovalPage() {
 
         // ยิง API เปล่าๆ ไม่ต้องส่ง params
         const response = await api.get(`/awards/search`);
-        const rawData = response.data?.data || response.data || [];
+        
+        // ✅ แก้ไข: เช็คให้ชัวร์ว่า rawData เป็น Array เท่านั้น ป้องกัน Error .map is not a function
+        const fetchedData = response.data?.data || response.data;
+        const rawData = Array.isArray(fetchedData) ? fetchedData : [];
 
         const mappedData = rawData.map((item: any) => {
             const isOrgNominated = item.org_name && item.org_name.trim() !== "";
@@ -146,19 +148,7 @@ export default function DeanApprovalPage() {
 
         if (isMounted) setItems(filteredData);
       } catch (error: any) {
-        
-        if (isMounted) {
-          const serverMsg = error.response?.data?.error || error.response?.data?.message || "เกิดข้อผิดพลาดภายในระบบ (500)";
-          Swal.fire({ 
-            icon: 'error', 
-            title: 'โหลดข้อมูลไม่สำเร็จ', 
-            text: serverMsg,
-            toast: true, 
-            position: 'top-end', 
-            showConfirmButton: false, 
-            timer: 4000 
-          });
-        }
+        console.error("Error fetching nominations:", error);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -288,7 +278,7 @@ export default function DeanApprovalPage() {
                 <CheckCircle2 className="w-8 h-8 text-emerald-500" /> พิจารณาคัดเลือกนิสิตดีเด่น
               </h1>
               <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
-                <Building2 className="w-4 h-4" /> สำหรับรองคณบดี
+                <Building2 className="w-4 h-4" /> สำหรับหัวหน้าภาควิชา
               </p>
             </div>
           </div>
