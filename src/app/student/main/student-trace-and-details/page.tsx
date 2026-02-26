@@ -7,7 +7,8 @@ import {
   CheckCircle2, XCircle, Clock, Award, FileText, 
   History, UserCheck, ShieldCheck, Landmark, GraduationCap,
   ChevronDown, ChevronUp, ArrowRight, ArrowLeft,
-  User, Building2, Search, CalendarDays, Phone, Mail, MapPin, Map
+  User, Building2, Search, CalendarDays, Phone, Mail, MapPin, Map,
+  Filter // ✅ นำเข้า Filter Icon เพิ่ม
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -44,6 +45,10 @@ export default function StudentTraceAndDetails() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [studentProfile, setStudentProfile] = useState<any>(null);
   
+  // 🌟 เพิ่ม State สำหรับจัดการ Filter ปีการศึกษา
+  const [academicYears, setAcademicYears] = useState<any[]>([]);
+  const [selectedYear, setSelectedYear] = useState<string>("all");
+  
   // เก็บ Master Data
   const [metaData, setMetaData] = useState<any>({
       faculties: [],
@@ -59,14 +64,15 @@ export default function StudentTraceAndDetails() {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        // Fetch ข้อมูลหลัก, Master Data และข้อมูล Profile นิสิต พร้อมกัน
-        const [profileRes, statusRes, subRes, facRes, deptRes, campusRes] = await Promise.all([
+        // ✅ Fetch ข้อมูลหลัก รวมถึงดึงปีการศึกษาด้วย (ใส่ catch กัน error 403/404)
+        const [profileRes, statusRes, subRes, facRes, deptRes, campusRes, yearsRes] = await Promise.all([
           axios.get(`${API_BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/form-statuses/`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`${API_BASE_URL}/form-statuses/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
           axios.get(`${API_BASE_URL}/awards/my/submissions`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/faculty/`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/department/`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/campus/`, { headers: { Authorization: `Bearer ${token}` } })
+          axios.get(`${API_BASE_URL}/faculty/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
+          axios.get(`${API_BASE_URL}/department/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
+          axios.get(`${API_BASE_URL}/campus/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
+          axios.get(`${API_BASE_URL}/academic-years/all`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } }))
         ]);
 
         const profile = profileRes.data?.user || profileRes.data?.data || profileRes.data;
@@ -75,6 +81,9 @@ export default function StudentTraceAndDetails() {
         const statuses = statusRes.data?.data || [];
         const rawSubmissions = subRes.data?.data || [];
         
+        // เซ็ตข้อมูลปีการศึกษา
+        setAcademicYears(yearsRes.data?.data || []);
+        
         setMetaData({
             faculties: facRes.data?.data || [],
             departments: deptRes.data?.data || [],
@@ -82,19 +91,24 @@ export default function StudentTraceAndDetails() {
             statuses: statuses
         });
 
-        // ดึง Logs ย่อยของแต่ละฟอร์ม
+        // ✅ แก้ไข: ดึง Logs โดยเรียกจาก Endpoint /awards/details/:formId แทนการเรียก /logs ที่ทำให้เกิด 404
         const detailed = await Promise.all(rawSubmissions.map(async (item: any) => {
             try {
-                const logRes = await axios.get(`${API_BASE_URL}/awards/${item.form_id}/logs`, { 
+                const detailRes = await axios.get(`${API_BASE_URL}/awards/details/${item.form_id}`, { 
                     headers: { Authorization: `Bearer ${token}` } 
                 });
+                
+                // คาดหวังว่า Backend จะส่ง logs มาใน field 'logs'
+                const itemLogs = detailRes.data?.data?.logs || detailRes.data?.logs || [];
+
                 return {
                     ...item,
-                    logs: logRes.data?.data || [],
+                    ...detailRes.data?.data, // เผื่อมีข้อมูล detail อื่นๆ คืนมาด้วย
+                    logs: itemLogs,
                     status_detail: statuses.find((s: any) => s.form_status_id === item.form_status)
                 };
             } catch (e) { 
-                console.error("Error fetching logs for form", item.form_id, e);
+                console.error("Error fetching details for form", item.form_id, e);
                 return { ...item, logs: [] }; 
             }
         }));
@@ -109,6 +123,11 @@ export default function StudentTraceAndDetails() {
     fetchData();
   }, []);
 
+  // 🌟 ฟังก์ชันกรองข้อมูลตามปีการศึกษาที่เลือก
+  const filteredSubmissions = selectedYear === "all" 
+    ? submissions 
+    : submissions.filter(item => String(item.academic_year) === selectedYear);
+
   return (
     <div className="min-h-screen bg-slate-50 pb-40 font-sans selection:bg-blue-100">
       
@@ -121,11 +140,9 @@ export default function StudentTraceAndDetails() {
                         <ArrowLeft size={20} />
                     </button>
                 ) : (
-                    (
                     <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200 shrink-0">
                         <User size={20} />
                     </div>
-                    )
                 )}
                 <div className="overflow-hidden">
                     <h1 className="text-xl font-black text-slate-800 tracking-tight truncate">
@@ -156,25 +173,43 @@ export default function StudentTraceAndDetails() {
                     <SubmissionDetailView item={selectedItem} metaData={metaData} />
                 </motion.div>
             ) : (
-                <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-12">
+                <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
                     
-                    <div className="space-y-6">
+                    {/* 🌟 เพิ่มส่วนหัวที่มี Filter ปีการศึกษา */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-1.5 h-6 bg-indigo-600 rounded-full"></div>
                             <h3 className="text-2xl font-black text-slate-800 tracking-tight">ประวัติการยื่นเสนอผลงาน</h3>
                         </div>
+                        
+                        <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm">
+                            <Filter size={16} className="text-slate-400" />
+                            <span className="text-sm font-bold text-slate-600 whitespace-nowrap">ปีการศึกษา:</span>
+                            <select 
+                                value={selectedYear} 
+                                onChange={(e) => setSelectedYear(e.target.value)}
+                                className="bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-1.5 outline-none cursor-pointer"
+                            >
+                                <option value="all">ทั้งหมด</option>
+                                {/* วนลูปแสดงปีการศึกษาที่ดึงมาจาก API */}
+                                {academicYears.map((yearObj: any, idx: number) => {
+                                    const y = typeof yearObj === 'object' ? (yearObj.year || yearObj.academic_year) : yearObj;
+                                    return <option key={idx} value={String(y)}>{y}</option>
+                                })}
+                            </select>
+                        </div>
+                    </div>
 
-                        {submissions.length === 0 ? (
+                    <div className="space-y-6">
+                        {filteredSubmissions.length === 0 ? (
                              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300">
                                  <FileText className="mx-auto text-slate-300 mb-4" size={48} />
-                                 <p className="text-slate-500 font-medium">คุณยังไม่มีประวัติการยื่นคำร้อง</p>
-                                 <Link href="/student/main/student-nomination-form" className="inline-block mt-4 text-indigo-600 font-bold hover:underline">
-                                     คลิกที่นี่เพื่อเริ่มต้นยื่นเสนอชื่อ
-                                 </Link>
+                                 <p className="text-slate-500 font-medium">ไม่พบรายการคำร้องในปีการศึกษาที่เลือก</p>
                              </div>
                         ) : (
                             <div className="grid grid-cols-1 gap-6">
-                                {submissions.map((item, idx) => (
+                                {/* ✅ เปลี่ยนไปใช้ filteredSubmissions แทน submissions ธรรมดา */}
+                                {filteredSubmissions.map((item, idx) => (
                                     <DetailedTraceCard key={item.form_id} item={item} index={idx} metaData={metaData} onSelect={() => setSelectedItem(item)} />
                                 ))}
                             </div>
@@ -192,12 +227,10 @@ export default function StudentTraceAndDetails() {
 // 3. Components สำหรับแสดงผล
 // ==========================================
 
-// --- 3.1 Card ในหน้า List ---
 function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
   const isRejected = [3, 5, 7, 9, 11, 13, 15].includes(item.form_status);
   const isAccepted = item.form_status === 14;
   
-  // ✅ แก้ไข: อัปเดตเงื่อนไขแสดงสถานะฟอร์มใหม่ (ID 1)
   let statusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name || "ไม่ทราบสถานะ";
   if (item.form_status === 1) {
       statusName = "รอหัวหน้าภาควิชาพิจารณา";
@@ -271,7 +304,6 @@ function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
   );
 }
 
-// --- 3.2 View สำหรับหน้า Detail เต็มรูปแบบ ---
 function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) {
   const [showLogs, setShowLogs] = useState(false);
   
@@ -292,7 +324,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                   : { other_details: item.form_detail };
   } catch(e) { detailObj = { other_details: item.form_detail }; }
 
-  // ✅ แก้ไข: อัปเดตเงื่อนไขแสดงสถานะฟอร์มใหม่ (ID 1)
   let statusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name?.replace(/_/g, ' ') || "ไม่ทราบสถานะ";
   if (item.form_status === 1) {
       statusName = "รอหัวหน้าภาควิชาพิจารณา";
@@ -306,7 +337,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
   const showDept = detailObj.department || metaData.departments.find((d: any) => d.department_id === item.department_id)?.department_name || "ไม่ระบุ";
   const showCampus = detailObj.campus || metaData.campuses.find((c: any) => c.campusId === item.campusId)?.campusName || "ไม่ระบุ";
 
-  // ✅ Helper Functions สำหรับแปลง Logs ให้เป็นภาษาที่มนุษย์เข้าใจง่าย
   const translateField = (field: string) => {
     const dictionary: Record<string, string> = {
         form_status: "สถานะ",
@@ -340,7 +370,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
 
   return (
     <div className="space-y-8 animate-fade-in-up">
-        
         {/* SECTION 1: TIMELINE & STATUS */}
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-200/60 p-8 md:p-10">
             <div className="flex flex-col lg:flex-row justify-between items-start gap-8 mb-12 border-b border-slate-100 pb-8">
@@ -374,10 +403,8 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                 </div>
             </div>
 
-            {/* Progress Bar Timeline (อัปเดตแอนิเมชันให้รู้ว่าเรื่องถึงไหนแล้ว) */}
+            {/* Progress Bar Timeline */}
             <div className="relative mb-16 mt-8 hidden md:block px-2">
-                
-                {/* กลุ่มของเส้นเชื่อมระหว่างแต่ละโหนด */}
                 <div className="absolute top-[26px] left-[28px] right-[28px] h-[6px] flex items-center z-0">
                     {Array.from({ length: 7 }).map((_, i) => {
                         const stepTarget = i + 2; 
@@ -408,7 +435,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                     })}
                 </div>
 
-                {/* กลุ่มของโหนดสถานะ (ไอคอน) */}
                 <div className="relative z-10 flex justify-between">
                     {STEP_LOGIC.map((step, i) => {
                         const stepNum = i + 1;
@@ -460,7 +486,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                                     <div key={i} className="flex gap-4 items-start text-sm bg-white p-4 rounded-xl shadow-sm border border-slate-100">
                                         <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 shrink-0"><UserCheck size={18} /></div>
                                         <div>
-                                            {/* ✅ แก้ไข: แปลง Field และ Value ให้เป็นคำที่มนุษย์เข้าใจ */}
                                             <p className="font-bold text-slate-800">
                                                 อัปเดต {translateField(log.field_name)} เป็น <span className="text-indigo-600">{formatValue(log.field_name, log.new_value)}</span>
                                             </p>

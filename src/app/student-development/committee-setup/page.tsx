@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { api } from "@/lib/axios"; // ✅ เปลี่ยนมาใช้ api จาก axios เพื่อจัดการ token อัตโนมัติ
+import { api } from "@/lib/axios"; 
 import Swal from "sweetalert2";
 
 // ==========================================
-// 0. Configuration & Service Layer
+// 0. Configuration & Types
 // ==========================================
 
 type CommitteeRole = "none" | "committee" | "chairman";
@@ -22,66 +22,8 @@ interface Staff {
   img_url?: string;
 }
 
-interface MasterOption {
-  id: number;
-  name: string;
-}
-
-// --- Service Object ---
-const staffService = {
-  getStaffList: async (): Promise<Staff[]> => {
-    try {
-      // ✅ เรียก API ผู้ใช้ทั้งหมด
-      const response = await api.get("/users");
-      const users = response.data || [];
-      
-      // ✅ กรองเอานิสิต (1) และองค์กร (9) ออก เหลือแต่บุคลากร
-      const staffs = users.filter((u: any) => u.role_id !== 1 && u.role_id !== 9);
-      
-      return staffs.map((u: any) => {
-        let role: CommitteeRole = "none";
-        // ✅ แมป RoleID 6 = คณะกรรมการ, 7 = ประธานคณะกรรมการ
-        if (u.role_id === 7) role = "chairman";
-        else if (u.role_id === 6) role = "committee";
-
-        return {
-          id: u.user_id,
-          name: `${u.prefix || ''}${u.firstname} ${u.lastname}`.trim(),
-          faculty: "ไม่ระบุ", // ⚠️ ข้อมูล Faculty ไม่มีใน API /users ปัจจุบันของ Backend
-          department: "ไม่ระบุ", // ⚠️ ข้อมูล Department ไม่มีใน API /users ปัจจุบันของ Backend
-          role: role,
-          email: u.email,
-          position: "บุคลากร"
-        };
-      });
-    } catch (error) {
-      console.error("Failed to fetch staff list:", error);
-      throw error;
-    }
-  },
-
-  setupCommittee: async (payload: { chairman_id: number; committee_ids: number[] }) => {
-    // 🚨 คำเตือน: ใน Backend ยังไม่มี Route สำหรับบันทึก Committee!
-    // คุณจะต้องไปเพิ่ม API ใน Go ให้รับ POST /committee/setup เพื่อนำไปบันทึกลงตาราง Committee
-    const response = await api.post("/committee/setup", payload);
-    return response.data;
-  }
-};
-
 // ==========================================
-// 1. Static Data
-// ==========================================
-
-// เนื่องจาก Backend ยังไม่มีข้อมูลคณะติดมากับ User จึงขอ Mock คณะไว้ชั่วคราวสำหรับการ Filter
-const STATIC_FACULTIES: MasterOption[] = [
-  { id: 1, name: "คณะวิทยาศาสตร์" },
-  { id: 2, name: "คณะวิศวกรรมศาสตร์" },
-  { id: 3, name: "คณะเกษตร" },
-  { id: 4, name: "คณะบริหารธุรกิจ" }
-];
-
-// ==========================================
-// 2. Components
+// 1. Components
 // ==========================================
 
 const RoleBadge = ({ role }: { role: CommitteeRole }) => {
@@ -106,13 +48,15 @@ const SkeletonLoader = () => (
 );
 
 // ==========================================
-// 3. Main Page Component
+// 2. Main Page Component
 // ==========================================
 
 export default function CommitteeSetupPage() {
   
   // --- States ---
   const [staffList, setStaffList] = useState<Staff[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]); 
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -120,18 +64,55 @@ export default function CommitteeSetupPage() {
 
   // --- Fetch Data ---
   useEffect(() => {
-    const fetchStaffs = async () => {
+    const fetchData = async () => {
       setLoading(true);
       try {
-        const data = await staffService.getStaffList();
-        setStaffList(data);
+        const [usersRes, facRes, deptRes] = await Promise.all([
+          api.get("/users/"),
+          api.get("/faculty/").catch(() => ({ data: { data: [] } })),
+          api.get("/department/").catch(() => ({ data: { data: [] } }))
+        ]);
+
+        const rawUsers = usersRes.data?.data || usersRes.data || [];
+        const rawFaculties = facRes.data?.data || facRes.data || [];
+        const rawDepartments = deptRes.data?.data || deptRes.data || [];
+
+        setFaculties(rawFaculties);
+
+        // ✅ 1. กรองเอาเฉพาะ Role 6 (คณะกรรมการ) เท่านั้น (หรือคนที่เกี่ยวข้อง)
+        const staffs = rawUsers.filter((u: any) => u.role_id === 6);
+        
+        // 2. Map ข้อมูลและแยกประธานออกจากกรรมการด้วย is_chairman
+        const mappedStaffs = staffs.map((u: any) => {
+          let role: CommitteeRole = "committee"; 
+          
+          if (u.is_chairman || u.CommitteeData?.IsChairman || u.CommitteeData?.is_chairman) {
+              role = "chairman";
+          }
+
+          const fac = rawFaculties.find((f: any) => f.faculty_id === u.faculty_id);
+          const dept = rawDepartments.find((d: any) => d.department_id === u.department_id);
+
+          return {
+            id: u.user_id,
+            name: `${u.prefix || ''}${u.firstname} ${u.lastname}`.trim(),
+            faculty: fac ? fac.faculty_name : "ไม่ระบุ",
+            department: dept ? dept.department_name : "ไม่ระบุ",
+            role: role,
+            email: u.email,
+            position: "บุคลากร"
+          };
+        });
+
+        setStaffList(mappedStaffs);
       } catch (error) {
-        Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: 'กรุณาลองใหม่อีกครั้ง หรือตรวจสอบหลังบ้าน' });
+        console.error("Failed to fetch data:", error);
+        Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: 'ไม่สามารถดึงข้อมูลผู้ใช้ได้ (กรุณาตรวจสอบการ Login)' });
       } finally {
         setLoading(false);
       }
     };
-    fetchStaffs();
+    fetchData();
   }, []);
 
   // --- Computed Stats ---
@@ -153,9 +134,9 @@ export default function CommitteeSetupPage() {
     setStaffList(prev => {
       let updated = [...prev];
       
-      // ถ้าเลือกประธานคนใหม่ ให้ปลดประธานคนเก่าเป็น 'none'
       if (newRole === 'chairman') {
-        updated = updated.map(s => s.role === 'chairman' ? { ...s, role: 'none' } : s);
+        // ถ้าเลือกคนใหม่เป็นประธาน ให้ประธานคนเก่ากลับไปเป็น "กรรมการ (committee)" แทน
+        updated = updated.map(s => s.role === 'chairman' ? { ...s, role: 'committee' } : s);
       }
 
       // Update user role
@@ -164,7 +145,6 @@ export default function CommitteeSetupPage() {
   };
 
   const handleSave = async () => {
-    // 1. Advanced Validation
     if (!chairman) {
       return Swal.fire({ 
           icon: 'warning', 
@@ -182,7 +162,6 @@ export default function CommitteeSetupPage() {
       });
     }
 
-    // 2. Confirm
     const result = await Swal.fire({
       title: 'ยืนยันการแต่งตั้ง?',
       html: `
@@ -198,26 +177,42 @@ export default function CommitteeSetupPage() {
       cancelButtonText: 'ยกเลิก'
     });
 
-    // 3. API Call
     if (result.isConfirmed) {
       setSaving(true);
       try {
-        const payload = {
-          chairman_id: chairman.id,
-          committee_ids: staffList.filter(s => s.role === 'committee').map(s => s.id)
-        };
+        // ✅ ปรับการยิง API ให้ตรงกับ Route ของฝั่ง Go (PUT /users/...)
+        const updatePromises = staffList.map(staff => {
+          if (staff.role === 'chairman') {
+            // 1. เรียก API เลื่อนขั้นเป็นประธาน
+            return api.put(`/users/promote-chairman/${staff.id}`);
+          } else if (staff.role === 'committee') {
+            // 2. อัปเดตให้เป็นกรรมการปกติ (ใช้ /users/update/:id)
+            return api.put(`/users/update/${staff.id}`, { 
+              role_id: 6, 
+              is_chairman: false 
+            });
+          } else {
+            // 3. กรณี role เป็น 'none' (ถอดจากกรรมการ)
+            // หมายเหตุ: กรณีนี้ปรับ role_id ให้เป็นของบุคลากรปกติ เช่น 2 (ถ้าในระบบคุณใช้เลขอื่น สามารถแก้ได้เลยครับ)
+            return api.put(`/users/update/${staff.id}`, { 
+              role_id: 2, 
+              is_chairman: false 
+            });
+          }
+        });
 
-        await staffService.setupCommittee(payload);
+        // รอให้อัปเดตเสร็จทุกคนพร้อมกัน
+        await Promise.all(updatePromises);
 
         Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false });
         
       } catch (error: any) {
         console.error(error);
-        // แสดง 404 ให้เห็นชัดๆ ว่ายังไม่มี API หลังบ้าน
-        const errorMsg = error.response?.status === 404 
-          ? 'ยังไม่มี API /api/committee/setup ในฝั่งหลังบ้าน (404 Not Found)' 
-          : 'เกิดข้อผิดพลาดที่ระบบ';
-        Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: errorMsg });
+        Swal.fire({ 
+          icon: 'error', 
+          title: 'บันทึกไม่สำเร็จ', 
+          text: error.response?.data?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์' 
+        });
       } finally {
         setSaving(false);
       }
@@ -247,7 +242,7 @@ export default function CommitteeSetupPage() {
           </div>
         </div>
 
-        {/* Stats Cards (Replaced Emojis with SVGs) */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
           {/* Chairman Card */}
@@ -296,7 +291,7 @@ export default function CommitteeSetupPage() {
             onChange={e => setFilterFaculty(e.target.value)}
           >
             <option value="all">ทุกคณะ</option>
-            {STATIC_FACULTIES.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
+            {faculties.map((f: any) => <option key={f.faculty_id} value={f.faculty_name}>{f.faculty_name}</option>)}
           </select>
         </div>
 
@@ -337,7 +332,8 @@ export default function CommitteeSetupPage() {
                         </div>
                       </td>
                       <td className="p-5">
-                        <div className="text-gray-700">{staff.faculty}</div>
+                        {/* เพิ่มคำว่า "สังกัด" ตามด้วยชื่อคณะตรงนี้ */}
+                        <div className="text-gray-700">สังกัด {staff.faculty}</div>
                         <div className="text-xs text-gray-400">{staff.department}</div>
                       </td>
                       <td className="p-5 text-center">

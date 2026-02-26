@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-// ✅ เปลี่ยนมาใช้ api instance ของโปรเจกต์แทน axios ดิบ
 import { api } from "@/lib/axios"; 
 import { 
   CheckCircle2, XCircle, Clock, Award, FileText, 
   History, UserCheck, ShieldCheck, Landmark, GraduationCap,
   ChevronDown, ChevronUp, ArrowRight, ArrowLeft,
-  User, Building2, Search, CalendarDays, Phone, Mail, MapPin, Map
+  User, Building2, Search, CalendarDays, Phone, Mail, MapPin, Map,
+  Filter
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -33,7 +33,6 @@ const STEP_LOGIC = [
   { id: 8, label: "อธิการบดี", ids: [12, 14, 15], role: "อธิการบดี", icon: CheckCircle2 }
 ];
 
-// ฟังก์ชันแปลสถานะให้เป็นคำที่เข้าใจง่าย (บอกว่าตอนนี้รอใครอยู่)
 const getCustomStatusName = (statusId: number, originalName: string) => {
   const forwardMapping: Record<number, string> = {
       1: "รอหัวหน้าภาควิชาพิจารณา",
@@ -45,7 +44,6 @@ const getCustomStatusName = (statusId: number, originalName: string) => {
       12: "รออธิการบดีลงนาม",
       13: "เสร็จสิ้น (อนุมัติรางวัลแล้ว)"
   };
-  // ถ้ามีใน Mapping ให้ใช้คำใหม่ ถ้าไม่มี (เช่น พวกโดนปฏิเสธ) ให้ใช้คำเดิมจาก DB
   return forwardMapping[statusId] || originalName;
 };
 
@@ -56,6 +54,10 @@ export default function OrganizationTraceAndDetails() {
   const [loading, setLoading] = useState(true);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [selectedItem, setSelectedItem] = useState<any>(null);
+  
+  // 🌟 เพิ่ม State สำหรับจัดการ Filter ปีการศึกษา
+  const [academicYears, setAcademicYears] = useState<any[]>([]);
+  const [selectedYear, setSelectedYear] = useState<string>("all");
   
   const [metaData, setMetaData] = useState<any>({
       faculties: [],
@@ -68,18 +70,21 @@ export default function OrganizationTraceAndDetails() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // ✅ ใช้ Promise.all ควบคู่กับ .catch() ด้านใน เพื่อให้เวลาติด 403 Forbidden ที่ Master Data ระบบจะไม่พัง (กันหน้าขาว)
-        // ✅ ตัด Slash ท้าย URL ออก เพื่อป้องกันปัญหา Header สูญหายตอน Redirect
-        const [statusRes, subRes, facRes, deptRes, campusRes] = await Promise.all([
+        // 🌟 เพิ่มการดึงข้อมูลปีการศึกษาเข้าไปใน Promise.all
+        const [statusRes, subRes, facRes, deptRes, campusRes, yearsRes] = await Promise.all([
           api.get(`/form-statuses`).catch((e) => { console.warn("Cannot fetch statuses", e); return { data: { data: [] } }; }),
-          api.get(`/awards/my/submissions`), // อันนี้ถ้าพังให้โยน Error เข้า Catch ตัวใหญ่ด้านล่างเลย
+          api.get(`/awards/my/submissions`), 
           api.get(`/faculty`).catch((e) => { console.warn("Cannot fetch faculty", e); return { data: { data: [] } }; }),
           api.get(`/department`).catch((e) => { console.warn("Cannot fetch department", e); return { data: { data: [] } }; }),
-          api.get(`/campus`).catch((e) => { console.warn("Cannot fetch campus", e); return { data: { data: [] } }; })
+          api.get(`/campus`).catch((e) => { console.warn("Cannot fetch campus", e); return { data: { data: [] } }; }),
+          api.get(`/academic-years/all`).catch((e) => { console.warn("Cannot fetch years", e); return { data: { data: [] } }; })
         ]);
 
         const statuses = statusRes.data?.data || [];
         const rawSubmissions = subRes.data?.data || [];
+        
+        // เซ็ตปีการศึกษา
+        setAcademicYears(yearsRes.data?.data || []);
         
         setMetaData({
             faculties: facRes.data?.data || [],
@@ -90,15 +95,21 @@ export default function OrganizationTraceAndDetails() {
 
         const detailed = await Promise.all(rawSubmissions.map(async (item: any) => {
             try {
-                // ✅ เปลี่ยนมาใช้ api.get เหมือนกัน
-                const logRes = await api.get(`/awards/${item.form_id}/logs`);
+                // 🚨 แก้ไข API จาก /awards/:id/logs (ซึ่ง 404) มาใช้ /awards/details/:id แทน
+                // หรือหาก Backend ใช้ route อื่นในการดึง log สามารถเปลี่ยนตรงนี้ได้เลยครับ
+                const detailRes = await api.get(`/awards/details/${item.form_id}`);
+                
+                // สมมติว่า Backend คืนค่า log มาในชื่อ field ว่า logs 
+                const itemLogs = detailRes.data?.data?.logs || detailRes.data?.logs || [];
+                
                 return {
                     ...item,
-                    logs: logRes.data?.data || [],
+                    ...detailRes.data?.data, // เผื่อมีข้อมูล detail อื่นๆ คืนมาด้วย
+                    logs: itemLogs,
                     status_detail: statuses.find((s: any) => s.form_status_id === item.form_status)
                 };
             } catch (e) { 
-                console.error("Error fetching logs for form", item.form_id, e);
+                console.error("Error fetching details for form", item.form_id, e);
                 return { ...item, logs: [] }; 
             }
         }));
@@ -112,6 +123,11 @@ export default function OrganizationTraceAndDetails() {
     };
     fetchData();
   }, []);
+
+  // 🌟 ฟังก์ชันกรองข้อมูลตามปีการศึกษาที่เลือก
+  const filteredSubmissions = selectedYear === "all" 
+    ? submissions 
+    : submissions.filter(item => String(item.academic_year) === selectedYear);
 
   return (
     <div className="min-h-screen bg-slate-50 pb-40 font-sans selection:bg-blue-100">
@@ -160,21 +176,43 @@ export default function OrganizationTraceAndDetails() {
                 </motion.div>
             ) : (
                 /* โหมดหน้ารายการปกติ (List View) */
-                <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-12">
-                    <div className="space-y-6">
+                <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
+                    
+                    {/* 🌟 เพิ่มส่วนหัวที่มี Filter ปีการศึกษา */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-1.5 h-6 bg-indigo-600 rounded-full"></div>
                             <h3 className="text-2xl font-black text-slate-800 tracking-tight">รายการคำร้องที่ยื่นแล้ว</h3>
                         </div>
+                        
+                        <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm">
+                            <Filter size={16} className="text-slate-400" />
+                            <span className="text-sm font-bold text-slate-600 whitespace-nowrap">ปีการศึกษา:</span>
+                            <select 
+                                value={selectedYear} 
+                                onChange={(e) => setSelectedYear(e.target.value)}
+                                className="bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-1.5 outline-none cursor-pointer"
+                            >
+                                <option value="all">ทั้งหมด</option>
+                                {/* วนลูปแสดงปีการศึกษาที่ดึงมาจาก API /all */}
+                                {academicYears.map((yearObj: any, idx: number) => {
+                                    // เผื่อ Backend ส่งมาเป็น { year: "2568" } หรือเป็น string ตรงๆ
+                                    const y = typeof yearObj === 'object' ? (yearObj.year || yearObj.academic_year) : yearObj;
+                                    return <option key={idx} value={String(y)}>{y}</option>
+                                })}
+                            </select>
+                        </div>
+                    </div>
 
-                        {submissions.length === 0 ? (
+                    <div className="space-y-6">
+                        {filteredSubmissions.length === 0 ? (
                              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300">
                                  <FileText className="mx-auto text-slate-300 mb-4" size={48} />
-                                 <p className="text-slate-500 font-medium">ยังไม่มีประวัติการยื่นคำร้อง</p>
+                                 <p className="text-slate-500 font-medium">ไม่พบรายการคำร้องในปีการศึกษาที่เลือก</p>
                              </div>
                         ) : (
                             <div className="grid grid-cols-1 gap-6">
-                                {submissions.map((item, idx) => (
+                                {filteredSubmissions.map((item, idx) => (
                                     <DetailedTraceCard key={item.form_id} item={item} index={idx} metaData={metaData} onSelect={() => setSelectedItem(item)} />
                                 ))}
                             </div>
@@ -189,19 +227,15 @@ export default function OrganizationTraceAndDetails() {
 }
 
 // ==========================================
-// 3. Components สำหรับแสดงผล
+// 3. Components สำหรับแสดงผล (ไม่มีการแก้ไขส่วนนี้)
 // ==========================================
 
-// --- 3.1 Card ในหน้า List ---
 function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
   const isRejected = [3, 5, 7, 9, 11].includes(item.form_status);
   const isAccepted = item.form_status === 13;
   
   const rawStatusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name || "ไม่ทราบสถานะ";
-  
-  // ✅ เรียกใช้ฟังก์ชันแปลสถานะ
   const statusName = getCustomStatusName(item.form_status, rawStatusName);
-
   const facultyName = metaData.faculties.find((f: any) => f.faculty_id === item.faculty_id)?.faculty_name || "ไม่ระบุ";
 
   return (
@@ -258,7 +292,6 @@ function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
   );
 }
 
-// --- 3.2 View สำหรับหน้า Detail เต็มรูปแบบ ---
 function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) {
   const [showLogs, setShowLogs] = useState(false);
   
@@ -273,7 +306,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
   const currentRole = STEP_LOGIC.find(s => s.id === currentStep)?.role || "ระบบ";
 
   const rawStatusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name || "ไม่ทราบสถานะ";
-  // ✅ แปลสถานะ
   const statusName = getCustomStatusName(item.form_status, rawStatusName);
 
   const facultyName = metaData.faculties.find((f: any) => f.faculty_id === item.faculty_id)?.faculty_name || "ไม่ระบุ";
@@ -289,7 +321,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
 
   return (
     <div className="space-y-8 animate-fade-in-up">
-        
         {/* SECTION 1: TIMELINE & STATUS */}
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-200/60 p-8 md:p-10">
             <div className="flex flex-col lg:flex-row justify-between items-start gap-8 mb-12 border-b border-slate-100 pb-8">
@@ -388,7 +419,7 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                 </div>
             </div>
 
-            {/* ✅ Decision Log Toggle & Display (แปลงข้อความให้อ่านง่าย) */}
+            {/* ✅ Decision Log Toggle & Display */}
             <div className="mt-14 border-t border-slate-100 pt-6 flex flex-col items-center">
                 <button onClick={() => setShowLogs(!showLogs)} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-all bg-slate-50 hover:bg-indigo-50 px-6 py-2.5 rounded-full border border-slate-200">
                     <History size={16} /> 
@@ -401,7 +432,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                             <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-6 space-y-4">
                                 {item.logs?.length > 0 ? item.logs.map((log: any, i: number) => {
                                     
-                                    // 💡 Logic แปลงคำใน Log
                                     let actionText = "อัปเดตข้อมูล";
                                     let displayValue = log.new_value;
 
@@ -444,7 +474,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
             </div>
 
             <div className="p-8 md:p-10 space-y-12">
-                
                 <section>
                     <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
                         <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center"><User size={18} /></div>

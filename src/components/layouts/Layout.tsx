@@ -12,8 +12,7 @@ import Sidebar from "@/components/Sidebar";
 // ==========================================
 const TermSchema = z.object({
   year: z.number().or(z.string()).transform(String),
-  semester: z.number().or(z.string()).transform(String),
-  is_current: z.boolean().optional(),
+  semester: z.number().or(z.string()).transform(String)
 });
 
 type TermResponse = z.infer<typeof TermSchema>;
@@ -43,7 +42,7 @@ export default function FormLayout({
         const token = localStorage.getItem("token");
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api";
 
-        const response = await axios.get(`${apiUrl}/academic-years/current/semester`, {
+        const response = await axios.get(`${apiUrl}/academic-years/current`, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
@@ -62,9 +61,6 @@ export default function FormLayout({
 
       } catch (error: any) {
         console.error("Error fetching term:", error);
-        
-        // Fallback
-        setTermData({ year: "2568", semester: "1" });
 
         if (error.response?.status !== 404) {
              const isNetworkError = error.code === "ERR_NETWORK" || error.response?.status >= 500;

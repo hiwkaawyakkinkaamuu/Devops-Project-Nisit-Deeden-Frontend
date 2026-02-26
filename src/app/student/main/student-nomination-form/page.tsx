@@ -123,7 +123,7 @@ const nominationService = {
 
   getCurrentTerm: async (token: string) => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/academic-years/current/semester`, { headers: { Authorization: `Bearer ${token}` } });
+        const response = await axios.get(`${API_BASE_URL}/academic-years/current`, { headers: { Authorization: `Bearer ${token}` } });
         return response.data.data;
     } catch (e) { return null; }
   },

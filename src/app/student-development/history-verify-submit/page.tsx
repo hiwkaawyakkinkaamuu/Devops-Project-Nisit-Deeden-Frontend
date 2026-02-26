@@ -98,7 +98,7 @@ export default function SDDHistoryPage() {
             try {
                 if (USE_MOCK_DATA) return;
 
-                // ✅ 1. ใช้ api.get() ของ Axios (ระบบจะแนบ Token ให้อัตโนมัติจาก Interceptor)
+                // 1. ใช้ api.get() ของ Axios (ระบบจะแนบ Token ให้อัตโนมัติจาก Interceptor)
                 // ใส่ .catch เอาไว้กันหน้าพังกรณีที่ API บางตัว Error
                 const [userRes, statusRes, formRes] = await Promise.all([
                     api.get("/users").catch(() => ({ data: { data: [] } })),
@@ -106,17 +106,22 @@ export default function SDDHistoryPage() {
                     api.get("/awards/search?limit=1000").catch(() => ({ data: { data: [] } }))
                 ]);
 
-                // รองรับโครงสร้าง Response แบบ { data: [...] }
-                const usersList = userRes.data?.data || userRes.data || [];
-                const statusList = statusRes.data?.data || statusRes.data || [];
-                const formsList = formRes.data?.data || formRes.data || [];
+                // 1. ดึงข้อมูลออกมาก่อน
+                const fetchedUsers = userRes.data?.data || userRes.data;
+                const fetchedStatus = statusRes.data?.data || statusRes.data;
+                const fetchedForms = formRes.data?.data || formRes.data;
 
-                // ✅ 2. ดึง Log ของแต่ละฟอร์ม (ดักจับ 404 ให้คืนค่าเป็น Array ว่างอย่างนุ่มนวล)
+                // 2. เช็คว่าเป็น Array ไหม ถ้าเป็นให้ใช้ ถ้าไม่เป็นให้ใช้ค่าว่าง []
+                const usersList = Array.isArray(fetchedUsers) ? fetchedUsers : [];
+                const statusList = Array.isArray(fetchedStatus) ? fetchedStatus : [];
+                const formsList = Array.isArray(fetchedForms) ? fetchedForms : [];
+
+                // 2. ดึง Log ของแต่ละฟอร์ม (ตอนนี้ formsList เป็น Array ชัวร์ๆ แล้ว จะไม่พังแน่นอน)
                 const logPromises = formsList.map((form: any) => 
-                    api.get(`/awards/${form.form_id}/logs`)
-                        .then(res => res.data?.data || res.data || [])
-                        .catch(() => []) 
-                );
+                api.get(`/awards/${form.form_id}/logs`)
+                    .then(res => res.data?.data || res.data || [])
+                    .catch(() => []) 
+            );;
 
                 const logsArrays = await Promise.all(logPromises);
                 
@@ -125,7 +130,7 @@ export default function SDDHistoryPage() {
                     .flat()
                     .filter(log => log && typeof log === 'object');
 
-                // ✅ 3. Mapping ข้อมูล (จับคู่ ID ของ User กับชื่อ)
+                // 3. Mapping ข้อมูล (จับคู่ ID ของ User กับชื่อ)
                 const mappedLogs = rawLogs.map((log: any) => {
                     const operator = usersList.find((u: any) => u.user_id === log.changed_by);
                     const form = formsList.find((f: any) => f.form_id === log.form_id);

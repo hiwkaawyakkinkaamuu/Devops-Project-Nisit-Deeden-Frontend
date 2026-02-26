@@ -71,7 +71,7 @@ const nominationService = {
     } catch { return null; }
   },
   getCurrentTerm: async (token: string) => {
-    try { return (await axios.get(`${API_BASE_URL}/academic-years/current/semester`, { headers: { Authorization: `Bearer ${token}` } })).data?.data; } catch { return null; }
+    try { return (await axios.get(`${API_BASE_URL}/academic-years/current`, { headers: { Authorization: `Bearer ${token}` } })).data?.data; } catch { return null; }
   },
   checkSubmissionHistory: async (token: string, year: number, sem: number) => {
     try {

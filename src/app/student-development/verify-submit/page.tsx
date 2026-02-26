@@ -134,7 +134,11 @@ export default function SDDVerifyPage() {
         if (filterType !== "all") params.award_type = filterType;
 
         const response = await api.get(`/awards/search`, { params });
-        const rawData = response.data?.data || response.data || [];
+        
+        // 1. ดึงข้อมูลออกมาก่อน
+        const fetchedData = response.data?.data || response.data;
+        // 2. เช็คว่าเป็น Array ไหม ถ้าเป็นให้ใช้ ถ้าไม่เป็นให้ใช้ค่าว่าง
+        const rawData = Array.isArray(fetchedData) ? fetchedData : [];
 
         const mappedData = rawData.map((item: any) => ({
             ...item,
