@@ -225,10 +225,12 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
   };
 
   const submitVote = async (id: number, statusId: number, reason: string, studentName: string) => {
-    try {
-      if (!USE_MOCK_DATA) {
-        await api.put(`/awards/form-status/change/${id}`, { form_status: statusId, reject_reason: reason });
-      }
+    try {
+      if (!USE_MOCK_DATA) {
+        await api.post(`/awards/committee/vote/${id}`, { 
+           operation: statusId === 10 ? "approve" : "reject",
+        });
+      }
       setItems(prev => prev.filter(c => c.form_id !== id));
       setSelectedId(null);
       setIsRejectModalOpen(false);

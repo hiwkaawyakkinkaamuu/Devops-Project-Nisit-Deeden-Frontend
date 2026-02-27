@@ -72,7 +72,7 @@ const modalVariants: Variants = {
 // ==========================================
 // 2. Main Component
 // ==========================================
-export default function AssociateDeanHistoryPage() { 
+export default function CommitteeHistoryPage() { 
   
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Nomination[]>([]);
@@ -99,16 +99,14 @@ export default function AssociateDeanHistoryPage() {
   };
 
   const getStatusBadge = (statusId: number) => {
-      // 4 = ตีกลับ/ไม่เห็นชอบ
-      if (statusId === 4 || statusId === 99) { 
-          return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-600 text-xs font-bold border border-rose-200"><XCircle className="w-3.5 h-3.5"/> ไม่เห็นชอบ</span>;
-      } 
-      // เปลี่ยนเป็น > 3 เพราะสถานะ 3 คือกำลังรอรองคณบดีตรวจ ถ้ามากกว่า 3 คือรองคณบดีให้ผ่านแล้ว
-      else if (statusId > 3) {
-          return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs font-bold border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5"/> เห็นชอบแล้ว</span>;
-      }
-      return <span className="px-3 py-1 rounded-full bg-slate-50 text-slate-600 text-xs font-medium border border-slate-200">สถานะ {statusId}</span>;
-  };
+    if (statusId === 11) { 
+        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-600 text-xs font-bold border border-rose-200"><XCircle className="w-3.5 h-3.5"/> ไม่เห็นชอบ</span>;
+    } 
+    else if (statusId >= 10 && statusId !== 11) {
+        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs font-bold border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5"/> เห็นชอบแล้ว</span>;
+    }
+    return <span className="px-3 py-1 rounded-full bg-slate-50 text-slate-600 text-xs font-medium border border-slate-200">สถานะ {statusId}</span>;
+};
 
   const getDisplayName = (item: Nomination) => {
     if (!item.student_lastname || item.student_lastname === "-") return item.student_firstname || "-";
@@ -155,9 +153,7 @@ export default function AssociateDeanHistoryPage() {
             };
         });
 
-        // ประวัติของรองคณบดี = เอาเฉพาะที่ผ่านรองคณบดีไปแล้ว (สถานะต้องไม่ใช่ 1 และ ไม่ใช่ 2) 
-        // หรืออาจจะเป็น 4 (โดนปฏิเสธ) ก็ให้แสดงในประวัติด้วย
-        const filteredData = mappedData.filter((item: any) => item.form_status >= 8);
+        const filteredData = mappedData.filter((item: any) => item.form_status >= 10);
 
         if (isMounted) setItems(filteredData);
       } catch (error) {
