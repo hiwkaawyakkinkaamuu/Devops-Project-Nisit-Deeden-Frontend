@@ -8,8 +8,8 @@ import Swal from "sweetalert2";
 // 0. Configuration & Service Layer
 // ==========================================
 
-const USE_MOCK_DATA = true; // Set FALSE to use Real API
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+const USE_MOCK_DATA = true;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 // --- Hardcoded Codes Mapping (For API) ---
 const FACULTY_CODE_MAP: Record<string, string> = {

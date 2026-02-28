@@ -16,6 +16,7 @@ import { api } from "@/lib/axios";
 // 0. Configuration & Types
 // ==========================================
 const USE_MOCK_DATA = false;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 interface VoteSummary {
   approve: number;
@@ -104,7 +105,7 @@ export default function ChairmanApprovalPage() {
     
     const fetchAwardTypes = async () => {
       try {
-        const response = await api.get("/awards/types");
+        const response = await api.get(`${API_BASE_URL}/awards/types`);
         const types = response.data?.data || response.data || [];
         if (isMounted) setAwardTypes(types);
       } catch (error) {
@@ -122,7 +123,7 @@ export default function ChairmanApprovalPage() {
         if (filterCategory) params.award_type = filterCategory;
         if (filterYear) params.student_year = filterYear;
 
-        const response = await api.get(`/awards/search`, { params });
+        const response = await api.get(`${API_BASE_URL}/awards/search`, { params });
         
         // ✅ ป้องกัน Error .map is not a function
         const fetchedData = response.data?.data || response.data;
@@ -248,7 +249,7 @@ export default function ChairmanApprovalPage() {
         if (!USE_MOCK_DATA) {
             // ✅ สถานะ 12 = ลงนามโดยประธานคณะกรรมการ
             const NEXT_STATUS_ID = 12; 
-            await api.put(`/awards/form-status/change/${id}`, { form_status: NEXT_STATUS_ID, reject_reason: "" });
+            await api.put(`${API_BASE_URL}/awards/form-status/change/${id}`, { form_status: NEXT_STATUS_ID, reject_reason: "" });
         }
 
         setItems(prev => prev.filter(item => item.form_id !== id));

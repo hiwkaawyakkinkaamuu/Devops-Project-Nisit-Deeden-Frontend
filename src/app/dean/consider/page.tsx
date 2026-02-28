@@ -16,6 +16,7 @@ import { api } from "@/lib/axios";
 // 0. Configuration & Types
 // ==========================================
 const USE_MOCK_DATA = false;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 export interface FileResponse {
   file_dir_id: number;
@@ -110,7 +111,7 @@ export default function DeanApprovalPage() {
     // ดึงประเภทรางวัลทั้งหมดที่มีใน DB
     const fetchAwardTypes = async () => {
       try {
-        const response = await api.get("/awards/types");
+        const response = await api.get(`${API_BASE_URL}/awards/types`);
         const types = response.data?.data || response.data || [];
         if (isMounted) setAwardTypes(types);
       } catch (error) {
@@ -127,7 +128,7 @@ export default function DeanApprovalPage() {
         }
 
         // ยิง API เปล่าๆ ไม่ต้องส่ง params
-        const response = await api.get(`/awards/search`);
+        const response = await api.get(`${API_BASE_URL}/awards/search`);
         
         // ✅ แก้ไข: เช็คให้ชัวร์ว่า rawData เป็น Array เท่านั้น ป้องกัน Error .map is not a function
         const fetchedData = response.data?.data || response.data;
@@ -227,7 +228,7 @@ export default function DeanApprovalPage() {
   const submitVote = async (id: number, statusId: number, reason: string, studentName: string) => {
     try {
       if (!USE_MOCK_DATA) {
-        await api.put(`/awards/form-status/change/${id}`, { form_status: statusId, reject_reason: reason });
+        await api.put(`${API_BASE_URL}/awards/form-status/change/${id}`, { form_status: statusId, reject_reason: reason });
       }
       setItems(prev => prev.filter(c => c.form_id !== id));
       setSelectedId(null);

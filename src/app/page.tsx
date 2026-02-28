@@ -11,7 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 // 0. Configuration & Service Layer
 // ==========================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 // แก้ไข Interface ให้รองรับ committee_data
 interface LoginResponse {
@@ -117,7 +117,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await api.post("/auth/login", { email, password });
+      const response = await api.post(`${API_BASE_URL}/auth/login`, { email, password });
       const backendData = response.data;
       const roleId = backendData.user.role_id;
 

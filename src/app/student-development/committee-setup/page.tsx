@@ -12,6 +12,8 @@ import {
 // 0. Configuration & Types
 // ==========================================
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+
 type CommitteeRole = "none" | "committee" | "chairman";
 
 interface Staff {
@@ -106,7 +108,7 @@ export default function CommitteeSetupPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const usersRes = await api.get("/users/");
+        const usersRes = await api.get(`${API_BASE_URL}/users/`);
         const rawUsers = usersRes.data?.data || usersRes.data || [];
 
         const staffs = rawUsers.filter((u: any) => u.role_id === 6);
@@ -114,7 +116,7 @@ export default function CommitteeSetupPage() {
         const detailedStaffs = await Promise.all(
           staffs.map(async (u: any) => {
             try {
-              const infoRes = await api.get(`/users/info/${u.user_id}`);
+              const infoRes = await api.get(`${API_BASE_URL}/users/info/${u.user_id}`);
               const info = infoRes.data?.data || infoRes.data || {};
               return { ...u, ...info };
             } catch (err) {

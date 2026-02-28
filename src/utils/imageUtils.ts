@@ -13,10 +13,10 @@ export const getProfileImageUrl = (imagePath: string | undefined | null) => {
   // 3. ถ้าเป็นรูปในเครื่อง (Local Upload)
   // ให้เติม API_BASE_URL หรือ Path ของ Server เข้าไปข้างหน้า
   // สมมติรูปอยู่ที่ http://localhost:8080/uploads/user-profile/1.png
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"; 
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api"; 
   
   // ตัด / ตัวแรกออกถ้ามีซ้ำกัน เพื่อความสวยงาม (Optional)
   const cleanPath = imagePath.startsWith("/") ? imagePath : `/${imagePath}`;
   
-  return `${API_URL}${cleanPath}`;
+  return `${API_BASE_URL}${cleanPath}`;
 };

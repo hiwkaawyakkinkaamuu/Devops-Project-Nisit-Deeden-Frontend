@@ -15,7 +15,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/a
 const authService = {
   register: async (email: string, password: string) => {
     try {
-      const response = await api.post(`/auth/register`, {
+      const response = await api.post(`${API_BASE_URL}/auth/register`, {
         email: email,
         password: password,
         confirmPassword: password

@@ -20,6 +20,8 @@ import {
 const USE_MOCK_DATA = false;
 const ITEMS_PER_PAGE = 8;
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+
 const getFileUrl = (filePath: string) => {
   if (!filePath) return "#";
   const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api").replace(/\/api$/, "");
@@ -110,10 +112,10 @@ export default function SDDVerifyPage() {
     const fetchMasterData = async () => {
         try {
             const [facRes, deptRes, campRes, typeRes] = await Promise.all([
-                api.get("/faculty"),
-                api.get("/department"),
-                api.get("/campus"),
-                api.get("/awards/types")
+                api.get(`${API_BASE_URL}/faculty`),
+                api.get(`${API_BASE_URL}/department`),
+                api.get(`${API_BASE_URL}/campus`),
+                api.get(`${API_BASE_URL}/awards/types`)
             ]);
             if(isMounted) {
                 setFaculties(facRes.data?.data || facRes.data || []);
@@ -133,7 +135,7 @@ export default function SDDVerifyPage() {
         if (searchTerm) params.keyword = searchTerm;
         if (filterType !== "all") params.award_type = filterType;
 
-        const response = await api.get(`/awards/search`, { params });
+        const response = await api.get(`${API_BASE_URL}/awards/search`, { params });
         
         // 1. ดึงข้อมูลออกมาก่อน
         const fetchedData = response.data?.data || response.data;
@@ -259,7 +261,7 @@ export default function SDDVerifyPage() {
     if (result.isConfirmed) {
       try {
         // ✅ ยิง API เปลี่ยนสถานะเป็น 8 (อนุมัติโดยกองพัฒนานิสิต) ทันที
-        await api.put(`/awards/form-status/change/${selectedItem.form_id}`, { 
+        await api.put(`${API_BASE_URL}/awards/form-status/change/${selectedItem.form_id}`, { 
             form_status: 8, 
             reject_reason: "" 
         });
@@ -283,7 +285,7 @@ export default function SDDVerifyPage() {
 
     try {
       // ✅ เปลี่ยนสถานะเป็น 9 (ปฏิเสธ/ตีกลับ โดยกองพัฒนานิสิต)
-      await api.put(`/awards/form-status/change/${selectedItem.form_id}`, { 
+      await api.put(`${API_BASE_URL}/awards/form-status/change/${selectedItem.form_id}`, { 
           form_status: 9, 
           reject_reason: rejectReason 
       });

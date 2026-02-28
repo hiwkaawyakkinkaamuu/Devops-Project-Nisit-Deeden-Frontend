@@ -13,7 +13,7 @@ import {
 // ==========================================
 // 0. Configuration
 // ==========================================
-const API_BASE_URL = "/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 interface Faculty { faculty_id: number; faculty_name: string; }
 interface Department { department_id: number; department_name: string; }

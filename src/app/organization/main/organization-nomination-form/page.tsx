@@ -16,7 +16,7 @@ import {
 // 0. Configuration & Types
 // ==========================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 // เพิ่มคลาสสีแบบเต็ม เพื่อป้องกันบัค Tailwind ไม่ยอม Render สีตามประเภท

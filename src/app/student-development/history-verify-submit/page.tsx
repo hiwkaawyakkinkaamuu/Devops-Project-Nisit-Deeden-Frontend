@@ -12,6 +12,8 @@ import { Search, ChevronDown, CheckCircle2, History, User, ChevronLeft, ChevronR
 const USE_MOCK_DATA = false;
 const ITEMS_PER_PAGE = 8;
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+
 export interface LogEntry {
     log_id: number;
     form_id: number;
@@ -109,7 +111,7 @@ export default function SDDHistoryPage() {
                 // โหลด Master Data ของ User ก่อน (ถ้ายังไม่มี) เพื่อเอาไว้โชว์ชื่อ
                 let currentUsers = usersList;
                 if (currentUsers.length === 0) {
-                    const userRes = await api.get("/users").catch(() => null);
+                    const userRes = await api.get(`${API_BASE_URL}/users`).catch(() => null);
                     if (userRes && Array.isArray(userRes.data?.data)) {
                         currentUsers = userRes.data.data;
                         setUsersList(currentUsers);
@@ -128,7 +130,7 @@ export default function SDDHistoryPage() {
                 if (filterAction !== "all") params.operation = filterAction; // 'approve' หรือ 'reject'
 
                 // เรียกใช้ API History ตัวใหม่
-                const res = await api.get("/awards/my/approval-logs", { params });
+                const res = await api.get(`${API_BASE_URL}/awards/my/approval-logs`, { params });
                 const rawLogs = res.data?.data || [];
                 const pagination = res.data?.pagination;
 

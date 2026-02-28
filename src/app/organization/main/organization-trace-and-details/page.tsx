@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 const getFileUrl = (filePath: string) => {
   if (!filePath) return "#";
   const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api").replace(/\/api$/, "");
@@ -72,12 +73,12 @@ export default function OrganizationTraceAndDetails() {
       try {
         // เพิ่มการดึงข้อมูลปีการศึกษาเข้าไปใน Promise.all
         const [statusRes, subRes, facRes, deptRes, campusRes, yearsRes] = await Promise.all([
-          api.get(`/form-statuses`).catch((e) => { console.warn("Cannot fetch statuses", e); return { data: { data: [] } }; }),
-          api.get(`/awards/my/submissions`), 
-          api.get(`/faculty`).catch((e) => { console.warn("Cannot fetch faculty", e); return { data: { data: [] } }; }),
-          api.get(`/department`).catch((e) => { console.warn("Cannot fetch department", e); return { data: { data: [] } }; }),
-          api.get(`/campus`).catch((e) => { console.warn("Cannot fetch campus", e); return { data: { data: [] } }; }),
-          api.get(`/academic-years/all`).catch((e) => { console.warn("Cannot fetch years", e); return { data: { data: [] } }; })
+          api.get(`${API_BASE_URL}/form-statuses`).catch((e) => { console.warn("Cannot fetch statuses", e); return { data: { data: [] } }; }),
+          api.get(`${API_BASE_URL}/awards/my/submissions`), 
+          api.get(`${API_BASE_URL}/faculty`).catch((e) => { console.warn("Cannot fetch faculty", e); return { data: { data: [] } }; }),
+          api.get(`${API_BASE_URL}/department`).catch((e) => { console.warn("Cannot fetch department", e); return { data: { data: [] } }; }),
+          api.get(`${API_BASE_URL}/campus`).catch((e) => { console.warn("Cannot fetch campus", e); return { data: { data: [] } }; }),
+          api.get(`${API_BASE_URL}/academic-years/all`).catch((e) => { console.warn("Cannot fetch years", e); return { data: { data: [] } }; })
         ]);
 
         const statuses = statusRes.data?.data || [];
@@ -97,7 +98,7 @@ export default function OrganizationTraceAndDetails() {
             try {
                 // 🚨 แก้ไข API จาก /awards/:id/logs (ซึ่ง 404) มาใช้ /awards/details/:id แทน
                 // หรือหาก Backend ใช้ route อื่นในการดึง log สามารถเปลี่ยนตรงนี้ได้เลยครับ
-                const detailRes = await api.get(`/awards/details/${item.form_id}`);
+                const detailRes = await api.get(`${API_BASE_URL}/awards/details/${item.form_id}`);
                 
                 // สมมติว่า Backend คืนค่า log มาในชื่อ field ว่า logs 
                 const itemLogs = detailRes.data?.data?.logs || detailRes.data?.logs || [];

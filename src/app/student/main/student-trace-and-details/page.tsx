@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 // ฟังก์ชันสำหรับแปลง Path ไฟล์ให้ชี้ไปที่ Backend เสมอ (ป้องกัน 404)
 const getFileUrl = (filePath: string) => {

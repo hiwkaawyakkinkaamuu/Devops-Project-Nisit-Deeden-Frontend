@@ -18,6 +18,8 @@ import {
 const ITEMS_PER_PAGE = 8;
 const PREFIX_OPTIONS = ["นาย", "นาง", "นางสาว", "อ.", "ดร.", "ผศ.", "รศ.", "ศ.", "ผศ.ดร.", "รศ.ดร.", "ศ.ดร.", "-"];
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+
 // --- Interfaces ---
 interface User {
   user_id: number;
@@ -191,11 +193,11 @@ export default function UserManagementPage() {
     setLoading(true);
     try {
       const [usersRes, rolesRes, campusRes, facRes, deptRes] = await Promise.all([
-        api.get(`/users`), 
-        api.get(`/roles/`).catch(() => ({ data: { data: [] } })), 
-        api.get(`/campus/`).catch(() => ({ data: { data: [] } })),
-        api.get(`/faculty/`).catch(() => ({ data: { data: [] } })),
-        api.get(`/department/`).catch(() => ({ data: { data: [] } }))
+        api.get(`${API_BASE_URL}/users`), 
+        api.get(`${API_BASE_URL}/roles/`).catch(() => ({ data: { data: [] } })), 
+        api.get(`${API_BASE_URL}/campus/`).catch(() => ({ data: { data: [] } })),
+        api.get(`${API_BASE_URL}/faculty/`).catch(() => ({ data: { data: [] } })),
+        api.get(`${API_BASE_URL}/department/`).catch(() => ({ data: { data: [] } }))
       ]);
 
       const rawUsers = usersRes.data?.data || usersRes.data || [];
@@ -281,7 +283,7 @@ export default function UserManagementPage() {
 
     if (result.isConfirmed) {
       try {
-        await api.delete(`/users/${id}`);
+        await api.delete(`${API_BASE_URL}/users/${id}`);
         setUsers(prev => prev.filter(u => u.user_id !== id));
         Toast.fire({ icon: 'success', title: 'ลบบัญชีสำเร็จ' });
       } catch (error: any) {
@@ -340,10 +342,10 @@ export default function UserManagementPage() {
       }
 
       if (modalMode === 'create') {
-        await api.post(`/auth/register`, payload);
+        await api.post(`${API_BASE_URL}/auth/register`, payload);
         Toast.fire({ icon: 'success', title: 'สร้างบัญชีสำเร็จ' });
       } else {
-        await api.put(`/users/update/${formData.user_id}`, payload);
+        await api.put(`${API_BASE_URL}/users/update/${formData.user_id}`, payload);
         Toast.fire({ icon: 'success', title: 'แก้ไขข้อมูลสำเร็จ' });
       }
 

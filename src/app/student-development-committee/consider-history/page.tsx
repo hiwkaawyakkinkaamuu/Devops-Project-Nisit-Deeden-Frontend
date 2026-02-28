@@ -15,6 +15,8 @@ import { api } from "@/lib/axios";
 // ==========================================
 const USE_MOCK_DATA = false;
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+
 export interface FileResponse {
   file_dir_id: number;
   file_name?: string;
@@ -118,7 +120,7 @@ export default function CommitteeHistoryPage() {
 
     const fetchAwardTypes = async () => {
       try {
-        const response = await api.get("/awards/types");
+        const response = await api.get(`${API_BASE_URL}/awards/types`);
         const types = response.data?.data || response.data || [];
         if (isMounted) setAwardTypes(types);
       } catch (error) {
@@ -140,7 +142,7 @@ export default function CommitteeHistoryPage() {
         if (filterCategory) params.award_type = filterCategory;
         if (filterYear) params.student_year = filterYear;
 
-        const response = await api.get(`/awards/search`, { params });
+        const response = await api.get(`${API_BASE_URL}/awards/search`, { params });
         const rawData = response.data?.data || response.data || [];
 
         const mappedData = rawData.map((item: any) => {

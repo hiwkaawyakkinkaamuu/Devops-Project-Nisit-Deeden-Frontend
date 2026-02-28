@@ -35,6 +35,8 @@ export interface Nomination {
 // ==========================================
 // 1. Framer Motion Variants
 // ==========================================
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 const modalVariants: Variants = {
   hidden: { opacity: 0, scale: 0.95 },
   show: { opacity: 1, scale: 1, transition: { type: "spring", duration: 0.3 } },
@@ -102,7 +104,7 @@ export default function DeanHistoryPage() {
     let isMounted = true;
     const fetchAwardTypes = async () => {
       try {
-        const response = await api.get("/awards/types");
+        const response = await api.get(`${API_BASE_URL}/awards/types`);
         if (isMounted) setAwardTypes(response.data?.data || []);
       } catch (error) {
         console.error("Error fetching award types:", error);
@@ -130,7 +132,7 @@ export default function DeanHistoryPage() {
         if (filterCategory) params.award_type = filterCategory;
         if (filterDate) params.date = filterDate;
 
-        const response = await api.get(`/awards/my/approval-logs`, { params });
+        const response = await api.get(`${API_BASE_URL}/awards/my/approval-logs`, { params });
         const rawData = response.data?.data || [];
         const pagination = response.data?.pagination;
 
@@ -172,7 +174,7 @@ export default function DeanHistoryPage() {
 
   const openDetailModal = async (formId: number) => {
     try {
-        const response = await api.get(`/awards/details/${formId}`); // ✅ เติม /details
+        const response = await api.get(`${API_BASE_URL}/awards/details/${formId}`); // ✅ เติม /details
         setModalData(response.data?.data);
         setIsDetailModalOpen(true);
     } catch (err) {
