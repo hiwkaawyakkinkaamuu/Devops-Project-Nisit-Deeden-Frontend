@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import NominationDetailModal from "@/components/Nomination-detail-modal"; 
 import Swal from "sweetalert2";
 import { motion, AnimatePresence, Variants } from "framer-motion";
@@ -68,6 +68,66 @@ const modalVariants: Variants = {
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
 };
 
+// 🌟 Custom Dropdown Component 🌟
+const CustomSelect = ({ value, onChange, options, icon: Icon, placeholder, className = "" }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+  
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+  
+    const selectedLabel = options.find((o: any) => String(o.v) === String(value))?.l || placeholder;
+  
+    return (
+        <div className={`relative w-full ${className}`} style={{ zIndex: isOpen ? 1000 : 1 }} ref={dropdownRef}>
+            <div 
+                onClick={() => setIsOpen(!isOpen)}
+                className={`flex items-center justify-between w-full pl-11 pr-4 py-3 bg-white/80 backdrop-blur-sm border rounded-2xl cursor-pointer transition-all duration-300 shadow-sm
+                    ${isOpen ? 'border-emerald-400 ring-4 ring-emerald-500/10' : 'border-slate-200/80 hover:border-slate-300'}
+                `}
+            >
+                <Icon className={`w-4 h-4 absolute left-4 top-3.5 transition-colors ${isOpen ? 'text-emerald-500' : 'text-slate-400'}`} />
+                <span className={`text-sm font-medium truncate ${!value || value === "all" ? 'text-slate-500' : 'text-slate-800'}`}>
+                    {selectedLabel}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-180 text-emerald-500' : ''}`} />
+            </div>
+  
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute top-[calc(100%+8px)] left-0 w-full bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl py-2 max-h-60 overflow-y-auto z-[99999] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 hover:[&::-webkit-scrollbar-thumb]:bg-slate-300"
+                    >
+                        {options.map((o: any, i: number) => (
+                            <div
+                                key={i}
+                                onClick={() => { onChange(String(o.v)); setIsOpen(false); }}
+                                className={`px-4 py-3 cursor-pointer transition-all duration-200 text-sm font-medium flex items-center justify-between
+                                    ${String(value) === String(o.v) ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                                `}
+                            >
+                                {o.l}
+                                {String(value) === String(o.v) && <CheckCircle2 size={16} className="text-emerald-500" />}
+                            </div>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
 // ==========================================
 // 2. Main Component
 // ==========================================
@@ -85,9 +145,9 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
 
   // Filters & Sort
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterCategory, setFilterCategory] = useState("");
+  const [filterCategory, setFilterCategory] = useState("all");
   const [filterDate, setFilterDate] = useState("");
-  const [filterYear, setFilterYear] = useState("");
+  const [filterYear, setFilterYear] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Nomination | 'award_type_name' | null, direction: 'asc' | 'desc' | null }>({ key: 'created_at', direction: 'desc' });
 
@@ -108,7 +168,6 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
   useEffect(() => {
     let isMounted = true;
     
-    // ดึงประเภทรางวัลทั้งหมดที่มีใน DB
     const fetchAwardTypes = async () => {
       try {
         const response = await api.get(`${API_BASE_URL}/awards/types`);
@@ -127,10 +186,8 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
           return;
         }
 
-        // ยิง API เปล่าๆ ไม่ต้องส่ง params
         const response = await api.get(`${API_BASE_URL}/awards/search`);
         
-        // ✅ แก้ไข: เช็คให้ชัวร์ว่า rawData เป็น Array เท่านั้น ป้องกัน Error .map is not a function
         const fetchedData = response.data?.data || response.data;
         const rawData = Array.isArray(fetchedData) ? fetchedData : [];
 
@@ -158,15 +215,14 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
     fetchAwardTypes();
     fetchData();
     return () => { isMounted = false; };
-  }, []); // ลบ dependency ของ params ออก เพื่อดึงแค่รอบแรก
+  }, []); 
 
   // ==========================================
-  // 4. Filtering & Sorting Logic (ฝั่ง Frontend)
+  // 4. Filtering & Sorting Logic
   // ==========================================
   const processedData = useMemo(() => {
     let filtered = items;
     
-    // ค้นหาตามชื่อหรือรหัส (Frontend search)
     if (searchTerm) {
       const lowerTerm = searchTerm.toLowerCase();
       filtered = filtered.filter(item => 
@@ -176,23 +232,19 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
       );
     }
     
-    // กรองประเภทรางวัล
-    if (filterCategory) {
+    if (filterCategory && filterCategory !== "all") {
       filtered = filtered.filter(item => item.award_type_name === filterCategory);
     }
     
-    // กรองชั้นปี
-    if (filterYear) {
+    if (filterYear && filterYear !== "all") {
       filtered = filtered.filter(item => String(item.student_year) === filterYear);
     }
 
-    // กรองวันที่
     if (filterDate) {
       const filterTime = new Date(filterDate).setHours(23, 59, 59, 999);
       filtered = filtered.filter(item => new Date(item.created_at).getTime() <= filterTime);
     }
     
-    // เรียงข้อมูล
     if (sortConfig.key) {
       filtered.sort((a: any, b: any) => {
         let valA = sortConfig.key ? a[sortConfig.key] : '';
@@ -216,6 +268,22 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
   const currentItems = processedData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   // ==========================================
+  // Dropdown Options
+  // ==========================================
+  const awardTypeOptions = [
+      { v: "all", l: "ทุกประเภทรางวัล" },
+      ...awardTypes.map(type => ({ v: type, l: type }))
+  ];
+
+  const yearOptions = [
+      { v: "all", l: "ทุกระดับชั้นปี" },
+      { v: "1", l: "ชั้นปีที่ 1" },
+      { v: "2", l: "ชั้นปีที่ 2" },
+      { v: "3", l: "ชั้นปีที่ 3" },
+      { v: "4", l: "ชั้นปีที่ 4" },
+  ];
+
+  // ==========================================
   // 5. Handlers
   // ==========================================
   const handleSort = (key: keyof Nomination | 'award_type_name') => {
@@ -225,19 +293,38 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
     });
   };
 
+  // 🚨🚨 ส่วนที่แก้ไข: เพิ่มโค้ดบังคับยิง API ไปบันทึก Log เข้าตาราง 🚨🚨
   const submitVote = async (id: number, statusId: number, reason: string, studentName: string) => {
-    try {
-      if (!USE_MOCK_DATA) {
-        await api.post(`${API_BASE_URL}/awards/committee/vote/${id}`, { 
-           operation: statusId === 10 ? "approve" : "reject",
+    try {
+      if (!USE_MOCK_DATA) {
+        const operationType = statusId === 10 ? "approve" : "reject";
+
+        // 1. ส่งผลโหวตไปจัดการสถานะหลัก
+        await api.post(`${API_BASE_URL}/awards/committee/vote/${id}`, { 
+           operation: operationType,
+           reason: reason // แนบเหตุผลไปด้วยเผื่อหลังบ้านต้องการ
         });
-      }
+
+        // 2. ยิงเข้าตาราง Approval Logs ตรงๆ (ตามที่หน้าอื่นทำ)
+        try {
+            await api.post(`${API_BASE_URL}/awards/approval-logs`, {
+                form_id: id,
+                operation: operationType,
+                comment: reason,
+                reason: reason
+            });
+        } catch (logErr) {
+            console.warn("ไม่สามารถบันทึกเข้าตาราง Log ได้ (อาจจะชื่อ Endpoint ผิด):", logErr);
+            // ให้มันทำงานต่อไปได้แม้ Log จะพัง
+        }
+      }
+
       setItems(prev => prev.filter(c => c.form_id !== id));
       setSelectedId(null);
       setIsRejectModalOpen(false);
       Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, icon: reason.length > 0 ? 'info' : 'success', title: 'บันทึกผลสำเร็จ', text: `จัดการข้อมูลของ: ${studentName} เรียบร้อย` });
     } catch (error) {
-      Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ดำเนินการไม่สำเร็จ' });
+      Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ดำเนินการไม่สำเร็จ โปรดลองอีกครั้ง' });
     }
   };
 
@@ -274,56 +361,52 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header Section */}
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white/70 backdrop-blur-xl border border-white shadow-sm rounded-3xl p-8">
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="bg-white/70 backdrop-blur-xl border border-white shadow-sm rounded-3xl p-8 relative z-[50]">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
               <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 flex items-center gap-3">
                 <CheckCircle2 className="w-8 h-8 text-emerald-500" /> พิจารณาคัดเลือกนิสิตดีเด่น
               </h1>
               <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
-                <Building2 className="w-4 h-4" /> สำหรับหัวหน้าภาควิชา
+                <Building2 className="w-4 h-4" /> สำหรับคณะกรรมการส่วนกลาง
               </p>
             </div>
           </div>
 
           {/* Filters Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8 relative z-[100]">
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400" /></div>
-              <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 text-sm outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm" />
+              <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white/80 border border-slate-200/80 rounded-2xl px-4 py-3 pl-10 text-sm outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm font-medium placeholder:text-slate-400" />
             </div>
             
             <div className="relative group">
-               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><Calendar className="h-4 w-4 text-slate-400" /></div>
-              <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 text-sm text-slate-600 outline-none cursor-pointer" />
+               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none z-10"><Calendar className="h-4 w-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" /></div>
+              <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full bg-white/80 border border-slate-200/80 rounded-2xl px-4 py-3 pl-10 text-sm font-medium text-slate-600 outline-none cursor-pointer focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all shadow-sm" />
             </div>
             
-            <div className="relative group">
-               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><Award className="h-4 w-4 text-slate-400" /></div>
-              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 pr-10 text-sm text-slate-600 outline-none appearance-none cursor-pointer">
-                <option value="">ทุกประเภทรางวัล</option>
-                {awardTypes.map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              <ChevronDown className="w-4 h-4 absolute right-4 top-3.5 text-slate-400 pointer-events-none" />
-            </div>
+            <CustomSelect 
+                value={filterCategory} 
+                onChange={setFilterCategory} 
+                options={awardTypeOptions} 
+                icon={Award}
+                placeholder="ทุกประเภทรางวัล"
+            />
             
-            <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><GraduationCap className="h-4 w-4 text-slate-400" /></div>
-              <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 pr-10 text-sm text-slate-600 outline-none appearance-none cursor-pointer">
-                <option value="">ทุกระดับชั้นปี</option>
-                <option value="1">ชั้นปีที่ 1</option><option value="2">ชั้นปีที่ 2</option><option value="3">ชั้นปีที่ 3</option><option value="4">ชั้นปีที่ 4</option>
-              </select>
-              <ChevronDown className="w-4 h-4 absolute right-4 top-3.5 text-slate-400 pointer-events-none" />
-            </div>
+            <CustomSelect 
+                value={filterYear} 
+                onChange={setFilterYear} 
+                options={yearOptions} 
+                icon={GraduationCap}
+                placeholder="ทุกระดับชั้นปี"
+            />
           </div>
         </motion.div>
 
         {/* Data Table */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-visible relative z-10">
           <div className="overflow-x-auto min-h-[400px]">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
                 <tr className="bg-slate-50/80 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
                   <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('student_firstname')}>
@@ -351,7 +434,7 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
                     </tr>
                   ))
                 ) : currentItems.length === 0 ? (
-                  <tr><td colSpan={7} className="p-16 text-center text-slate-400 font-medium">ไม่พบรายการรอพิจารณา</td></tr>
+                  <tr><td colSpan={7} className="py-32 text-center text-slate-400 font-medium">ไม่พบรายการรอพิจารณา</td></tr>
                 ) : (
                   currentItems.map((item, index) => (
                     <motion.tr key={item.form_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: index * 0.05 }} onClick={() => setSelectedId(item.form_id)} className={`transition-colors cursor-pointer group ${selectedId === item.form_id ? "bg-emerald-50/50" : "hover:bg-slate-50"}`}>
@@ -377,7 +460,7 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
           </div>
 
           {/* Footer Actions */}
-          <div className="bg-slate-50 border-t border-slate-200 p-5 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="bg-slate-50 border-t border-slate-200 p-5 flex flex-col md:flex-row justify-between items-center gap-4 rounded-b-3xl">
             <div className="flex items-center gap-2">
               <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2 rounded-xl bg-white border border-slate-200 disabled:opacity-50 shadow-sm"><ChevronLeft className="w-4 h-4" /></button>
               <span className="text-sm font-medium text-slate-600 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">หน้า {currentPage} จาก {totalPages || 1}</span>

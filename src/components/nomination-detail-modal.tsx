@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { AlertCircle, Clock } from "lucide-react";
+import React, { useEffect, useState, useMemo } from "react";
+import { 
+  AlertCircle, Clock, CheckCircle2, XCircle, Award, FileText, 
+  History, UserCheck, ShieldCheck, Landmark, GraduationCap,
+  ChevronDown, ChevronUp, User, Building2, Phone, Mail, MapPin, Map,
+  UserCircle2, CalendarDays
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/axios";
 
 // ==========================================
 // 1. Interfaces
 // ==========================================
 
-interface FileResponse {
+export interface FileResponse {
   file_dir_id: number;
   file_name?: string;
   file_type: string;
@@ -39,32 +45,14 @@ export interface Nomination {
   student_address: string;
   gpa: number;
   student_date_of_birth: string;
-  org_name: string;
-  org_type: string;
-  org_location: string;
-  org_phone_number: string;
+  org_name?: string;
+  org_type?: string;
+  org_location?: string;
+  org_phone_number?: string;
   form_detail: string | any;
-  reject_reason?: string; // ใช้เป็น Optional เผื่อไม่มี
+  reject_reason?: string; 
   files?: FileResponse[];
-}
-
-interface MasterFaculty {
-  faculty_id: number;
-  faculty_name: string;
-}
-
-interface MasterDepartment {
-  department_id: number;
-  department_name: string;
-  faculty_id: number;
-}
-
-interface ModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  data: Nomination | null;
-  faculties: MasterFaculty[]; 
-  departments: MasterDepartment[];
+  logs?: ApprovalLog[];
 }
 
 interface ApprovalLog {
@@ -75,14 +63,36 @@ interface ApprovalLog {
   role_name?: string;
   operation?: string; 
   action?: string;
+  approval_status?: string;
   reject_reason?: string;
   operation_date?: string;
+  approved_at?: string;
   created_at?: string;
 }
 
+interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  data: Nomination | null;
+  faculties?: any[]; 
+  departments?: any[];
+}
+
 // ==========================================
-// 2. Helpers & Themes
+// 2. Helpers & Configurations
 // ==========================================
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+
+const getFileUrl = (filePath: string) => {
+  if (!filePath) return "#";
+  const backendUrl = API_BASE_URL.replace(/\/api$/, "");
+  let cleanPath = filePath;
+  if (cleanPath.startsWith("api/")) cleanPath = cleanPath.replace("api/", "");
+  if (cleanPath.startsWith("/api/")) cleanPath = cleanPath.replace("/api/", "");
+  if (!cleanPath.startsWith("/")) cleanPath = "/" + cleanPath;
+  return `${backendUrl}${cleanPath}`;
+};
 
 const formatDateDisplay = (isoDate: string) => {
     if (!isoDate) return "-";
@@ -105,6 +115,18 @@ const calculateAge = (isoDate: string) => {
     const diff = Date.now() - dob.getTime();
     const ageDate = new Date(diff);
     return Math.abs(ageDate.getUTCFullYear() - 1970);
+};
+
+const getRoleFromStatus = (statusId: number) => {
+    switch (statusId) {
+        case 3: return "หัวหน้าภาควิชา";
+        case 5: return "รองคณบดีฝ่ายกิจการนิสิต";
+        case 7: return "คณบดี";
+        case 9: return "กองพัฒนานิสิต";
+        case 11: return "คณะกรรมการพิจารณา";
+        case 15: return "อธิการบดี";
+        default: return "ผู้พิจารณาคำร้อง";
+    }
 };
 
 const THEME_STYLES: Record<string, any> = {
@@ -217,16 +239,12 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
             setCampusName(parsedDetail?.campus || "-");
         }
 
-        // ✅ แก้ไข: Fetch Approval Logs ป้องกัน Array Filter พัง
-        api.get(`/awards/approval-logs/${data.form_id}`)
-            .then(res => {
-                const logs = res.data?.data || res.data;
-                // เช็คให้ชัวร์ว่าเป็น Array เท่านั้น ถ้าเป็น Object (เช่น 404 response) ให้เป็น []
-                setApprovalLogs(Array.isArray(logs) ? logs : []);
-            }).catch(err => {
-                console.error("Failed to fetch approval logs:", err);
-                setApprovalLogs([]);
-            });
+        // Fetch Approval Logs
+        if (data.logs && Array.isArray(data.logs)) {
+            setApprovalLogs(data.logs);
+        } else {
+            setApprovalLogs([]);
+        }
 
     } else {
         setIsVisible(false);
@@ -238,6 +256,8 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
   }, [isOpen, data, parsedDetail]);
 
   if (!isOpen || !data) return null;
+
+  const isOrganization = data.org_name && data.org_name.trim() !== ""; 
 
   // --- กำหนดประเภทและ Theme ---
   const awardStr = data.award_type || data.award_type_name || "";
@@ -253,20 +273,15 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
   if (isOther && awardStr) themeKey = "other";
   const theme = THEME_STYLES[themeKey];
 
-  const isOrganization = (data.org_name && data.org_name.trim() !== "") || data.student_lastname === "-";
-
   const displayStudentName = data.student_lastname === "-" 
       ? data.student_firstname 
       : `${data.student_firstname || ""} ${data.student_lastname || ""}`.trim();
 
   let stepCounter = 1;
-
   const reasonToDisplay = parsedDetail?.other_details || parsedDetail?.behavior_desc || (typeof data.form_detail === 'string' && !data.form_detail.startsWith('{') ? data.form_detail : "");
 
-  // ✅ แก้ไข: ป้องกัน Filter แตก และสร้าง Fallback ดึงข้อมูลจากการตีกลับของฟอร์มหลัก
   const safeLogs = Array.isArray(approvalLogs) ? approvalLogs : [];
   
-  // 1. ดึงจากประวัติ Logs (ถ้ามี)
   let rejectedLogs = safeLogs
     .filter(log => 
         (log.operation && String(log.operation).toLowerCase().includes("reject")) ||
@@ -275,28 +290,22 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
     )
     .sort((a, b) => new Date(b.operation_date || b.created_at || 0).getTime() - new Date(a.operation_date || a.created_at || 0).getTime());
 
-  // 2. ถ้า Logs API Error(404) แต่ตัวฟอร์มหลักบอกว่าโดนปฏิเสธ ให้ใช้ข้อมูลจากฟอร์มหลักแสดงผล
-  if (rejectedLogs.length === 0 && data.reject_reason && data.reject_reason.trim() !== "") {
+  const isFormRejected = [3, 5, 7, 9, 11, 15].includes(data.form_status);
+  if (rejectedLogs.length === 0 && isFormRejected) {
       rejectedLogs = [{
-          approval_log_id: 999999, // Dummy ID
+          approval_log_id: 999999,
           form_id: data.form_id,
-          role_name: "คณะกรรมการพิจารณา",
+          role_name: getRoleFromStatus(data.form_status),
           operation: "reject",
           operation_date: data.latest_update || data.created_at,
-          reject_reason: data.reject_reason
+          reject_reason: data.reject_reason || "ไม่ได้ระบุเหตุผล (กรุณาติดต่อผู้พิจารณา)"
       }];
   }
 
   return (
     <div className="absolute inset-0 z-[50] flex items-center justify-center p-4 md:p-8 overflow-hidden">
-      
-      {/* Backdrop */}
-      <div 
-        className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
-        onClick={onClose}
-      ></div>
+      <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`} onClick={onClose}></div>
 
-      {/* Modal Content */}
       <div className={`relative bg-[#F8F9FA] rounded-[24px] shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col transition-all duration-300 transform ${isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'}`}>
         
         <style jsx>{`
@@ -309,23 +318,17 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
         {/* Header */}
         <div className="bg-white/90 backdrop-blur-md z-10 px-6 md:px-8 py-5 border-b border-gray-200 flex justify-between items-center sticky top-0 shadow-sm shrink-0">
             <div>
-                <h3 className="text-xl md:text-2xl font-extrabold text-gray-800 flex items-center gap-3">
-                    รายละเอียดแบบเสนอชื่อ
-                </h3>
-                <p className="text-sm font-medium text-gray-500 mt-1 flex items-center gap-2">
-                    <span className={`w-3 h-3 rounded-full ${theme.numberBg}`}></span> 
-                    {awardStr}
-                </p>
+                <h3 className="text-xl md:text-2xl font-extrabold text-gray-800 flex items-center gap-3">รายละเอียดแบบเสนอชื่อ</h3>
             </div>
-            <button onClick={onClose} className="p-2 bg-gray-100 hover:bg-red-50 text-gray-500 hover:text-red-500 rounded-full transition-all active:scale-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-200 shrink-0">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            <button onClick={onClose} className="p-2 bg-gray-100 hover:bg-red-50 text-gray-500 hover:text-red-500 rounded-full transition-all active:scale-90 shrink-0">
+                <XCircle size={24} />
             </button>
         </div>
 
-        {/* Scrollable Body */}
+        {/* Body */}
         <div className="overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar">
 
-            {/* ✅ กล่องแสดงเหตุผลการปฏิเสธ */}
+            {/* กล่องแสดงเหตุผลการปฏิเสธ */}
             {rejectedLogs.length > 0 && (
                 <div className="space-y-4">
                     {rejectedLogs.map((log, index) => (
@@ -333,7 +336,7 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
                             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-rose-400 to-red-600"></div>
                             <h3 className="text-lg md:text-xl font-bold text-rose-800 mb-2 flex items-center gap-3">
                                 <AlertCircle className="w-6 h-6 text-rose-600" />
-                                ฟอร์มถูกตีกลับให้แก้ไขโดย: {log.role_name || "คณะกรรมการ"}
+                                ฟอร์มปฏิเสธโดย: {log.role_name || getRoleFromStatus(data.form_status)}
                             </h3>
                             <p className="text-sm font-bold text-rose-500 mb-5 flex items-center gap-2">
                                 <Clock className="w-4 h-4" />
@@ -342,7 +345,7 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-rose-700">ข้อเสนอแนะ / เหตุผลที่ปฏิเสธ:</label>
                                 <div className="w-full bg-white border border-rose-200 rounded-xl px-4 py-4 text-sm text-gray-800 whitespace-pre-wrap shadow-inner">
-                                    {log.reject_reason || "ไม่มีการระบุเหตุผลประกอบ"}
+                                    {log.reject_reason || data.reject_reason || "ไม่มีการระบุเหตุผลประกอบ"}
                                 </div>
                             </div>
                         </div>
@@ -350,19 +353,17 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
                 </div>
             )}
             
-            {/* === Section 1 (เฉพาะ Other) === */}
-            {isOther && (
-                <div className={`bg-white p-6 md:p-8 rounded-[24px] ${theme.border} shadow-sm relative overflow-hidden`}>
-                    <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${theme.gradient}`}></div>
-                    <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
-                        <span className={`w-8 h-8 rounded-full ${theme.numberBg} text-white flex items-center justify-center text-sm`}>{stepCounter++}</span>
-                        ระบุชื่อรางวัล/ประเภทที่ยื่นเสนอ
-                    </h3>
-                    <InputReadOnly label="ชื่อรางวัล" value={parsedDetail?.award_title || awardStr} />
-                </div>
-            )}
+            {/* === Section ประเภทรางวัล === */}
+            <div className={`bg-white p-6 md:p-8 rounded-[24px] ${theme.border} shadow-sm relative overflow-hidden`}>
+                <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${theme.gradient}`}></div>
+                <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+                    <span className={`w-8 h-8 rounded-full ${theme.numberBg} text-white flex items-center justify-center text-sm`}>{stepCounter++}</span>
+                    ประเภทรางวัลที่เสนอชื่อ
+                </h3>
+                <InputReadOnly label="ชื่อรางวัล" value={parsedDetail?.award_title || awardStr} />
+            </div>
 
-            {/* === Section ข้อมูลองค์กร === */}
+            {/* === Section ข้อมูลองค์กร (ถ้ามี) === */}
             {isOrganization && (
                 <div className={`bg-white p-6 md:p-8 rounded-[24px] border border-blue-100 shadow-sm relative overflow-hidden`}>
                     <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 to-indigo-500`}></div>
@@ -384,7 +385,7 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
                 <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${theme.gradient}`}></div>
                 <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-6 flex items-center gap-3">
                     <span className={`w-8 h-8 rounded-full ${theme.numberBg} text-white flex items-center justify-center text-sm`}>{stepCounter++}</span>
-                    ข้อมูลผู้ได้รับการเสนอชื่อ {isOrganization && <span className="text-sm font-normal text-gray-500 ml-2">(นิสิต/ตัวแทนองค์กร)</span>}
+                    ข้อมูลนิสิตที่ได้รับการเสนอชื่อ {isOrganization && <span className="text-sm font-normal text-gray-500 ml-2">(นิสิต/ตัวแทนองค์กร)</span>}
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
@@ -417,9 +418,19 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
                     <span className={`w-8 h-8 rounded-full flex items-center justify-center ${theme.numberBg} text-white text-sm`}>{stepCounter++}</span>
                     รายละเอียดเหตุผลและผลงาน
                 </h3>
+                
+                {parsedDetail.project_title && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+                        <ReadOnlyField label="ชื่อโครงการ/ผลงาน" value={parsedDetail.project_title} className="md:col-span-2" />
+                        <ReadOnlyField label="บทบาท/รางวัลที่ได้รับ" value={parsedDetail.prize} />
+                        <ReadOnlyField label="หน่วยงานที่จัด/เวที" value={parsedDetail.organized_by} />
+                        <ReadOnlyField label="วันที่ได้รับ/เข้าร่วม" value={parsedDetail.date_received} />
+                        <ReadOnlyField label="ชื่อทีม (ถ้ามี)" value={parsedDetail.team_name} />
+                    </div>
+                )}
 
                 <InputReadOnly 
-                    label="เหตุผลในการเสนอชื่อและความโดดเด่นของผลงาน" 
+                    label="เหตุผลในการเสนอชื่อ/รายละเอียดเพิ่มเติม" 
                     value={reasonToDisplay} 
                     isTextarea 
                 />
@@ -459,6 +470,9 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
                                              <p className="text-xs text-gray-400">{(file.file_size / 1024).toFixed(2)} KB</p>
                                          </div>
                                     </div>
+                                    <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                        ดูเอกสาร
+                                    </span>
                                 </a>
                             );
                         })}

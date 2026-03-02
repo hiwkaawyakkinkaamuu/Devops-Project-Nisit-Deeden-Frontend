@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/axios"; 
 import Swal from "sweetalert2";
 import { z } from "zod";
@@ -8,14 +8,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Search, Award, Users, Mail, ChevronDown, 
   ShieldCheck, AlertTriangle, Sparkles, CheckCircle2,
-  Building2, GraduationCap, X, Edit2, Trash2, Plus, MapPin
+  Building2, GraduationCap, X, Edit2, Trash2, Plus, MapPin,
+  ChevronLeft, ChevronRight, Filter
 } from "lucide-react";
 
 // ==========================================
 // 0. Configuration
 // ==========================================
 
-const ITEMS_PER_PAGE = 8;
+const ITEMS_PER_PAGE = 6; 
 const PREFIX_OPTIONS = ["นาย", "นาง", "นางสาว", "อ.", "ดร.", "ผศ.", "รศ.", "ศ.", "ผศ.ดร.", "รศ.ดร.", "ศ.ดร.", "-"];
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
@@ -32,7 +33,6 @@ interface User {
   role_id: number;
   role_name_th?: string;
   
-  // Specific Fields
   campus_id?: number;
   student_number?: string;
   faculty_id?: number;
@@ -44,68 +44,49 @@ interface User {
   organization_location?: string;
   organization_phone?: string;
 
-  // Display only
   faculty_name?: string;
   department_name?: string;
   image_path?: string;
   provider?: string;
 }
 
-// --- Validation Schemas (Zod) ---
+// --- Validation Schemas ---
 const UserSchema = z.object({
   prefix: z.string().optional(),
   firstname: z.string().min(1, "กรุณากรอกชื่อจริงหรือชื่อผู้ติดต่อ"),
-  lastname: z.string().optional(), // เปลี่ยนเป็น optional เพราะองค์กรไม่มีนามสกุล
+  lastname: z.string().optional(), 
   email: z.string().email("รูปแบบอีเมลไม่ถูกต้อง"),
   role_id: z.number().min(1, "กรุณาเลือกตำแหน่ง"),
   campus_id: z.number().min(1, "กรุณาเลือกวิทยาเขต"),
-  
   password: z.string().optional(),
   confirm_password: z.string().optional(),
-  
   student_number: z.string().optional(),
   faculty_id: z.number().optional(),
   department_id: z.number().optional(),
   organization_name: z.string().optional(),
-  
   image_path: z.string().optional(),
 }).superRefine((data, ctx) => {
-  
-  // บังคับนามสกุล สำหรับคนที่ไม่ใช่องค์กร
   if (data.role_id !== 8 && (!data.lastname || data.lastname.trim() === "")) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "กรุณากรอกนามสกุล", path: ["lastname"] });
   }
-
-  // กฎตาม Role
-  if (data.role_id === 1) { // Student
-    if (!data.student_number || !/^\d{10}$/.test(data.student_number)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "รหัสนิสิตต้องเป็นตัวเลข 10 หลัก", path: ["student_number"] });
-    }
+  if (data.role_id === 1) { 
+    if (!data.student_number || !/^\d{10}$/.test(data.student_number)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "รหัสนิสิตต้องเป็นตัวเลข 10 หลัก", path: ["student_number"] });
     if (!data.faculty_id) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "กรุณาเลือกคณะ", path: ["faculty_id"] });
     if (!data.department_id) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "กรุณาเลือกสาขา", path: ["department_id"] });
   }
-
-  if (data.role_id === 2) { // HOD
+  if (data.role_id === 2) { 
     if (!data.faculty_id) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "กรุณาเลือกคณะ", path: ["faculty_id"] });
     if (!data.department_id) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "กรุณาเลือกสาขา", path: ["department_id"] });
   }
-
-  if (data.role_id === 3 || data.role_id === 4) { // Assoc Dean & Dean
+  if (data.role_id === 3 || data.role_id === 4) { 
     if (!data.faculty_id) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "กรุณาเลือกคณะ", path: ["faculty_id"] });
   }
-
-  if (data.role_id === 8) { // Organization
+  if (data.role_id === 8) { 
     if (!data.organization_name) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "กรุณากรอกชื่อหน่วยงาน", path: ["organization_name"] });
   }
-  
-  // รหัสผ่าน
   if (data.password || data.confirm_password) {
-      if (data.password !== data.confirm_password) {
-          ctx.addIssue({ code: z.ZodIssueCode.custom, message: "รหัสผ่านไม่ตรงกัน", path: ["confirm_password"] });
-      }
-      if (data.password && data.password.length < 6) {
-          ctx.addIssue({ code: z.ZodIssueCode.custom, message: "รหัสผ่านอย่างน้อย 6 ตัวอักษร", path: ["password"] });
-      }
+      if (data.password !== data.confirm_password) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "รหัสผ่านไม่ตรงกัน", path: ["confirm_password"] });
+      if (data.password && data.password.length < 6) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "รหัสผ่านอย่างน้อย 6 ตัวอักษร", path: ["password"] });
   }
 });
 
@@ -151,17 +132,72 @@ const Avatar = ({ src, name }: { src?: string, name: string }) => {
   return (
     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl text-white font-bold shadow-md bg-gradient-to-br ${colors[colorIndex]} overflow-hidden shrink-0 border border-white/20 ring-2 ring-slate-50`}>
       {!imgError && src ? (
-        <img 
-          src={src.startsWith('http') ? src : `${process.env.NEXT_PUBLIC_API_URL || ''}${src}`} 
-          alt={name} 
-          onError={() => setImgError(true)}
-          className="w-full h-full object-cover"
-        />
+        <img src={src.startsWith('http') ? src : `${API_BASE_URL.replace('/api', '')}${src}`} alt={name} onError={() => setImgError(true)} className="w-full h-full object-cover" />
       ) : (
         <span>{initial}</span>
       )}
     </div>
   );
+};
+
+// 🌟 Custom Dropdown Component 
+const CustomSelect = ({ value, onChange, options, icon: Icon, placeholder }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+  
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+  
+    const selectedLabel = options.find((o: any) => String(o.v) === String(value))?.l || placeholder;
+  
+    return (
+        <div className="relative w-full" style={{ zIndex: isOpen ? 1000 : 1 }} ref={dropdownRef}>
+            <div 
+                onClick={() => setIsOpen(!isOpen)}
+                className={`flex items-center justify-between w-full pl-11 pr-4 py-3 bg-white border rounded-xl cursor-pointer transition-all duration-300 shadow-sm
+                    ${isOpen ? 'border-blue-400 ring-4 ring-blue-500/10' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}
+                `}
+            >
+                <Icon className={`w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isOpen ? 'text-blue-500' : 'text-slate-400'}`} />
+                <span className={`text-sm font-bold truncate ${!value || value === "all" ? 'text-slate-600' : 'text-slate-800'}`}>
+                    {selectedLabel}
+                </span>
+                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-180 text-blue-500' : ''}`} />
+            </div>
+  
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute top-[calc(100%+8px)] left-0 w-full bg-white border border-slate-100 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] py-2 max-h-60 overflow-y-auto z-[99999] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 hover:[&::-webkit-scrollbar-thumb]:bg-slate-300"
+                    >
+                        {options.map((o: any, i: number) => (
+                            <div
+                                key={i}
+                                onClick={() => { onChange(String(o.v)); setIsOpen(false); }}
+                                className={`px-4 py-3 cursor-pointer transition-all duration-200 text-sm font-medium flex items-center justify-between
+                                    ${String(value) === String(o.v) ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                                `}
+                            >
+                                {o.l}
+                                {String(value) === String(o.v) && <CheckCircle2 size={16} className="text-blue-500" />}
+                            </div>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
 };
 
 // ==========================================
@@ -176,9 +212,13 @@ export default function UserManagementPage() {
   const [departments, setDepartments] = useState<any[]>([]);
   
   const [loading, setLoading] = useState(true);
+  
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterRole, setFilterRole] = useState("all");
+  
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -186,14 +226,31 @@ export default function UserManagementPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, filterRole]);
+
+  useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentPage, debouncedSearch, filterRole]); 
 
   const fetchData = async () => {
     setLoading(true);
     try {
+      const params: any = {
+        page: currentPage,
+        limit: ITEMS_PER_PAGE
+      };
+      
+      if (debouncedSearch) params.search = debouncedSearch; 
+      if (filterRole !== "all") params.role_id = filterRole; 
+
       const [usersRes, rolesRes, campusRes, facRes, deptRes] = await Promise.all([
-        api.get(`${API_BASE_URL}/users`), 
+        api.get(`${API_BASE_URL}/users`, { params }),
         api.get(`${API_BASE_URL}/roles/`).catch(() => ({ data: { data: [] } })), 
         api.get(`${API_BASE_URL}/campus/`).catch(() => ({ data: { data: [] } })),
         api.get(`${API_BASE_URL}/faculty/`).catch(() => ({ data: { data: [] } })),
@@ -235,9 +292,22 @@ export default function UserManagementPage() {
           provider: u.provider
         };
       });
+
       setUsers(mapped);
+
+      const backendTotalPages = usersRes.data?.pagination?.total_pages || usersRes.data?.total_pages;
+      const backendTotalItems = usersRes.data?.pagination?.total_items || usersRes.data?.total;
+      
+      if (backendTotalPages) {
+          setTotalPages(backendTotalPages);
+      } else if (backendTotalItems) {
+          setTotalPages(Math.ceil(backendTotalItems / ITEMS_PER_PAGE));
+      } else {
+          setTotalPages(rawUsers.length === ITEMS_PER_PAGE ? currentPage + 1 : Math.max(1, currentPage));
+      }
+
     } catch (error) {
-      Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ไม่สามารถโหลดข้อมูลระบบได้', customClass: { popup: 'rounded-3xl' } });
+      console.error("Fetch Data Error:", error);
     } finally {
       setLoading(false);
     }
@@ -262,7 +332,6 @@ export default function UserManagementPage() {
         role_id: roleId, 
         department_id: undefined, 
         faculty_id: undefined,
-        // ถ้าเปลี่ยนเป็นองค์กร ให้เคลียร์คำนำหน้าและนามสกุลทิ้ง
         prefix: roleId === 8 ? "-" : (prev.prefix === "-" ? "นาย" : prev.prefix),
         lastname: roleId === 8 ? "-" : prev.lastname,
       }));
@@ -284,8 +353,13 @@ export default function UserManagementPage() {
     if (result.isConfirmed) {
       try {
         await api.delete(`${API_BASE_URL}/users/${id}`);
-        setUsers(prev => prev.filter(u => u.user_id !== id));
         Toast.fire({ icon: 'success', title: 'ลบบัญชีสำเร็จ' });
+        
+        if (users.length === 1 && currentPage > 1) {
+            setCurrentPage(prev => prev - 1);
+        } else {
+            fetchData();
+        }
       } catch (error: any) {
         Swal.fire({ icon: 'error', title: 'ลบไม่สำเร็จ', text: 'ระบบหลังบ้านอาจยังไม่รองรับการลบ', customClass: { popup: 'rounded-3xl' } });
       }
@@ -307,7 +381,6 @@ export default function UserManagementPage() {
 
     setIsSaving(true);
     try {
-      // 🎯 สร้าง Payload
       const payload: any = { 
         email: formData.email,
         role_id: formData.role_id,
@@ -322,19 +395,18 @@ export default function UserManagementPage() {
         payload.confirmPassword = formData.confirm_password; 
       }
 
-      // 🎯 เงื่อนไขเฉพาะ Role
-      if (formData.role_id === 1) { // Student
+      if (formData.role_id === 1) { 
         payload.student_number = formData.student_number;
         payload.faculty_id = formData.faculty_id;
         payload.department_id = formData.department_id;
-      } else if (formData.role_id === 2) { // HOD
+      } else if (formData.role_id === 2) { 
         payload.faculty_id = formData.faculty_id;
         payload.department_id = formData.department_id;
-      } else if (formData.role_id === 3 || formData.role_id === 4) { // Assoc Dean & Dean
+      } else if (formData.role_id === 3 || formData.role_id === 4) { 
         payload.faculty_id = formData.faculty_id;
-      } else if (formData.role_id === 6) { // Committee
+      } else if (formData.role_id === 6) { 
         payload.is_chairman = formData.is_chairman || false;
-      } else if (formData.role_id === 8) { // Organization
+      } else if (formData.role_id === 8) { 
         payload.organization_name = formData.organization_name;
         payload.organization_type = formData.organization_type;
         payload.organization_location = formData.organization_location;
@@ -350,7 +422,7 @@ export default function UserManagementPage() {
       }
 
       setIsModalOpen(false);
-      fetchData();
+      fetchData(); 
 
     } catch (error: any) {
       console.error("🚨 Error Save:", error.response?.data);
@@ -365,22 +437,13 @@ export default function UserManagementPage() {
     }
   };
 
-  const filteredUsers = useMemo(() => {
-    return users.filter(u => {
-      const fullSearch = `${u.firstname} ${u.lastname} ${u.email} ${u.student_number || ''}`.toLowerCase();
-      const matchSearch = fullSearch.includes(searchTerm.toLowerCase());
-      const matchRole = filterRole === 'all' ? true : String(u.role_id) === filterRole;
-      return matchSearch && matchRole;
-    });
-  }, [users, searchTerm, filterRole]);
-
-  const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
-  const paginatedUsers = filteredUsers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   const visibleDepartments = departments.filter(d => String(d.faculty_id) === String(formData.faculty_id));
 
-  // ==========================================
-  // 3. Render UI
-  // ==========================================
+  // --- เตรียม Options สำหรับ Dropdown ---
+  const dropdownRoleOptions = [
+      { v: "all", l: "แสดงทุกตำแหน่ง" },
+      ...roles.map((r: any) => ({ v: r.role_id, l: r.role_name_th }))
+  ];
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] p-6 md:p-10 pb-36 font-sans text-slate-800 selection:bg-slate-200 selection:text-slate-900 relative">
@@ -401,69 +464,87 @@ export default function UserManagementPage() {
         </div>
 
         {/* Toolbar */}
-        <div className="bg-white p-3 rounded-[1.5rem] shadow-sm border border-slate-200 flex flex-col md:flex-row gap-3">
-            <div className="relative flex-1 group">
-                <Search className="w-5 h-5 absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-slate-700 transition-colors" />
-                <input type="text" placeholder="ค้นหาชื่อ, อีเมล, รหัสนิสิต..." className="w-full pl-14 pr-4 py-4 bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-xl text-sm font-medium outline-none transition-all placeholder:text-slate-400 text-slate-700" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+        <div className="bg-white p-3 rounded-[1.5rem] shadow-sm border border-slate-200 flex flex-col md:flex-row gap-3 relative z-[100]">
+            <div className="relative flex-1 group z-10">
+                <Search className="w-5 h-5 absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                <input 
+                    type="text" 
+                    placeholder="ค้นหาชื่อ, อีเมล, รหัสนิสิต..." 
+                    className="w-full pl-14 pr-4 py-3 bg-white border border-slate-200 focus:border-blue-400 rounded-xl text-sm font-medium outline-none transition-all placeholder:text-slate-400 text-slate-700 shadow-sm focus:ring-4 focus:ring-blue-50" 
+                    value={searchTerm} 
+                    onChange={e => setSearchTerm(e.target.value)} 
+                />
             </div>
-            <div className="relative w-full md:w-72 group">
-                <select className="w-full px-5 pr-12 py-4 bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-200 focus:border-slate-400 rounded-xl text-sm font-bold text-slate-700 outline-none cursor-pointer appearance-none transition-all" value={filterRole} onChange={e => { setFilterRole(e.target.value); setCurrentPage(1); }}>
-                    <option value="all">แสดงทุกตำแหน่ง</option>
-                    {roles.map((r: any) => <option key={r.role_id} value={r.role_id}>{r.role_name_th}</option>)}
-                </select>
-                <ChevronDown className="w-5 h-5 absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-slate-600" />
+            <div className="w-full md:w-72 relative z-[99]">
+                <CustomSelect 
+                    value={filterRole} 
+                    onChange={(val: string) => setFilterRole(val)} 
+                    options={dropdownRoleOptions} 
+                    icon={Filter}
+                    placeholder="แสดงทุกตำแหน่ง"
+                />
             </div>
         </div>
 
         {/* User Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 min-h-[400px]">
             {loading ? (
-                [...Array(8)].map((_, i) => (
+                [...Array(6)].map((_, i) => (
                     <div key={i} className="bg-white rounded-[2rem] p-6 border border-slate-200 flex items-start gap-5 animate-pulse shadow-sm">
                         <div className="w-14 h-14 bg-slate-200 rounded-2xl shrink-0"></div>
                         <div className="flex-1 space-y-3 w-full mt-2"><div className="w-1/2 h-4 bg-slate-200 rounded-lg"></div><div className="w-3/4 h-3 bg-slate-100 rounded-lg"></div></div>
                     </div>
                 ))
-            ) : paginatedUsers.length === 0 ? (
+            ) : users.length === 0 ? (
                 <div className="col-span-full bg-white rounded-[3rem] p-20 text-center border border-dashed border-slate-300 flex flex-col items-center justify-center shadow-sm">
                     <AlertTriangle className="w-16 h-16 text-slate-300 mb-4" />
                     <h3 className="text-xl font-bold text-slate-700">ไม่พบข้อมูลในระบบ</h3>
                 </div>
             ) : (
                 <AnimatePresence>
-                    {paginatedUsers.map((user, index) => (
-                        <motion.div key={user.user_id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.2, delay: index * 0.05 }} className="group bg-white rounded-[2rem] p-6 shadow-sm border border-slate-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300 flex flex-col sm:flex-row gap-6 overflow-hidden">
-                            <div className="flex items-start gap-4 flex-1 min-w-0 z-10">
-                                <Avatar src={user.image_path} name={`${user.firstname} ${user.lastname}`} />
-                                <div className="min-w-0 flex-1 space-y-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <h3 className="font-bold text-slate-900 text-[1.1rem] truncate group-hover:text-blue-700 transition-colors">
-                                          {user.role_id === 8 
-                                            ? `${user.firstname}` // หน่วยงาน ไม่แสดงคำนำหน้าและนามสกุล
-                                            : `${user.prefix && user.prefix !== "-" ? user.prefix : ''}${user.firstname} ${user.lastname}`.trim()
-                                          }
-                                        </h3>
-                                        {user.role_id === 1 && user.student_number && (
-                                            <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-mono border border-slate-200 font-bold">{user.student_number}</span>
+                    {users.map((user, index) => (
+                        <motion.div 
+                            key={user.user_id} 
+                            initial={{ opacity: 0, y: 15 }} 
+                            animate={{ opacity: 1, y: 0 }} 
+                            exit={{ opacity: 0, scale: 0.95 }} 
+                            transition={{ duration: 0.2, delay: index * 0.05 }} 
+                            // 🚨 เปลี่ยนจาก motion.tr เป็น motion.div 🚨
+                            className="block group bg-white rounded-[2rem] p-6 shadow-sm border border-slate-200 hover:shadow-md hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                        >
+                            <div className="flex flex-col sm:flex-row gap-6">
+                              <div className="flex items-start gap-4 flex-1 min-w-0 z-10">
+                                  <Avatar src={user.image_path} name={`${user.firstname} ${user.lastname}`} />
+                                  <div className="min-w-0 flex-1 space-y-1">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                          <h3 className="font-bold text-slate-900 text-[1.1rem] truncate group-hover:text-blue-700 transition-colors">
+                                            {user.role_id === 8 
+                                              ? `${user.firstname}`
+                                              : `${user.prefix && user.prefix !== "-" ? user.prefix : ''}${user.firstname} ${user.lastname}`.trim()
+                                            }
+                                          </h3>
+                                          {user.role_id === 1 && user.student_number && (
+                                              <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-mono border border-slate-200 font-bold">{user.student_number}</span>
+                                          )}
+                                      </div>
+                                      <div className="flex items-center gap-1.5 text-sm text-slate-500">
+                                          <Mail className="w-3.5 h-3.5 text-slate-400" /> <span className="truncate">{user.email}</span>
+                                      </div>
+                                      <div className="pt-2 flex flex-col gap-2">
+                                        <RoleBadge roleId={user.role_id} roleName={user.role_name_th || ""} />
+                                        {(user.faculty_name || user.department_name) && (
+                                          <p className="text-xs text-slate-500 font-medium truncate flex items-center gap-1.5 bg-slate-50 w-fit px-2 py-1 rounded-lg border border-slate-100">
+                                              <Building2 className="w-3 h-3 text-slate-400" />
+                                              {user.faculty_name} {user.department_name && <span className="text-slate-300">•</span>} {user.department_name}
+                                          </p>
                                         )}
-                                    </div>
-                                    <div className="flex items-center gap-1.5 text-sm text-slate-500">
-                                        <Mail className="w-3.5 h-3.5 text-slate-400" /> <span className="truncate">{user.email}</span>
-                                    </div>
-                                    <div className="pt-2 flex flex-col gap-2">
-                                      <RoleBadge roleId={user.role_id} roleName={user.role_name_th || ""} />
-                                      {(user.faculty_name || user.department_name) && (
-                                        <p className="text-xs text-slate-500 font-medium truncate flex items-center gap-1.5 bg-slate-50 w-fit px-2 py-1 rounded-lg border border-slate-100">
-                                            <Building2 className="w-3 h-3 text-slate-400" />
-                                            {user.faculty_name} {user.department_name && <span className="text-slate-300">•</span>} {user.department_name}
-                                        </p>
-                                      )}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex sm:flex-col items-center sm:justify-start gap-2 pt-4 sm:pt-0 border-t sm:border-t-0 sm:border-l border-slate-100 sm:pl-5 shrink-0">
-                                <button onClick={() => handleOpenEdit(user)} className="flex-1 sm:flex-none w-full p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm font-bold border border-slate-200 sm:border-transparent sm:bg-transparent"><Edit2 className="w-4 h-4" /><span className="sm:hidden">แก้ไข</span></button>
-                                <button onClick={() => handleDelete(user.user_id, `${user.firstname} ${user.lastname}`)} className="flex-1 sm:flex-none w-full p-2.5 text-slate-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm font-bold border border-slate-200 sm:border-transparent sm:bg-transparent"><Trash2 className="w-4 h-4" /><span className="sm:hidden">ลบ</span></button>
+                                      </div>
+                                  </div>
+                              </div>
+                              <div className="flex sm:flex-col items-center sm:justify-start gap-2 pt-4 sm:pt-0 border-t sm:border-t-0 sm:border-l border-slate-100 sm:pl-5 shrink-0">
+                                  <button onClick={() => handleOpenEdit(user)} className="flex-1 sm:flex-none w-full p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm font-bold border border-slate-200 sm:border-transparent sm:bg-transparent"><Edit2 className="w-4 h-4" /><span className="sm:hidden">แก้ไข</span></button>
+                                  <button onClick={() => handleDelete(user.user_id, `${user.firstname} ${user.lastname}`)} className="flex-1 sm:flex-none w-full p-2.5 text-slate-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm font-bold border border-slate-200 sm:border-transparent sm:bg-transparent"><Trash2 className="w-4 h-4" /><span className="sm:hidden">ลบ</span></button>
+                              </div>
                             </div>
                         </motion.div>
                     ))}
@@ -471,14 +552,29 @@ export default function UserManagementPage() {
             )}
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex justify-center items-center gap-3 pt-6 pb-4">
-              <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all shadow-sm"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button>
-              <div className="bg-white px-4 py-2 rounded-lg border border-slate-300 shadow-sm font-bold text-sm text-slate-700">{currentPage} <span className="text-slate-400 font-normal mx-1">จาก</span> {totalPages}</div>
-              <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all shadow-sm"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
-          </div>
-        )}
+        {/* 🌟 Pagination Navigation */}
+        <div className="flex justify-center items-center gap-3 pt-6 pb-4">
+            <button 
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
+                disabled={currentPage === 1} 
+                className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+            >
+                <ChevronLeft className="w-5 h-5" />
+            </button>
+            
+            <div className="bg-white px-5 py-2 rounded-xl border border-slate-300 shadow-sm font-bold text-sm text-slate-700">
+                หน้า {currentPage} 
+                {totalPages > 1 && <><span className="text-slate-400 font-normal mx-1">จาก</span> {totalPages}</>}
+            </div>
+            
+            <button 
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+                disabled={currentPage >= totalPages} 
+                className="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+            >
+                <ChevronRight className="w-5 h-5" />
+            </button>
+        </div>
       </div>
 
       {/* Modal Create/Edit */}

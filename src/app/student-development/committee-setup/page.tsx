@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { api } from "@/lib/axios"; 
 import Swal from "sweetalert2";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   Search, Award, Users, Mail, ChevronDown, 
-  ShieldCheck, AlertTriangle, Sparkles, CheckCircle2 
+  ShieldCheck, AlertTriangle, Sparkles, CheckCircle2, Filter
 } from "lucide-react";
 
 // ==========================================
@@ -23,6 +24,7 @@ interface Staff {
   email: string;
   image_path?: string;
   provider?: string;
+  current_role_id?: number; 
 }
 
 // ==========================================
@@ -53,18 +55,17 @@ const RoleBadge = ({ role }: { role: CommitteeRole }) => {
   );
 };
 
-// Avatar Component (Handle missing/broken images with Initials)
+// Avatar Component
 const Avatar = ({ src, name, role }: { src?: string, name: string, role: string }) => {
   const [imgError, setImgError] = useState(false);
-  const initial = name ? name.replace('นาย', '').replace('นางสาว', '').replace('นาง', '').charAt(0) : '?';
-  
+  const initial = name && name !== "-" ? name.replace('นาย', '').replace('นางสาว', '').replace('นาง', '').charAt(0) : '?';
   const ringColor = role === 'chairman' ? 'ring-orange-400' : role === 'committee' ? 'ring-blue-400' : 'ring-slate-200';
 
   return (
     <div className={`relative w-12 h-12 rounded-full ring-2 ring-offset-2 ${ringColor} bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-600 font-bold text-lg overflow-hidden flex-shrink-0 shadow-sm`}>
       {!imgError && src ? (
         <img 
-          src={src.startsWith('http') ? src : `${process.env.NEXT_PUBLIC_API_URL || ''}${src}`} 
+          src={src.startsWith('http') ? src : `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || ''}${src}`} 
           alt={name} 
           onError={() => setImgError(true)}
           className="w-full h-full object-cover"
@@ -77,7 +78,7 @@ const Avatar = ({ src, name, role }: { src?: string, name: string, role: string 
 };
 
 const SkeletonLoader = () => (
-  <div className="space-y-3">
+  <div className="space-y-3 w-full">
     {[1, 2, 3, 4, 5].map((i) => (
       <div key={i} className="bg-white p-5 rounded-2xl border border-slate-100 flex items-center gap-6 animate-pulse shadow-sm">
         <div className="w-12 h-12 bg-slate-200 rounded-full"></div>
@@ -90,6 +91,66 @@ const SkeletonLoader = () => (
     ))}
   </div>
 );
+
+// 🌟 Custom Dropdown Component 🌟
+const CustomSelect = ({ value, onChange, options, icon: Icon, placeholder }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+  
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+  
+    const selectedLabel = options.find((o: any) => o.v === value)?.l || placeholder;
+  
+    return (
+        <div className="relative w-full z-50" ref={dropdownRef}>
+            <div 
+                onClick={() => setIsOpen(!isOpen)}
+                className={`flex items-center justify-between w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl cursor-pointer transition-all duration-300 shadow-sm
+                    ${isOpen ? 'border-blue-400 ring-4 ring-blue-500/10' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}
+                `}
+            >
+                <Icon className={`w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isOpen ? 'text-blue-500' : 'text-slate-400'}`} />
+                <span className={`text-sm font-bold truncate ${!value || value === "all" ? 'text-slate-600' : 'text-slate-800'}`}>
+                    {selectedLabel}
+                </span>
+                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-180 text-blue-500' : ''}`} />
+            </div>
+  
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute top-[calc(100%+8px)] left-0 w-full bg-white border border-slate-100 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] py-2 max-h-60 overflow-y-auto z-[999] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 hover:[&::-webkit-scrollbar-thumb]:bg-slate-300"
+                    >
+                        {options.map((o: any, i: number) => (
+                            <div
+                                key={i}
+                                onClick={() => { onChange(o.v); setIsOpen(false); }}
+                                className={`px-4 py-3 cursor-pointer transition-all duration-200 text-sm font-medium flex items-center justify-between
+                                    ${value === o.v ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                                `}
+                            >
+                                {o.l}
+                                {value === o.v && <CheckCircle2 size={16} className="text-blue-500" />}
+                            </div>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
 
 // ==========================================
 // 2. Main Page Component
@@ -111,13 +172,13 @@ export default function CommitteeSetupPage() {
         const usersRes = await api.get(`${API_BASE_URL}/users/`);
         const rawUsers = usersRes.data?.data || usersRes.data || [];
 
-        const staffs = rawUsers.filter((u: any) => u.role_id === 6);
+        const staffs = rawUsers;
         
         const detailedStaffs = await Promise.all(
           staffs.map(async (u: any) => {
             try {
-              const infoRes = await api.get(`${API_BASE_URL}/users/info/${u.user_id}`);
-              const info = infoRes.data?.data || infoRes.data || {};
+              const infoRes = await api.get(`${API_BASE_URL}/users/info/${u.user_id}`).catch(() => null);
+              const info = infoRes?.data?.data || infoRes?.data || {};
               return { ...u, ...info };
             } catch (err) {
               return u; 
@@ -126,8 +187,12 @@ export default function CommitteeSetupPage() {
         );
 
         const mappedStaffs = detailedStaffs.map((u: any) => {
-          let role: CommitteeRole = "committee"; 
+          let role: CommitteeRole = "none"; 
           
+          if(u.role_id === 6) {
+              role = "committee";
+          }
+
           const isChair = u.is_chairman === true || u.is_chairman === 1 || 
                           u.committee_data?.is_chairman === true || u.committee_data?.is_chairman === 1 ||
                           u.CommitteeData?.is_chairman === true; 
@@ -140,20 +205,24 @@ export default function CommitteeSetupPage() {
             id: u.user_id,
             name: `${u.prefix || ''}${u.firstname} ${u.lastname}`.trim(),
             role: role,
-            email: u.email,
+            email: u.email || "-",
             image_path: u.image_path,
-            provider: u.provider
+            provider: u.provider,
+            current_role_id: u.role_id
           };
         });
 
         mappedStaffs.sort((a: Staff, b: Staff) => {
           if (a.role === 'chairman') return -1;
           if (b.role === 'chairman') return 1;
+          if (a.role === 'committee') return -1;
+          if (b.role === 'committee') return 1;
           return 0;
         });
 
         setStaffList(mappedStaffs);
       } catch (error) {
+        console.error("Error fetching staff list:", error);
         Swal.fire({ icon: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', text: 'ไม่สามารถดึงข้อมูลผู้ใช้ได้', confirmButtonColor: '#3b82f6' });
       } finally {
         setLoading(false);
@@ -171,7 +240,13 @@ export default function CommitteeSetupPage() {
     return staffList.filter(staff => {
       const matchSearch = staff.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           staff.email.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchRole = filterRole === 'all' ? true : staff.role === filterRole;
+      
+      const matchRole = filterRole === 'all' 
+          ? true 
+          : filterRole === 'none' 
+              ? staff.role === 'none'
+              : staff.role === filterRole;
+              
       return matchSearch && matchRole;
     });
   }, [staffList, searchTerm, filterRole]);
@@ -219,11 +294,14 @@ export default function CommitteeSetupPage() {
       try {
         const updatePromises = staffList.map(staff => {
           if (staff.role === 'chairman') {
-            return api.put(`/users/promote-chairman/${staff.id}`);
+            return api.put(`/users/promote-chairman/${staff.id}`).catch(err => console.error(err));
           } else if (staff.role === 'committee') {
-            return api.put(`/users/update/${staff.id}`, { role_id: 6, is_chairman: false });
+            return api.put(`/users/update/${staff.id}`, { role_id: 6, is_chairman: false }).catch(err => console.error(err));
           } else {
-            return api.put(`/users/update/${staff.id}`, { role_id: 2, is_chairman: false });
+            if(staff.current_role_id === 6) {
+                return api.put(`/users/update/${staff.id}`, { role_id: 2, is_chairman: false }).catch(err => console.error(err));
+            }
+            return Promise.resolve(); 
           }
         });
 
@@ -243,13 +321,19 @@ export default function CommitteeSetupPage() {
     }
   };
 
+  const actionOptions = [
+    { v: "all", l: "แสดงทุกตำแหน่ง" },
+    { v: "chairman", l: "ประธานเท่านั้น" },
+    { v: "committee", l: "กรรมการทั่วไป" },
+    { v: "none", l: "รอแต่งตั้ง (ยังไม่ได้ระบุ)" }
+  ];
+
   // ==========================================
   // Render
   // ==========================================
   return (
-    <div className="min-h-screen bg-[#F4F7FC] p-6 md:p-10 pb-36 font-sans text-slate-800 selection:bg-blue-100 selection:text-blue-900">
+    <div className="min-h-screen bg-[#F4F7FC] p-6 md:p-10 pb-36 font-sans text-slate-800 selection:bg-blue-100 selection:text-blue-900 relative">
       
-      {/* Background Decorators */}
       <div className="fixed top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-50/50 to-transparent pointer-events-none -z-10"></div>
       
       <style jsx global>{`
@@ -260,9 +344,8 @@ export default function CommitteeSetupPage() {
       <div className="max-w-6xl mx-auto space-y-10 animate-slide-up">
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
-          {/* Header Section */}
-          <div className="flex flex-col gap-2 relative">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 text-xs font-bold mb-3 border border-blue-200 shadow-sm">
+          <div className="flex flex-col gap-2 relative w-full">
+            <div className="inline-flex w-fit items-center gap-2 px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 text-xs font-bold mb-3 border border-blue-200 shadow-sm">
                 <Sparkles className="w-4 h-4" />ระบบจัดการประธานและกรรมการพิจารณานิสิตดีเด่น
             </div>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">จัดการประธานคณะกรรมการ</h1>
@@ -271,9 +354,8 @@ export default function CommitteeSetupPage() {
         </div>
 
         {/* Stats Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
           
-          {/* Chairman Card */}
           <div className={`relative overflow-hidden p-8 rounded-[2rem] border transition-all duration-500 flex items-center gap-6 shadow-sm hover:shadow-xl
             ${chairman ? 'bg-white border-orange-100 shadow-orange-100/50' : 'bg-slate-50/50 border-dashed border-slate-300'}
           `}>
@@ -292,7 +374,6 @@ export default function CommitteeSetupPage() {
             </div>
           </div>
 
-          {/* Committee Card */}
           <div className="relative overflow-hidden p-8 rounded-[2rem] bg-white border border-blue-50 shadow-sm hover:shadow-xl shadow-blue-100/50 transition-all duration-500 flex items-center gap-6">
              <div className="absolute bottom-0 right-0 w-32 h-32 bg-blue-400/5 rounded-full blur-3xl"></div>
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 flex items-center justify-center shadow-inner">
@@ -311,37 +392,33 @@ export default function CommitteeSetupPage() {
 
         </div>
 
-        {/* Toolbar (Search & Filter) */}
-        <div className="bg-white/80 backdrop-blur-xl p-3 rounded-[1.5rem] shadow-sm border border-slate-200/60 flex flex-col md:flex-row gap-3 sticky top-4 z-20">
-          <div className="relative flex-1 group">
-            <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+        {/* 🚨 Toolbar (Search & Custom Dropdown) 🚨 */}
+        <div className="bg-white/80 backdrop-blur-xl p-3 rounded-[1.5rem] shadow-sm border border-slate-200/60 flex flex-col md:flex-row gap-3 relative z-[100]">
+          <div className="relative flex-1 z-10">
+            <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
               placeholder="ค้นหาชื่อ หรือ อีเมล..." 
-              className="w-full pl-12 pr-4 py-3.5 bg-slate-50/50 hover:bg-slate-50 focus:bg-white border border-transparent focus:border-blue-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-50 transition-all text-slate-700 placeholder:text-slate-400 font-medium"
+              className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all text-slate-700 placeholder:text-slate-400 font-medium shadow-sm"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="relative min-w-[200px]">
-             <select 
-              className="w-full pl-4 pr-10 py-3.5 bg-slate-50/50 hover:bg-slate-50 focus:bg-white border border-transparent focus:border-blue-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-50 cursor-pointer text-slate-700 font-medium appearance-none transition-all"
-              value={filterRole}
-              onChange={e => setFilterRole(e.target.value)}
-            >
-              <option value="all">แสดงทุกตำแหน่ง</option>
-              <option value="chairman">ประธานเท่านั้น</option>
-              <option value="committee">กรรมการทั่วไป</option>
-            </select>
-            <ChevronDown className="w-5 h-5 absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <div className="w-full md:w-72 relative z-[100]">
+             <CustomSelect 
+                value={filterRole} 
+                onChange={setFilterRole} 
+                options={actionOptions} 
+                icon={Filter}
+                placeholder="แสดงทั้งหมด"
+            />
           </div>
         </div>
 
         {/* Staff List (Card-based Table) */}
-        <div>
-          {/* Table Headers (Visible only on lg screens) */}
+        <div className="relative z-0">
           <div className="hidden lg:grid grid-cols-12 gap-4 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
-            <div className="col-span-4">รายชื่อกรรมการ</div>
+            <div className="col-span-4">รายชื่อบุคคลที่สามารถแต่งตั้งได้</div>
             <div className="col-span-4">ข้อมูลติดต่อ</div>
             <div className="col-span-2 text-center">บทบาทปัจจุบัน</div>
             <div className="col-span-2 text-center">ตั้งค่าสิทธิ์</div>
@@ -353,7 +430,7 @@ export default function CommitteeSetupPage() {
             ) : filteredList.length === 0 ? (
               <div className="bg-white rounded-3xl p-16 text-center border border-dashed border-slate-200 flex flex-col items-center justify-center">
                 <AlertTriangle className="w-12 h-12 text-slate-300 mb-4" />
-                <p className="text-slate-500 font-medium">ไม่พบรายชื่อกรรมการในระบบ</p>
+                <p className="text-slate-500 font-medium">ไม่พบรายชื่อในระบบที่ตรงกับเงื่อนไข</p>
               </div>
             ) : (
               filteredList.map((staff, idx) => (
@@ -365,7 +442,6 @@ export default function CommitteeSetupPage() {
                 >
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
                     
-                    {/* Column 1: Profile */}
                     <div className="col-span-1 lg:col-span-4 flex items-center gap-4">
                       <Avatar src={staff.image_path} name={staff.name} role={staff.role} />
                       <div>
@@ -374,7 +450,6 @@ export default function CommitteeSetupPage() {
                       </div>
                     </div>
 
-                    {/* Column 2: Contact Info (Replaced Faculty) */}
                     <div className="col-span-1 lg:col-span-4 flex flex-col justify-center gap-1.5 border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-100">
                       <div className="flex items-center gap-2 text-slate-600">
                         <div className="w-7 h-7 rounded-full bg-slate-50 flex items-center justify-center flex-shrink-0 text-slate-400">
@@ -384,13 +459,11 @@ export default function CommitteeSetupPage() {
                       </div>
                     </div>
 
-                    {/* Column 3: Current Role */}
                     <div className="col-span-1 lg:col-span-2 flex justify-start lg:justify-center py-2 lg:py-0">
                       <RoleBadge role={staff.role} />
                     </div>
 
-                    {/* Column 4: Action */}
-                    <div className="col-span-1 lg:col-span-2 flex justify-end lg:justify-center">
+                    <div className="col-span-1 lg:col-span-2 flex justify-end lg:justify-center relative z-0">
                       <div className="relative w-full sm:w-48 lg:w-full">
                         <select 
                           value={staff.role}

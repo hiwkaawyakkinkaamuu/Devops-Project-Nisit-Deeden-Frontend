@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Swal from "sweetalert2";
-import { api } from "@/lib/axios"; 
+import axios from "axios"; 
 import { useAuth } from "@/context/AuthContext";
 
 // ==========================================
@@ -13,7 +13,6 @@ import { useAuth } from "@/context/AuthContext";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
-// แก้ไข Interface ให้รองรับ committee_data
 interface LoginResponse {
   token: string;
   role: string;
@@ -25,7 +24,7 @@ interface LoginResponse {
     committee_data?: {
       is_chairman: boolean;
     };
-    is_chairman?: boolean; // fallback กรณีที่ backend ส่งมาข้างนอก
+    is_chairman?: boolean; 
   };
 }
 
@@ -56,13 +55,12 @@ export default function LoginPage() {
     window.location.href = `${API_BASE_URL}/auth/google/login`;
   };
 
-  // แก้ไข: Helper: Role-based Redirect พร้อม Logic เช็ค isChairman
+  // Helper: Role-based Redirect พร้อม Logic เช็ค isChairman
   const handleRedirect = (user: LoginResponse["user"]) => {
     const roleId = Number(user.role_id);
     const firstLogin = user.is_first_login;
     const isChairman = user.committee_data?.is_chairman || user.is_chairman || false;
 
-    // ตรวจสอบเงื่อนไข First Login สำหรับนิสิต (1) และหน่วยงานภายนอก (9)
     if (firstLogin) {
       if (roleId === 1) {
         router.push("/student/auth/first-login");
@@ -74,7 +72,6 @@ export default function LoginPage() {
       }
     }
 
-    // เปลี่ยนไปใช้ Switch Case หรือ IF-ELSE แทน Map เพื่อรองรับ Logic ของ Role 6 ได้สะดวกขึ้น
     let targetPath = "/";
 
     switch (roleId) {
@@ -94,16 +91,15 @@ export default function LoginPage() {
         targetPath = "/student-development/verify-submit";
         break;
       case 6:
-        // เช็คว่าเป็นประธานกรรมการหรือไม่
         targetPath = isChairman 
           ? "/chairman-of-student-development-committee/consider"
           : "/student-development-committee/consider";
         break;
       case 7:
-        targetPath = "/chancellor/dashboard"; // อธิการบดี
+        targetPath = "/chancellor/dashboard"; 
         break;
       case 8:
-        targetPath = "/organization/main/organization-nomination-form"; // หน่วยงานภายนอก
+        targetPath = "/organization/main/organization-nomination-form"; 
         break;
       default:
         targetPath = "/";
@@ -113,15 +109,46 @@ export default function LoginPage() {
   };
 
   const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault(); 
     setLoading(true);
 
     try {
-      const response = await api.post(`${API_BASE_URL}/auth/login`, { email, password });
-      const backendData = response.data;
-      const roleId = backendData.user.role_id;
+      // 🚨 ตั้งค่า validateStatus ให้ Axios ไม่พ่น Error สีแดงเมื่อได้โค้ด 401 หรือ 400
+      const response = await axios.post(
+        `${API_BASE_URL}/auth/login`, 
+        { email, password },
+        {
+          validateStatus: function (status) {
+            return status < 500; // ถ้ารหัสน้อยกว่า 500 (เช่น 200, 401, 404) จะไม่กระโดดไป catch
+          }
+        }
+      );
 
-      // บันทึก Token และข้อมูลลง Context โดยส่ง roleId ไปเลย
+      const backendData = response.data;
+
+      // 🚨 ตรวจสอบสถานะดัก 401 แบบแมนนวลแทน
+      if (response.status === 401 || response.status === 404 || response.status === 400) {
+          let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
+          const backendError = backendData?.error || backendData?.message;
+          
+          if (backendError === "invalid credentials" || backendError === "record not found") {
+              errorMessage = "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
+          }
+
+          Swal.fire({
+            icon: "error",
+            title: "เข้าสู่ระบบไม่สำเร็จ",
+            text: errorMessage,
+            confirmButtonColor: "#d33",
+            confirmButtonText: "ลองใหม่อีกครั้ง",
+          });
+          
+          setLoading(false);
+          return; // หยุดการทำงานตรงนี้ ข้อมูลที่พิมพ์ไว้ใน Input จะยังคงอยู่ ไม่รีเฟรชหน้า
+      }
+
+      // หากผ่าน (Status 200) ทำการล็อกอินตามปกติ
+      const roleId = backendData.user.role_id;
       login(backendData.token, roleId.toString(), backendData.user);
 
       await Swal.fire({
@@ -132,24 +159,15 @@ export default function LoginPage() {
         showConfirmButton: false,
       });
 
-      // แก้ไข: โยน Object User ไปทั้งหมดให้ handleRedirect จัดการ
       handleRedirect(backendData.user);
-    } catch (err: any) {
-      console.error("Login Error:", err);
-      let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
-      
-      // ดึง Error Message จาก Backend
-      const backendError = err.response?.data?.error || err.response?.data?.message;
-      if (backendError === "invalid credentials" || backendError === "record not found") {
-          errorMessage = "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
-      }
 
+    } catch (err: any) {
+      console.error("Login Fatal Error:", err);
       Swal.fire({
         icon: "error",
-        title: "เข้าสู่ระบบไม่สำเร็จ",
-        text: errorMessage,
+        title: "ระบบขัดข้อง",
+        text: "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้ในขณะนี้",
         confirmButtonColor: "#d33",
-        confirmButtonText: "ลองใหม่อีกครั้ง",
       });
     } finally {
       setLoading(false);
@@ -167,7 +185,6 @@ export default function LoginPage() {
 
       {/* Left Side (Branding) */}
       <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-[#006633] to-[#004220] text-white flex-col justify-center px-16 relative">
-        {/* Abstract Backgrounds */}
         <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-white opacity-5 rounded-full blur-[100px] animate-pulse"></div>
         <div className="absolute bottom-[-10%] left-[-10%] w-80 h-80 bg-green-400 opacity-10 rounded-full blur-[80px]"></div>
 

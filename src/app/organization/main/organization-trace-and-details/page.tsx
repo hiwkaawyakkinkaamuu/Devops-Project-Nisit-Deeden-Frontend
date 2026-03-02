@@ -1,18 +1,19 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { api } from "@/lib/axios"; 
+import axios from "axios";
 import { 
   CheckCircle2, XCircle, Clock, Award, FileText, 
   History, UserCheck, ShieldCheck, Landmark, GraduationCap,
   ChevronDown, ChevronUp, ArrowRight, ArrowLeft,
-  User, Building2, Search, CalendarDays, Phone, Mail, MapPin, Map,
-  Filter
+  User, Building2, Search, CalendarDays, Phone, Mail, MapPin, Map, AlertCircle, Filter,
+  UserCircle2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+
 const getFileUrl = (filePath: string) => {
   if (!filePath) return "#";
   const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api").replace(/\/api$/, "");
@@ -21,10 +22,10 @@ const getFileUrl = (filePath: string) => {
 };
 
 // ==========================================
-// 1. Logic Mapping & Custom Status Naming
+// 1. Logic Mapping 
 // ==========================================
 const STEP_LOGIC = [
-  { id: 1, label: "ยื่นเสนอชื่อ", ids: [], role: "ผู้ยื่นคำร้อง", icon: User },
+  { id: 1, label: "ยื่นเสนอชื่อ", ids: [], role: "ผู้ยื่นคำร้อง", icon: Building2 },
   { id: 2, label: "ภาควิชา", ids: [1, 3], role: "หัวหน้าภาควิชา", icon: GraduationCap },
   { id: 3, label: "กิจการนิสิต", ids: [2, 5], role: "รองคณบดี", icon: ShieldCheck },
   { id: 4, label: "ระดับคณะ", ids: [4, 7], role: "คณบดี", icon: Landmark },
@@ -34,18 +35,17 @@ const STEP_LOGIC = [
   { id: 8, label: "อธิการบดี", ids: [12, 14, 15], role: "อธิการบดี", icon: CheckCircle2 }
 ];
 
-const getCustomStatusName = (statusId: number, originalName: string) => {
-  const forwardMapping: Record<number, string> = {
-      1: "รอหัวหน้าภาควิชาพิจารณา",
-      2: "รอรองคณบดีพิจารณา",
-      4: "รอคณบดีพิจารณา",
-      6: "รอกองพัฒนานิสิตตรวจสอบ",
-      8: "รอคณะกรรมการพิจารณา",
-      10: "รอประธานคณะกรรมการลงนาม",
-      12: "รออธิการบดีลงนาม",
-      13: "เสร็จสิ้น (อนุมัติรางวัลแล้ว)"
-  };
-  return forwardMapping[statusId] || originalName;
+// ฟังก์ชันหาชื่อ Role จาก Status ของฟอร์ม
+const getRoleFromStatus = (statusId: number) => {
+  switch (statusId) {
+      case 3: return "หัวหน้าภาควิชา";
+      case 5: return "รองคณบดีฝ่ายกิจการนิสิต";
+      case 7: return "คณบดี";
+      case 9: return "กองพัฒนานิสิต";
+      case 11: return "คณะกรรมการพิจารณา";
+      case 15: return "อธิการบดี";
+      default: return "ผู้พิจารณาคำร้อง";
+  }
 };
 
 // ==========================================
@@ -56,7 +56,7 @@ export default function OrganizationTraceAndDetails() {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   
-  // 🌟 เพิ่ม State สำหรับจัดการ Filter ปีการศึกษา
+  // 🌟 State สำหรับจัดการ Filter ปีการศึกษา
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [selectedYear, setSelectedYear] = useState<string>("all");
   
@@ -71,20 +71,21 @@ export default function OrganizationTraceAndDetails() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // เพิ่มการดึงข้อมูลปีการศึกษาเข้าไปใน Promise.all
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
         const [statusRes, subRes, facRes, deptRes, campusRes, yearsRes] = await Promise.all([
-          api.get(`${API_BASE_URL}/form-statuses`).catch((e) => { console.warn("Cannot fetch statuses", e); return { data: { data: [] } }; }),
-          api.get(`${API_BASE_URL}/awards/my/submissions`), 
-          api.get(`${API_BASE_URL}/faculty`).catch((e) => { console.warn("Cannot fetch faculty", e); return { data: { data: [] } }; }),
-          api.get(`${API_BASE_URL}/department`).catch((e) => { console.warn("Cannot fetch department", e); return { data: { data: [] } }; }),
-          api.get(`${API_BASE_URL}/campus`).catch((e) => { console.warn("Cannot fetch campus", e); return { data: { data: [] } }; }),
-          api.get(`${API_BASE_URL}/academic-years/all`).catch((e) => { console.warn("Cannot fetch years", e); return { data: { data: [] } }; })
+          axios.get(`${API_BASE_URL}/form-statuses/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
+          axios.get(`${API_BASE_URL}/awards/my/submissions`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`${API_BASE_URL}/faculty/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
+          axios.get(`${API_BASE_URL}/department/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
+          axios.get(`${API_BASE_URL}/campus/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
+          axios.get(`${API_BASE_URL}/academic-years/all`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } }))
         ]);
 
         const statuses = statusRes.data?.data || [];
         const rawSubmissions = subRes.data?.data || [];
         
-        // เซ็ตปีการศึกษา
         setAcademicYears(yearsRes.data?.data || []);
         
         setMetaData({
@@ -94,18 +95,18 @@ export default function OrganizationTraceAndDetails() {
             statuses: statuses
         });
 
+        // ดึง Details พร้อม Logs
         const detailed = await Promise.all(rawSubmissions.map(async (item: any) => {
             try {
-                // 🚨 แก้ไข API จาก /awards/:id/logs (ซึ่ง 404) มาใช้ /awards/details/:id แทน
-                // หรือหาก Backend ใช้ route อื่นในการดึง log สามารถเปลี่ยนตรงนี้ได้เลยครับ
-                const detailRes = await api.get(`${API_BASE_URL}/awards/details/${item.form_id}`);
+                const detailRes = await axios.get(`${API_BASE_URL}/awards/details/${item.form_id}`, { 
+                    headers: { Authorization: `Bearer ${token}` } 
+                });
                 
-                // สมมติว่า Backend คืนค่า log มาในชื่อ field ว่า logs 
                 const itemLogs = detailRes.data?.data?.logs || detailRes.data?.logs || [];
-                
+
                 return {
                     ...item,
-                    ...detailRes.data?.data, // เผื่อมีข้อมูล detail อื่นๆ คืนมาด้วย
+                    ...detailRes.data?.data,
                     logs: itemLogs,
                     status_detail: statuses.find((s: any) => s.form_status_id === item.form_status)
                 };
@@ -117,7 +118,7 @@ export default function OrganizationTraceAndDetails() {
 
         setSubmissions(detailed);
       } catch (e) { 
-          console.error("Critical Error fetching submissions:", e); 
+          console.error("Error fetching data:", e); 
       } finally { 
           setLoading(false); 
       }
@@ -125,15 +126,23 @@ export default function OrganizationTraceAndDetails() {
     fetchData();
   }, []);
 
-  // 🌟 ฟังก์ชันกรองข้อมูลตามปีการศึกษาที่เลือก
   const filteredSubmissions = selectedYear === "all" 
     ? submissions 
     : submissions.filter(item => String(item.academic_year) === selectedYear);
 
+  // สร้างตัวเลือกสำหรับ Custom Dropdown
+  const yearOptions = [
+    { v: "all", l: "ทั้งหมด" },
+    ...academicYears.map((yearObj: any) => {
+        const y = typeof yearObj === 'object' ? (yearObj.year || yearObj.academic_year) : yearObj;
+        return { v: String(y), l: String(y) };
+    })
+  ];
+
   return (
     <div className="min-h-screen bg-slate-50 pb-40 font-sans selection:bg-blue-100">
       
-      {/* 🏛️ HEADER */}
+      {/* HEADER */}
       <header className="bg-white/90 backdrop-blur-xl sticky top-0 z-50 border-b border-slate-200/60 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -142,12 +151,12 @@ export default function OrganizationTraceAndDetails() {
                         <ArrowLeft size={20} />
                     </button>
                 ) : (
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
-                        <Search size={20} />
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200 shrink-0">
+                        <Building2 size={20} />
                     </div>
                 )}
-                <div>
-                    <h1 className="text-xl font-black text-slate-800 tracking-tight">
+                <div className="overflow-hidden">
+                    <h1 className="text-xl font-black text-slate-800 tracking-tight truncate">
                         {selectedItem ? "รายละเอียดข้อมูลคำร้อง" : "ระบบติดตามสถานะคำร้อง"}
                     </h1>
                     <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
@@ -157,7 +166,7 @@ export default function OrganizationTraceAndDetails() {
             </div>
             {!selectedItem && (
                 <Link href="/organization/main/organization-nomination-form" className="hidden sm:flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-md hover:shadow-lg">
-                    <FileText size={16} /> ยื่นเสนอชื่อใหม่
+                    <FileText size={16} /> เสนอรายชื่อใหม่
                 </Link>
             )}
         </div>
@@ -168,40 +177,26 @@ export default function OrganizationTraceAndDetails() {
             {loading ? (
                 <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center py-32 space-y-6">
                     <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
-                    <p className="text-slate-400 font-bold animate-pulse">กำลังดึงข้อมูลคำร้อง...</p>
+                    <p className="text-slate-400 font-bold animate-pulse">กำลังดึงข้อมูลคำร้องของหน่วยงาน...</p>
                 </motion.div>
             ) : selectedItem ? (
-                /* โหมดดูรายละเอียด (Detail View) */
                 <motion.div key="detail" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
                     <SubmissionDetailView item={selectedItem} metaData={metaData} />
                 </motion.div>
             ) : (
-                /* โหมดหน้ารายการปกติ (List View) */
                 <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
                     
-                    {/* 🌟 เพิ่มส่วนหัวที่มี Filter ปีการศึกษา */}
+                    {/* 🌟 ส่วนหัวที่มี Custom Filter Dropdown */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-1.5 h-6 bg-indigo-600 rounded-full"></div>
-                            <h3 className="text-2xl font-black text-slate-800 tracking-tight">รายการคำร้องที่ยื่นแล้ว</h3>
+                            <h3 className="text-2xl font-black text-slate-800 tracking-tight">ประวัติการเสนอชื่อ</h3>
                         </div>
                         
-                        <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl border border-slate-200 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
                             <Filter size={16} className="text-slate-400" />
                             <span className="text-sm font-bold text-slate-600 whitespace-nowrap">ปีการศึกษา:</span>
-                            <select 
-                                value={selectedYear} 
-                                onChange={(e) => setSelectedYear(e.target.value)}
-                                className="bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-1.5 outline-none cursor-pointer"
-                            >
-                                <option value="all">ทั้งหมด</option>
-                                {/* วนลูปแสดงปีการศึกษาที่ดึงมาจาก API /all */}
-                                {academicYears.map((yearObj: any, idx: number) => {
-                                    // เผื่อ Backend ส่งมาเป็น { year: "2568" } หรือเป็น string ตรงๆ
-                                    const y = typeof yearObj === 'object' ? (yearObj.year || yearObj.academic_year) : yearObj;
-                                    return <option key={idx} value={String(y)}>{y}</option>
-                                })}
-                            </select>
+                            <YearFilterDropdown value={selectedYear} onChange={setSelectedYear} options={yearOptions} />
                         </div>
                     </div>
 
@@ -228,16 +223,133 @@ export default function OrganizationTraceAndDetails() {
 }
 
 // ==========================================
-// 3. Components สำหรับแสดงผล (ไม่มีการแก้ไขส่วนนี้)
+// 3. Components สำหรับแสดงผล
 // ==========================================
 
+const formatDateDisplay = (isoDate: string) => {
+    if (!isoDate) return "-";
+    const date = new Date(isoDate);
+    if (isNaN(date.getTime())) return isoDate;
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
+const formatDateTimeDisplay = (isoDate: string) => {
+    if (!isoDate) return "-";
+    const date = new Date(isoDate);
+    if (isNaN(date.getTime())) return isoDate;
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+const calculateAge = (isoDate: string) => {
+    if (!isoDate) return "-";
+    const dob = new Date(isoDate);
+    if (isNaN(dob.getTime())) return "-";
+    const diff = Date.now() - dob.getTime();
+    const ageDate = new Date(diff);
+    return Math.abs(ageDate.getUTCFullYear() - 1970);
+};
+
+const THEME_STYLES: Record<string, any> = {
+    "activity": {
+        border: "border-orange-100", gradient: "from-orange-400 to-orange-600", 
+        numberBg: "bg-orange-600", text: "text-orange-600", bgSoft: "bg-orange-50"
+    },
+    "innovation": {
+        border: "border-purple-100", gradient: "from-purple-400 to-purple-600", 
+        numberBg: "bg-purple-600", text: "text-purple-600", bgSoft: "bg-purple-50"
+    },
+    "behavior": {
+        border: "border-blue-100", gradient: "from-blue-400 to-blue-600", 
+        numberBg: "bg-blue-600", text: "text-blue-600", bgSoft: "bg-blue-50"
+    },
+    "other": {
+        border: "border-emerald-100", gradient: "from-emerald-400 to-teal-500", 
+        numberBg: "bg-emerald-600", text: "text-emerald-600", bgSoft: "bg-emerald-50"
+    },
+    "default": {
+        border: "border-slate-100", gradient: "from-slate-400 to-slate-600", 
+        numberBg: "bg-slate-600", text: "text-slate-600", bgSoft: "bg-slate-50"
+    }
+};
+
+// 🌟 Custom Dropdown Component
+function YearFilterDropdown({ value, onChange, options }: any) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+          if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+              setIsOpen(false);
+          }
+      };
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedLabel = options.find((o: any) => o.v === value)?.l || "ทั้งหมด";
+
+  return (
+      <div className="relative" ref={dropdownRef}>
+          <div 
+              onClick={() => setIsOpen(!isOpen)}
+              className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 text-slate-700 text-sm font-bold rounded-xl px-4 py-2 cursor-pointer hover:border-indigo-300 hover:bg-white transition-all min-w-[120px]"
+          >
+              <span>{selectedLabel}</span>
+              <ChevronDown size={16} className={`text-slate-400 transition-transform duration-300 ${isOpen ? "rotate-180 text-indigo-500" : ""}`} />
+          </div>
+
+          <AnimatePresence>
+              {isOpen && (
+                  <motion.div
+                      initial={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
+                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                      exit={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
+                      transition={{ duration: 0.2 }}
+                      className="absolute right-0 z-50 w-full min-w-[140px] mt-2 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300"
+                  >
+                      {options.map((o: any, i: number) => (
+                          <div
+                              key={i}
+                              onClick={() => { onChange(o.v); setIsOpen(false); }}
+                              className={`px-4 py-2.5 cursor-pointer transition-all duration-200 font-medium text-sm flex items-center justify-between
+                                  ${value === o.v ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                              `}
+                          >
+                              {o.l}
+                              {value === o.v && <CheckCircle2 size={14} className="text-indigo-600" />}
+                          </div>
+                      ))}
+                  </motion.div>
+              )}
+          </AnimatePresence>
+      </div>
+  );
+}
+
+
 function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
-  const isRejected = [3, 5, 7, 9, 11].includes(item.form_status);
-  const isAccepted = item.form_status === 13;
+  const isRejected = [3, 5, 7, 9, 11, 13, 15].includes(item.form_status);
+  const isAccepted = item.form_status === 14;
   
-  const rawStatusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name || "ไม่ทราบสถานะ";
-  const statusName = getCustomStatusName(item.form_status, rawStatusName);
+  let statusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name || "ไม่ทราบสถานะ";
+  if (item.form_status === 1) {
+      statusName = "รอหัวหน้าภาควิชาพิจารณา";
+  }
+
   const facultyName = metaData.faculties.find((f: any) => f.faculty_id === item.faculty_id)?.faculty_name || "ไม่ระบุ";
+
+  let detailObj: any = {};
+  try {
+      detailObj = typeof item.form_detail === 'string' && item.form_detail.startsWith('{') 
+                  ? JSON.parse(item.form_detail) 
+                  : {};
+  } catch(e) {}
+
+  const showFirstName = detailObj.student_firstname || item.student_firstname;
+  const showLastName = detailObj.student_lastname || item.student_lastname;
+  const showStudentNumber = detailObj.student_number || item.student_number;
+  const showFaculty = detailObj.faculty || facultyName;
 
   return (
     <motion.div 
@@ -267,10 +379,10 @@ function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 text-sm font-semibold text-slate-600">
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center"><User size={14} /></div>
-                    <span>{item.student_firstname} {item.student_lastname} ({item.student_number})</span>
+                    <span>{showFirstName} {showLastName} ({showStudentNumber})</span>
                 </div>
                 <div className="hidden sm:block w-1.5 h-1.5 rounded-full bg-slate-300"></div>
-                <span className="text-slate-500">{facultyName}</span>
+                <span className="text-slate-500">{showFaculty}</span>
             </div>
         </div>
 
@@ -282,7 +394,7 @@ function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
                     isRejected ? "bg-rose-50 text-rose-700 border-rose-200" :
                     "bg-indigo-50 text-indigo-700 border-indigo-200"
                 }`}>
-                    {statusName}
+                    {statusName.replace(/_/g, ' ')}
                 </div>
             </div>
             <button className="w-full lg:w-auto px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-indigo-600 transition-all shadow-md flex items-center justify-center gap-2">
@@ -302,16 +414,9 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
   };
   
   const currentStep = getStepProgress(item.form_status);
-  const isRejected = [3, 5, 7, 9, 11].includes(item.form_status);
-  const isAccepted = item.form_status === 13;
+  const isRejected = [3, 5, 7, 9, 11, 13, 15].includes(item.form_status);
+  const isAccepted = item.form_status === 14;
   const currentRole = STEP_LOGIC.find(s => s.id === currentStep)?.role || "ระบบ";
-
-  const rawStatusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name || "ไม่ทราบสถานะ";
-  const statusName = getCustomStatusName(item.form_status, rawStatusName);
-
-  const facultyName = metaData.faculties.find((f: any) => f.faculty_id === item.faculty_id)?.faculty_name || "ไม่ระบุ";
-  const departmentName = metaData.departments.find((d: any) => d.department_id === item.department_id)?.department_name || "ไม่ระบุ";
-  const campusName = metaData.campuses.find((c: any) => c.campusId === item.campusId)?.campusName || "ไม่ระบุ";
 
   let detailObj: any = {};
   try {
@@ -320,8 +425,122 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                   : { other_details: item.form_detail };
   } catch(e) { detailObj = { other_details: item.form_detail }; }
 
+  let statusName = metaData.statuses.find((s: any) => s.form_status_id === item.form_status)?.form_status_name?.replace(/_/g, ' ') || "ไม่ทราบสถานะ";
+  if (item.form_status === 1) {
+      statusName = "รอหัวหน้าภาควิชาพิจารณา";
+  }
+  
+  const showFirstName = detailObj.student_firstname || item.student_firstname;
+  const showLastName = detailObj.student_lastname || item.student_lastname;
+  const showStudentNumber = detailObj.student_number || item.student_number;
+  const showEmail = detailObj.email || item.student_email;
+  const showFaculty = detailObj.faculty || metaData.faculties.find((f: any) => f.faculty_id === item.faculty_id)?.faculty_name || "ไม่ระบุ";
+  const showDept = detailObj.department || metaData.departments.find((d: any) => d.department_id === item.department_id)?.department_name || "ไม่ระบุ";
+  const showCampus = detailObj.campus || metaData.campuses.find((c: any) => c.campusId === item.campusId)?.campusName || "ไม่ระบุ";
+
+  // ✅ รวม Log ทั้งจาก API และสร้าง Log จำลอง (Fallback) ในกรณีที่เกิดการปฏิเสธ
+  const safeLogs = Array.isArray(item.logs) ? item.logs : [];
+  let displayLogs = [...safeLogs];
+  
+  const hasRejectLogInApi = displayLogs.some(log => 
+      (log.approval_status && String(log.approval_status).toLowerCase().includes("reject")) ||
+      (log.operation && String(log.operation).toLowerCase().includes("reject"))
+  );
+
+  // ถ้าไม่มี log การ Reject แต่ฟอร์มเป็นสถานะ Reject ให้สร้างจำลองขึ้นมา
+  if (!hasRejectLogInApi && isRejected) {
+      displayLogs.push({
+          approval_log_id: 999999,
+          form_id: item.form_id,
+          role_name: getRoleFromStatus(item.form_status), 
+          approval_status: "reject",
+          operation: "reject",
+          approved_at: item.latest_update || item.created_at,
+          reject_reason: item.reject_reason || "ไม่ได้ระบุเหตุผล (กรุณาติดต่อผู้พิจารณา)"
+      });
+  }
+
+  // เรียงลำดับ Log ใหม่สุดขึ้นก่อน
+  displayLogs.sort((a: any, b: any) => new Date(b.operation_date || b.approved_at || b.created_at || 0).getTime() - new Date(a.operation_date || a.approved_at || a.created_at || 0).getTime());
+
+  // เลือกเฉพาะ Log ที่ถูกตีกลับ เพื่อนำไปแสดงในกล่องสีแดงด้านบน
+  const rejectedLogs = displayLogs.filter(log => 
+      (log.approval_status && String(log.approval_status).toLowerCase().includes("reject")) ||
+      (log.operation && String(log.operation).toLowerCase().includes("reject")) ||
+      (log.reject_reason && String(log.reject_reason).trim() !== "")
+  );
+
+  const translateField = (field: string) => {
+    const dictionary: Record<string, string> = {
+        form_status: "สถานะ",
+        form_status_id: "สถานะ",
+        award_type: "ประเภทรางวัล",
+        award_type_id: "ประเภทรางวัล",
+        faculty_id: "คณะ",
+        department_id: "ภาควิชา"
+    };
+    return dictionary[field] || field;
+  };
+
+  const formatValue = (field: string, value: any) => {
+    if (!value) return "-";
+    if (field === "form_status" || field === "form_status_id") {
+        const id = parseInt(value, 10);
+        if (id === 1) return "รอหัวหน้าภาควิชาพิจารณา";
+        const status = metaData.statuses.find((s: any) => s.form_status_id === id);
+        return status ? status.form_status_name.replace(/_/g, ' ') : value;
+    }
+    if (field === "faculty_id") {
+        const fac = metaData.faculties.find((f: any) => f.faculty_id === parseInt(value, 10));
+        return fac ? fac.faculty_name : value;
+    }
+    if (field === "department_id") {
+        const dept = metaData.departments.find((d: any) => d.department_id === parseInt(value, 10));
+        return dept ? dept.department_name : value;
+    }
+    return value;
+  };
+
+  const awardStr = item.award_type || item.award_type_name || "";
+  const isActivity = awardStr.includes("กิจกรรม");
+  const isInnovation = awardStr.includes("นวัตกรรม");
+  const isBehavior = awardStr.includes("ประพฤติดี");
+  const isOther = !isActivity && !isInnovation && !isBehavior;
+
+  let themeKey = "default";
+  if (isActivity) themeKey = "activity";
+  if (isInnovation) themeKey = "innovation";
+  if (isBehavior) themeKey = "behavior";
+  if (isOther && awardStr) themeKey = "other";
+  const theme = THEME_STYLES[themeKey];
+
   return (
     <div className="space-y-8 animate-fade-in-up">
+        {/* ✅ กล่องแสดงเหตุผลการปฏิเสธ (ถ้ามี) */}
+        {rejectedLogs.length > 0 && (
+            <div className="space-y-4">
+                {rejectedLogs.map((log: any, index: number) => (
+                    <div key={log.approval_log_id || index} className="bg-rose-50 border border-rose-200 p-6 md:p-8 rounded-[32px] shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-rose-400 to-red-600"></div>
+                        <h3 className="text-xl md:text-2xl font-black text-rose-800 mb-2 flex items-center gap-3">
+                            <AlertCircle className="w-7 h-7 text-rose-600" />
+                            ฟอร์มถูกตีกลับให้แก้ไขโดย: {log.role_name || getRoleFromStatus(item.form_status)}
+                        </h3>
+                        <p className="text-sm font-bold text-rose-500 mb-5 flex items-center gap-2">
+                            <Clock className="w-4 h-4" />
+                            เมื่อวันที่: {formatDateTimeDisplay(log.operation_date || log.approved_at || log.created_at || item.latest_update)}
+                        </p>
+                        <div className="space-y-3">
+                            <label className="text-sm font-bold text-rose-700 bg-rose-200/50 px-3 py-1 rounded-md inline-block">ข้อเสนอแนะ / เหตุผลที่ปฏิเสธ:</label>
+                            <div className="w-full bg-white border border-rose-200 rounded-2xl px-5 py-4 text-[15px] font-medium text-gray-800 whitespace-pre-wrap shadow-inner leading-relaxed">
+                                {log.reject_reason || item.reject_reason || "ไม่มีการระบุเหตุผลประกอบ"}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        )}
+
         {/* SECTION 1: TIMELINE & STATUS */}
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-200/60 p-8 md:p-10">
             <div className="flex flex-col lg:flex-row justify-between items-start gap-8 mb-12 border-b border-slate-100 pb-8">
@@ -350,7 +569,7 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                         {statusName}
                     </div>
                     <p className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
-                        <UserCheck size={14} className="text-indigo-500" /> รับผิดชอบโดย: <span className="text-indigo-600">{currentRole}</span>
+                        <UserCheck size={14} className="text-indigo-500" /> รอพิจารณาโดย: <span className="text-indigo-600">{currentRole}</span>
                     </p>
                 </div>
             </div>
@@ -360,6 +579,7 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                 <div className="absolute top-[26px] left-[28px] right-[28px] h-[6px] flex items-center z-0">
                     {Array.from({ length: 7 }).map((_, i) => {
                         const stepTarget = i + 2; 
+                        
                         const isCompleted = currentStep > stepTarget || isAccepted;
                         const isProcessing = currentStep === stepTarget && !isRejected && !isAccepted;
                         const isError = currentStep === stepTarget && isRejected;
@@ -400,6 +620,7 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                                     {isActive && !isErr && (
                                         <div className="absolute -inset-2 bg-indigo-400/30 rounded-full animate-ping z-0"></div>
                                     )}
+                                    
                                     <div className={`relative z-10 w-14 h-14 rounded-2xl border-4 flex items-center justify-center transition-all duration-500 shadow-sm ${
                                         isDone ? "bg-indigo-600 border-indigo-600 text-white" :
                                         isErr ? "bg-rose-500 border-rose-500 text-white scale-110 shadow-rose-200" :
@@ -409,6 +630,7 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                                         <StepIcon size={22} strokeWidth={isDone || isActive ? 2.5 : 2} />
                                     </div>
                                 </div>
+                                
                                 <div className="mt-4 text-center absolute top-14 w-28 -ml-7">
                                     <p className={`text-[11px] font-black uppercase tracking-tight mt-1 ${isActive ? 'text-indigo-700' : isDone ? 'text-slate-600' : 'text-slate-400'}`}>
                                         {step.label}
@@ -430,36 +652,60 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                 <AnimatePresence>
                     {showLogs && (
                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden w-full mt-6">
-                            <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-6 space-y-4">
-                                {item.logs?.length > 0 ? item.logs.map((log: any, i: number) => {
+                            <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-6 space-y-4">
+                                {displayLogs.length > 0 ? displayLogs.map((log: any, i: number) => {
                                     
-                                    let actionText = "อัปเดตข้อมูล";
-                                    let displayValue = log.new_value;
-
-                                    if (log.field_name === "form_status" || log.field_name === "form_status_id") {
-                                        actionText = "เปลี่ยนสถานะคำร้องเป็น";
-                                        const matchedStatus = metaData.statuses.find((s: any) => String(s.form_status_id) === String(log.new_value));
-                                        if (matchedStatus) {
-                                            displayValue = getCustomStatusName(Number(log.new_value), matchedStatus.form_status_name);
-                                        }
-                                    } else {
-                                        actionText = `เปลี่ยน ${log.field_name} เป็น`;
-                                    }
+                                    const isApproveLog = log.approval_status === "approve" || log.operation === "approve";
+                                    const isRejectLog = log.approval_status === "reject" || log.operation === "reject";
+                                    
+                                    const actionText = isApproveLog ? "เห็นชอบ (Approve)" : isRejectLog ? "ไม่เห็นชอบ (ตีกลับ)" : "ดำเนินการพิจารณา";
+                                    const colorClass = isApproveLog ? "text-emerald-600" : isRejectLog ? "text-rose-600" : "text-indigo-600";
+                                    const bgClass = isApproveLog ? "bg-emerald-50 border-emerald-200" : isRejectLog ? "bg-rose-50 border-rose-200" : "bg-indigo-50 border-indigo-200";
+                                    
+                                    // หากไม่มี role name ส่งมา ให้คำนวณจากสถานะ
+                                    const roleName = log.role_name || (isRejectLog ? getRoleFromStatus(item.form_status) : "ผู้พิจารณาคำร้อง");
 
                                     return (
-                                    <div key={i} className="flex gap-4 items-start text-sm bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-                                        <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 shrink-0"><UserCheck size={18} /></div>
-                                        <div>
-                                            <p className="font-bold text-slate-800">{actionText} <span className="text-indigo-600">{displayValue}</span></p>
-                                            <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                                                <Clock size={12}/> {new Date(log.created_at).toLocaleString('th-TH')} 
-                                                <span className="w-1 h-1 bg-slate-300 rounded-full"></span> 
-                                                ดำเนินการโดย ID: {log.changed_by || "System"}
-                                            </p>
+                                        <div key={i} className={`flex gap-5 items-start text-sm bg-white p-5 rounded-2xl shadow-sm border ${isRejectLog ? 'border-rose-100 hover:border-rose-300' : 'border-slate-100 hover:border-indigo-300'} transition-colors`}>
+                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 border ${bgClass} ${colorClass}`}>
+                                                {isApproveLog ? <CheckCircle2 size={20} /> : isRejectLog ? <XCircle size={20} /> : <UserCheck size={20} />}
+                                            </div>
+                                            <div className="flex-1 w-full">
+                                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
+                                                    <p className="font-bold text-slate-800 text-base">
+                                                        ผลการพิจารณา: <span className={colorClass}>{actionText}</span>
+                                                    </p>
+                                                    <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5 w-fit">
+                                                        <Clock size={12}/> {formatDateTimeDisplay(log.operation_date || log.approved_at || log.created_at)}
+                                                    </span>
+                                                </div>
+                                                
+                                                <p className="text-sm font-medium text-slate-600 mb-3 flex items-center gap-2 flex-wrap">
+                                                    <UserCircle2 size={16} className="text-slate-400" />
+                                                    ผู้ดำเนินการ: <span className="text-indigo-600">{roleName}</span> 
+                                                    <span className="text-slate-400 font-normal">(ID: {log.user_id || log.reviewer_user_id || "ระบบ"})</span>
+                                                </p>
+
+                                                {/* แสดงเหตุผลถ้ามีการตีกลับใน Log นั้นๆ */}
+                                                {isRejectLog && (log.reject_reason || item.reject_reason) && (
+                                                    <div className="mt-3 p-4 bg-rose-50/80 border border-rose-100 rounded-xl">
+                                                        <p className="text-rose-800 font-bold text-xs mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
+                                                            <FileText size={12} /> เหตุผลที่แจ้งให้แก้ไข
+                                                        </p>
+                                                        <p className="text-rose-600 text-sm font-medium whitespace-pre-wrap leading-relaxed">
+                                                            {log.reject_reason || item.reject_reason}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
                                     )
-                                }) : <p className="text-center text-slate-400 text-sm py-4">-- ไม่มีประวัติการอัปเดต --</p>}
+                                }) : (
+                                    <div className="text-center py-10">
+                                        <History className="w-12 h-12 mx-auto text-slate-300 mb-3 opacity-50" />
+                                        <p className="text-slate-500 font-medium">ยังไม่มีประวัติการดำเนินการพิจารณาคำร้องนี้</p>
+                                    </div>
+                                )}
                             </div>
                         </motion.div>
                     )}
@@ -471,39 +717,42 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-200/60 overflow-hidden">
             <div className="bg-slate-900 px-8 py-6 flex items-center gap-3">
                 <FileText className="text-indigo-400" size={24} />
-                <h3 className="text-xl font-black text-white">ข้อมูลรายละเอียดในคำร้อง</h3>
+                <h3 className="text-xl font-black text-white">ข้อมูลรายละเอียดในคำร้องของหน่วยงาน</h3>
             </div>
 
             <div className="p-8 md:p-10 space-y-12">
+                
+                {/* 1. ข้อมูลส่วนตัวนิสิต */}
                 <section>
                     <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
                         <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center"><User size={18} /></div>
-                        <h4 className="text-lg font-black text-slate-800">1. ข้อมูลนิสิตที่ได้รับการเสนอชื่อ</h4>
+                        <h4 className="text-lg font-black text-slate-800">ข้อมูลส่วนตัวนิสิตที่ได้รับการเสนอชื่อ</h4>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                        <ReadOnlyField label="ชื่อ-นามสกุล" value={`${item.student_firstname} ${item.student_lastname}`} />
-                        <ReadOnlyField label="รหัสนิสิต" value={item.student_number} />
+                        <ReadOnlyField label="ชื่อ-นามสกุล" value={`${showFirstName} ${showLastName}`} />
+                        <ReadOnlyField label="รหัสนิสิต" value={showStudentNumber} />
                         <ReadOnlyField label="ชั้นปี" value={item.student_year} />
-                        <ReadOnlyField label="คณะ" value={facultyName} />
-                        <ReadOnlyField label="สาขา/ภาควิชา" value={departmentName} />
-                        <ReadOnlyField label="วิทยาเขต" value={campusName} />
+                        <ReadOnlyField label="คณะ" value={showFaculty} />
+                        <ReadOnlyField label="สาขา/ภาควิชา" value={showDept} />
+                        <ReadOnlyField label="วิทยาเขต" value={showCampus} />
                         <ReadOnlyField label="เกรดเฉลี่ย (GPA)" value={item.gpa} />
                         <ReadOnlyField label="วัน/เดือน/ปีเกิด" value={item.student_date_of_birth ? new Date(item.student_date_of_birth).toLocaleDateString('th-TH') : "-"} />
                         <ReadOnlyField label="อาจารย์ที่ปรึกษา" value={item.advisor_name} />
                     </div>
                     
                     <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <ReadOnlyField label="อีเมลติดต่อ" value={item.student_email} icon={Mail} />
+                        <ReadOnlyField label="อีเมลติดต่อ" value={showEmail} icon={Mail} />
                         <ReadOnlyField label="เบอร์โทรศัพท์" value={item.student_phone_number} icon={Phone} />
                         <ReadOnlyField label="ที่อยู่ปัจจุบัน" value={item.student_address} icon={MapPin} className="md:col-span-2" />
                     </div>
                 </section>
 
+                {/* 2. ข้อมูลหน่วยงาน */}
                 {item.org_name && (
                     <section>
                         <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
                             <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center"><Building2 size={18} /></div>
-                            <h4 className="text-lg font-black text-slate-800">2. หน่วยงานที่เสนอชื่อ</h4>
+                            <h4 className="text-lg font-black text-slate-800">ข้อมูลองค์กร/หน่วยงานที่เสนอชื่อ</h4>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <ReadOnlyField label="ชื่อหน่วยงาน" value={item.org_name} />
@@ -514,10 +763,11 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                     </section>
                 )}
 
+                {/* 3. รายละเอียดผลงาน */}
                 <section>
                     <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
                         <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center"><Award size={18} /></div>
-                        <h4 className="text-lg font-black text-slate-800">3. รายละเอียดเหตุผลและผลงาน</h4>
+                        <h4 className="text-lg font-black text-slate-800">รายละเอียดผลงานและการเสนอชื่อ</h4>
                     </div>
                     
                     {detailObj.project_title && (
@@ -531,42 +781,50 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                     )}
                     
                     <ReadOnlyField 
-                        label="เหตุผลในการเสนอชื่อ (โดยละเอียด)" 
+                        label="เหตุผลในการเสนอชื่อ/รายละเอียดเพิ่มเติม" 
                         value={detailObj.other_details || item.form_detail} 
                         isTextArea 
                         className="bg-indigo-50/50 border-indigo-100"
                     />
                 </section>
 
+                {/* 4. ไฟล์แนบ */}
                 {item.files && item.files.length > 0 && (
                     <section>
                          <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
                             <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center"><FileText size={18} /></div>
-                            <h4 className="text-lg font-black text-slate-800">4. เอกสารแนบ</h4>
+                            <h4 className="text-lg font-black text-slate-800">เอกสารแนบประกอบพิจารณา</h4>
                         </div>
                         <div className="flex flex-col gap-3">
-                            {item.files.map((file: any, idx: number) => (
-                                <a 
-                                    key={idx} 
-                                    href={getFileUrl(file.file_path)}
-                                    target="_blank" 
-                                    rel="noreferrer"
-                                    className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-indigo-400 hover:shadow-md transition-all group"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
-                                            <FileText size={20} />
+                            {item.files.map((file: any, idx: number) => {
+                                let safePath = file.file_path;
+                                if (safePath.startsWith("api/")) safePath = safePath.replace("api/", "");
+                                if (safePath.startsWith("/api/")) safePath = safePath.replace("/api/", "");
+                                if (!safePath.startsWith("/")) safePath = "/" + safePath;
+
+                                const fileName = file.file_name || safePath.split('/').pop() || `Document_${idx + 1}.pdf`;
+
+                                return (
+                                    <a 
+                                        key={idx} 
+                                        href={safePath}
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="group flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:border-red-200 hover:shadow-md transition-all duration-300"
+                                    >
+                                        <div className="flex items-center gap-4 overflow-hidden">
+                                             <div className="w-12 h-12 bg-red-50 rounded-lg flex items-center justify-center text-red-500 font-bold text-xs group-hover:scale-110 transition-transform shrink-0">PDF</div>
+                                             <div className="min-w-0">
+                                                 <p className="text-sm font-bold text-gray-700 truncate group-hover:text-red-500 transition-colors">{fileName}</p>
+                                                 <p className="text-xs text-gray-400">{(file.file_size / 1024).toFixed(2)} KB</p>
+                                             </div>
                                         </div>
-                                        <div>
-                                            <p className="font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">เอกสารแนบประกอบการพิจารณา #{idx + 1}</p>
-                                            <p className="text-xs text-slate-400 uppercase">{file.file_type} • {(file.file_size / 1024 / 1024).toFixed(2)} MB</p>
-                                        </div>
-                                    </div>
-                                    <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                                        ดูเอกสาร
-                                    </span>
-                                </a>
-                            ))}
+                                        <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                            ดูเอกสาร
+                                        </span>
+                                    </a>
+                                );
+                            })}
                         </div>
                     </section>
                 )}

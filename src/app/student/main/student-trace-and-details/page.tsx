@@ -1,20 +1,19 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import axios from "axios";
 import { 
   CheckCircle2, XCircle, Clock, Award, FileText, 
   History, UserCheck, ShieldCheck, Landmark, GraduationCap,
   ChevronDown, ChevronUp, ArrowRight, ArrowLeft,
-  User, Building2, Search, CalendarDays, Phone, Mail, MapPin, Map,
-  Filter // ✅ นำเข้า Filter Icon เพิ่ม
+  User, Building2, Search, CalendarDays, Phone, Mail, MapPin, Map, AlertCircle, Filter,
+  UserCircle2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
-// ฟังก์ชันสำหรับแปลง Path ไฟล์ให้ชี้ไปที่ Backend เสมอ (ป้องกัน 404)
 const getFileUrl = (filePath: string) => {
   if (!filePath) return "#";
   const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api").replace(/\/api$/, "");
@@ -23,7 +22,7 @@ const getFileUrl = (filePath: string) => {
 };
 
 // ==========================================
-// 1. Logic Mapping (ขั้นตอนการติดตามอิงตาม Seed FormStatus)
+// 1. Logic Mapping 
 // ==========================================
 const STEP_LOGIC = [
   { id: 1, label: "ยื่นเสนอชื่อ", ids: [], role: "ผู้ยื่นคำร้อง", icon: User },
@@ -36,6 +35,19 @@ const STEP_LOGIC = [
   { id: 8, label: "อธิการบดี", ids: [12, 14, 15], role: "อธิการบดี", icon: CheckCircle2 }
 ];
 
+// ฟังก์ชันหาชื่อ Role จาก Status ของฟอร์ม
+const getRoleFromStatus = (statusId: number) => {
+  switch (statusId) {
+      case 3: return "หัวหน้าภาควิชา";
+      case 5: return "รองคณบดีฝ่ายกิจการนิสิต";
+      case 7: return "คณบดี";
+      case 9: return "กองพัฒนานิสิต";
+      case 11: return "คณะกรรมการพิจารณา";
+      case 15: return "อธิการบดี";
+      default: return "ผู้พิจารณาคำร้อง";
+  }
+};
+
 // ==========================================
 // 2. Main Page Component
 // ==========================================
@@ -45,11 +57,10 @@ export default function StudentTraceAndDetails() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [studentProfile, setStudentProfile] = useState<any>(null);
   
-  // 🌟 เพิ่ม State สำหรับจัดการ Filter ปีการศึกษา
+  // 🌟 State สำหรับจัดการ Filter ปีการศึกษา
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [selectedYear, setSelectedYear] = useState<string>("all");
   
-  // เก็บ Master Data
   const [metaData, setMetaData] = useState<any>({
       faculties: [],
       departments: [],
@@ -64,7 +75,6 @@ export default function StudentTraceAndDetails() {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        // ✅ Fetch ข้อมูลหลัก รวมถึงดึงปีการศึกษาด้วย (ใส่ catch กัน error 403/404)
         const [profileRes, statusRes, subRes, facRes, deptRes, campusRes, yearsRes] = await Promise.all([
           axios.get(`${API_BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),
           axios.get(`${API_BASE_URL}/form-statuses/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
@@ -81,7 +91,6 @@ export default function StudentTraceAndDetails() {
         const statuses = statusRes.data?.data || [];
         const rawSubmissions = subRes.data?.data || [];
         
-        // เซ็ตข้อมูลปีการศึกษา
         setAcademicYears(yearsRes.data?.data || []);
         
         setMetaData({
@@ -91,19 +100,17 @@ export default function StudentTraceAndDetails() {
             statuses: statuses
         });
 
-        // ✅ แก้ไข: ดึง Logs โดยเรียกจาก Endpoint /awards/details/:formId แทนการเรียก /logs ที่ทำให้เกิด 404
         const detailed = await Promise.all(rawSubmissions.map(async (item: any) => {
             try {
                 const detailRes = await axios.get(`${API_BASE_URL}/awards/details/${item.form_id}`, { 
                     headers: { Authorization: `Bearer ${token}` } 
                 });
                 
-                // คาดหวังว่า Backend จะส่ง logs มาใน field 'logs'
                 const itemLogs = detailRes.data?.data?.logs || detailRes.data?.logs || [];
 
                 return {
                     ...item,
-                    ...detailRes.data?.data, // เผื่อมีข้อมูล detail อื่นๆ คืนมาด้วย
+                    ...detailRes.data?.data,
                     logs: itemLogs,
                     status_detail: statuses.find((s: any) => s.form_status_id === item.form_status)
                 };
@@ -123,10 +130,18 @@ export default function StudentTraceAndDetails() {
     fetchData();
   }, []);
 
-  // 🌟 ฟังก์ชันกรองข้อมูลตามปีการศึกษาที่เลือก
   const filteredSubmissions = selectedYear === "all" 
     ? submissions 
     : submissions.filter(item => String(item.academic_year) === selectedYear);
+
+  // สร้างตัวเลือกสำหรับ Custom Dropdown
+  const yearOptions = [
+    { v: "all", l: "ทั้งหมด" },
+    ...academicYears.map((yearObj: any) => {
+        const y = typeof yearObj === 'object' ? (yearObj.year || yearObj.academic_year) : yearObj;
+        return { v: String(y), l: String(y) };
+    })
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 pb-40 font-sans selection:bg-blue-100">
@@ -175,28 +190,17 @@ export default function StudentTraceAndDetails() {
             ) : (
                 <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
                     
-                    {/* 🌟 เพิ่มส่วนหัวที่มี Filter ปีการศึกษา */}
+                    {/* 🌟 ส่วนหัวที่มี Custom Filter Dropdown */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-1.5 h-6 bg-indigo-600 rounded-full"></div>
                             <h3 className="text-2xl font-black text-slate-800 tracking-tight">ประวัติการยื่นเสนอผลงาน</h3>
                         </div>
                         
-                        <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl border border-slate-200 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
                             <Filter size={16} className="text-slate-400" />
                             <span className="text-sm font-bold text-slate-600 whitespace-nowrap">ปีการศึกษา:</span>
-                            <select 
-                                value={selectedYear} 
-                                onChange={(e) => setSelectedYear(e.target.value)}
-                                className="bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-1.5 outline-none cursor-pointer"
-                            >
-                                <option value="all">ทั้งหมด</option>
-                                {/* วนลูปแสดงปีการศึกษาที่ดึงมาจาก API */}
-                                {academicYears.map((yearObj: any, idx: number) => {
-                                    const y = typeof yearObj === 'object' ? (yearObj.year || yearObj.academic_year) : yearObj;
-                                    return <option key={idx} value={String(y)}>{y}</option>
-                                })}
-                            </select>
+                            <YearFilterDropdown value={selectedYear} onChange={setSelectedYear} options={yearOptions} />
                         </div>
                     </div>
 
@@ -208,7 +212,6 @@ export default function StudentTraceAndDetails() {
                              </div>
                         ) : (
                             <div className="grid grid-cols-1 gap-6">
-                                {/* ✅ เปลี่ยนไปใช้ filteredSubmissions แทน submissions ธรรมดา */}
                                 {filteredSubmissions.map((item, idx) => (
                                     <DetailedTraceCard key={item.form_id} item={item} index={idx} metaData={metaData} onSelect={() => setSelectedItem(item)} />
                                 ))}
@@ -226,6 +229,108 @@ export default function StudentTraceAndDetails() {
 // ==========================================
 // 3. Components สำหรับแสดงผล
 // ==========================================
+
+const formatDateDisplay = (isoDate: string) => {
+    if (!isoDate) return "-";
+    const date = new Date(isoDate);
+    if (isNaN(date.getTime())) return isoDate;
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
+const formatDateTimeDisplay = (isoDate: string) => {
+    if (!isoDate) return "-";
+    const date = new Date(isoDate);
+    if (isNaN(date.getTime())) return isoDate;
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+const calculateAge = (isoDate: string) => {
+    if (!isoDate) return "-";
+    const dob = new Date(isoDate);
+    if (isNaN(dob.getTime())) return "-";
+    const diff = Date.now() - dob.getTime();
+    const ageDate = new Date(diff);
+    return Math.abs(ageDate.getUTCFullYear() - 1970);
+};
+
+const THEME_STYLES: Record<string, any> = {
+    "activity": {
+        border: "border-orange-100", gradient: "from-orange-400 to-orange-600", 
+        numberBg: "bg-orange-600", text: "text-orange-600", bgSoft: "bg-orange-50"
+    },
+    "innovation": {
+        border: "border-purple-100", gradient: "from-purple-400 to-purple-600", 
+        numberBg: "bg-purple-600", text: "text-purple-600", bgSoft: "bg-purple-50"
+    },
+    "behavior": {
+        border: "border-blue-100", gradient: "from-blue-400 to-blue-600", 
+        numberBg: "bg-blue-600", text: "text-blue-600", bgSoft: "bg-blue-50"
+    },
+    "other": {
+        border: "border-emerald-100", gradient: "from-emerald-400 to-teal-500", 
+        numberBg: "bg-emerald-600", text: "text-emerald-600", bgSoft: "bg-emerald-50"
+    },
+    "default": {
+        border: "border-slate-100", gradient: "from-slate-400 to-slate-600", 
+        numberBg: "bg-slate-600", text: "text-slate-600", bgSoft: "bg-slate-50"
+    }
+};
+
+// 🌟 Custom Dropdown Component
+function YearFilterDropdown({ value, onChange, options }: any) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+          if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+              setIsOpen(false);
+          }
+      };
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedLabel = options.find((o: any) => o.v === value)?.l || "ทั้งหมด";
+
+  return (
+      <div className="relative" ref={dropdownRef}>
+          <div 
+              onClick={() => setIsOpen(!isOpen)}
+              className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 text-slate-700 text-sm font-bold rounded-xl px-4 py-2 cursor-pointer hover:border-indigo-300 hover:bg-white transition-all min-w-[120px]"
+          >
+              <span>{selectedLabel}</span>
+              <ChevronDown size={16} className={`text-slate-400 transition-transform duration-300 ${isOpen ? "rotate-180 text-indigo-500" : ""}`} />
+          </div>
+
+          <AnimatePresence>
+              {isOpen && (
+                  <motion.div
+                      initial={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
+                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                      exit={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
+                      transition={{ duration: 0.2 }}
+                      className="absolute right-0 z-50 w-full min-w-[140px] mt-2 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300"
+                  >
+                      {options.map((o: any, i: number) => (
+                          <div
+                              key={i}
+                              onClick={() => { onChange(o.v); setIsOpen(false); }}
+                              className={`px-4 py-2.5 cursor-pointer transition-all duration-200 font-medium text-sm flex items-center justify-between
+                                  ${value === o.v ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                              `}
+                          >
+                              {o.l}
+                              {value === o.v && <CheckCircle2 size={14} className="text-indigo-600" />}
+                          </div>
+                      ))}
+                  </motion.div>
+              )}
+          </AnimatePresence>
+      </div>
+  );
+}
+
 
 function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
   const isRejected = [3, 5, 7, 9, 11, 13, 15].includes(item.form_status);
@@ -306,6 +411,7 @@ function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
 
 function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) {
   const [showLogs, setShowLogs] = useState(false);
+  const [approvalLogs, setApprovalLogs] = useState<any[]>([]);
   
   const getStepProgress = (statusId: number) => {
     const step = STEP_LOGIC.find((s) => s.ids.includes(statusId));
@@ -337,39 +443,97 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
   const showDept = detailObj.department || metaData.departments.find((d: any) => d.department_id === item.department_id)?.department_name || "ไม่ระบุ";
   const showCampus = detailObj.campus || metaData.campuses.find((c: any) => c.campusId === item.campusId)?.campusName || "ไม่ระบุ";
 
-  const translateField = (field: string) => {
-    const dictionary: Record<string, string> = {
-        form_status: "สถานะ",
-        form_status_id: "สถานะ",
-        award_type: "ประเภทรางวัล",
-        award_type_id: "ประเภทรางวัล",
-        faculty_id: "คณะ",
-        department_id: "ภาควิชา"
-    };
-    return dictionary[field] || field;
-  };
+  // ✅ แก้ไข: ใช้ axios ดึงข้อมูล Logs จาก API พร้อมแนบ Headers ให้ถูกต้อง (แก้ไข error "api is not defined")
+  useEffect(() => {
+      const token = localStorage.getItem("token");
+      if(token) {
+          axios.get(`${API_BASE_URL}/awards/approval-logs/${item.form_id}`, {
+              headers: { Authorization: `Bearer ${token}` }
+          })
+             .then(res => {
+                 const logsData = res.data?.data || res.data;
+                 const logsArray = Array.isArray(logsData) ? logsData : (logsData ? [logsData] : []);
+                 setApprovalLogs(logsArray);
+             })
+             .catch(err => {
+                 console.warn("API 400/404 for approval logs. Will construct history from form status.");
+                 setApprovalLogs([]);
+             });
+      }
+  }, [item.form_id]);
 
-  const formatValue = (field: string, value: any) => {
-    if (!value) return "-";
-    if (field === "form_status" || field === "form_status_id") {
-        const id = parseInt(value, 10);
-        if (id === 1) return "รอหัวหน้าภาควิชาพิจารณา";
-        const status = metaData.statuses.find((s: any) => s.form_status_id === id);
-        return status ? status.form_status_name.replace(/_/g, ' ') : value;
-    }
-    if (field === "faculty_id") {
-        const fac = metaData.faculties.find((f: any) => f.faculty_id === parseInt(value, 10));
-        return fac ? fac.faculty_name : value;
-    }
-    if (field === "department_id") {
-        const dept = metaData.departments.find((d: any) => d.department_id === parseInt(value, 10));
-        return dept ? dept.department_name : value;
-    }
-    return value;
-  };
+  // ✅ รวม Log ทั้งจาก API และสร้าง Log จำลอง (Fallback) ในกรณีที่ API พังแต่สถานะฟอร์มระบุว่าถูกตีกลับ
+  const safeLogs = Array.isArray(approvalLogs) ? approvalLogs : [];
+  let displayLogs = [...safeLogs];
+  
+  const hasRejectLogInApi = displayLogs.some(log => 
+      (log.approval_status && String(log.approval_status).toLowerCase().includes("reject")) ||
+      (log.operation && String(log.operation).toLowerCase().includes("reject"))
+  );
+
+  // ถ้าไม่มี log การ Reject แต่ฟอร์มเป็นสถานะ Reject ให้สร้างจำลองขึ้นมา
+  if (!hasRejectLogInApi && isRejected) {
+      displayLogs.push({
+          approval_log_id: 999999,
+          form_id: item.form_id,
+          role_name: getRoleFromStatus(item.form_status), 
+          approval_status: "reject",
+          operation: "reject",
+          approved_at: item.latest_update || item.created_at,
+          reject_reason: item.reject_reason || "ไม่ได้ระบุเหตุผล (กรุณาติดต่อผู้พิจารณา)"
+      });
+  }
+
+  // เรียงลำดับ Log ใหม่สุดขึ้นก่อน
+  displayLogs.sort((a: any, b: any) => new Date(b.operation_date || b.approved_at || b.created_at || 0).getTime() - new Date(a.operation_date || a.approved_at || a.created_at || 0).getTime());
+
+  // เลือกเฉพาะ Log ที่ถูกตีกลับ เพื่อนำไปแสดงในกล่องสีแดงด้านบน
+  const rejectedLogs = displayLogs.filter(log => 
+      (log.approval_status && String(log.approval_status).toLowerCase().includes("reject")) ||
+      (log.operation && String(log.operation).toLowerCase().includes("reject")) ||
+      (log.reject_reason && String(log.reject_reason).trim() !== "")
+  );
+
+  const awardStr = item.award_type || item.award_type_name || "";
+  const isActivity = awardStr.includes("กิจกรรม");
+  const isInnovation = awardStr.includes("นวัตกรรม");
+  const isBehavior = awardStr.includes("ประพฤติดี");
+  const isOther = !isActivity && !isInnovation && !isBehavior;
+
+  let themeKey = "default";
+  if (isActivity) themeKey = "activity";
+  if (isInnovation) themeKey = "innovation";
+  if (isBehavior) themeKey = "behavior";
+  if (isOther && awardStr) themeKey = "other";
+  const theme = THEME_STYLES[themeKey];
 
   return (
     <div className="space-y-8 animate-fade-in-up">
+        {/* ✅ กล่องแสดงเหตุผลการปฏิเสธ (ถ้ามี) */}
+        {rejectedLogs.length > 0 && (
+            <div className="space-y-4">
+                {rejectedLogs.map((log: any, index: number) => (
+                    <div key={log.approval_log_id || index} className="bg-rose-50 border border-rose-200 p-6 md:p-8 rounded-[32px] shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-rose-400 to-red-600"></div>
+                        <h3 className="text-xl md:text-2xl font-black text-rose-800 mb-2 flex items-center gap-3">
+                            <AlertCircle className="w-7 h-7 text-rose-600" />
+                            ฟอร์มถูกตีกลับให้แก้ไขโดย: {log.role_name || getRoleFromStatus(item.form_status)}
+                        </h3>
+                        <p className="text-sm font-bold text-rose-500 mb-5 flex items-center gap-2">
+                            <Clock className="w-4 h-4" />
+                            เมื่อวันที่: {formatDateTimeDisplay(log.operation_date || log.approved_at || log.created_at || item.latest_update)}
+                        </p>
+                        <div className="space-y-3">
+                            <label className="text-sm font-bold text-rose-700 bg-rose-200/50 px-3 py-1 rounded-md inline-block">ข้อเสนอแนะ / เหตุผลที่ปฏิเสธ:</label>
+                            <div className="w-full bg-white border border-rose-200 rounded-2xl px-5 py-4 text-[15px] font-medium text-gray-800 whitespace-pre-wrap shadow-inner leading-relaxed">
+                                {log.reject_reason || item.reject_reason || "ไม่มีการระบุเหตุผลประกอบ"}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        )}
+
         {/* SECTION 1: TIMELINE & STATUS */}
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-200/60 p-8 md:p-10">
             <div className="flex flex-col lg:flex-row justify-between items-start gap-8 mb-12 border-b border-slate-100 pb-8">
@@ -398,7 +562,7 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                         {statusName}
                     </div>
                     <p className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
-                        <UserCheck size={14} className="text-indigo-500" /> ดำเนินการโดย: <span className="text-indigo-600">{currentRole}</span>
+                        <UserCheck size={14} className="text-indigo-500" /> รอพิจารณาโดย: <span className="text-indigo-600">{currentRole}</span>
                     </p>
                 </div>
             </div>
@@ -471,7 +635,7 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                 </div>
             </div>
 
-            {/* Decision Log Toggle */}
+            {/* ✅ Decision Log Toggle & Display */}
             <div className="mt-14 border-t border-slate-100 pt-6 flex flex-col items-center">
                 <button onClick={() => setShowLogs(!showLogs)} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-all bg-slate-50 hover:bg-indigo-50 px-6 py-2.5 rounded-full border border-slate-200">
                     <History size={16} /> 
@@ -481,22 +645,60 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                 <AnimatePresence>
                     {showLogs && (
                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden w-full mt-6">
-                            <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-6 space-y-4">
-                                {item.logs?.length > 0 ? item.logs.map((log: any, i: number) => (
-                                    <div key={i} className="flex gap-4 items-start text-sm bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-                                        <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 shrink-0"><UserCheck size={18} /></div>
-                                        <div>
-                                            <p className="font-bold text-slate-800">
-                                                อัปเดต {translateField(log.field_name)} เป็น <span className="text-indigo-600">{formatValue(log.field_name, log.new_value)}</span>
-                                            </p>
-                                            <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                                                <Clock size={12}/> {new Date(log.created_at).toLocaleString('th-TH')} 
-                                                <span className="w-1 h-1 bg-slate-300 rounded-full"></span> 
-                                                ดำเนินการโดย User ID: {log.changed_by || "System"}
-                                            </p>
+                            <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-6 space-y-4">
+                                {displayLogs.length > 0 ? displayLogs.map((log: any, i: number) => {
+                                    
+                                    const isApproveLog = log.approval_status === "approve" || log.operation === "approve";
+                                    const isRejectLog = log.approval_status === "reject" || log.operation === "reject";
+                                    
+                                    const actionText = isApproveLog ? "เห็นชอบ (Approve)" : isRejectLog ? "ไม่เห็นชอบ (ตีกลับ)" : "ดำเนินการพิจารณา";
+                                    const colorClass = isApproveLog ? "text-emerald-600" : isRejectLog ? "text-rose-600" : "text-indigo-600";
+                                    const bgClass = isApproveLog ? "bg-emerald-50 border-emerald-200" : isRejectLog ? "bg-rose-50 border-rose-200" : "bg-indigo-50 border-indigo-200";
+                                    
+                                    // หากไม่มี role name ส่งมา ให้คำนวณจากสถานะ
+                                    const roleName = log.role_name || (isRejectLog ? getRoleFromStatus(item.form_status) : "ผู้พิจารณาคำร้อง");
+
+                                    return (
+                                        <div key={i} className={`flex gap-5 items-start text-sm bg-white p-5 rounded-2xl shadow-sm border ${isRejectLog ? 'border-rose-100 hover:border-rose-300' : 'border-slate-100 hover:border-indigo-300'} transition-colors`}>
+                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 border ${bgClass} ${colorClass}`}>
+                                                {isApproveLog ? <CheckCircle2 size={20} /> : isRejectLog ? <XCircle size={20} /> : <UserCheck size={20} />}
+                                            </div>
+                                            <div className="flex-1 w-full">
+                                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
+                                                    <p className="font-bold text-slate-800 text-base">
+                                                        ผลการพิจารณา: <span className={colorClass}>{actionText}</span>
+                                                    </p>
+                                                    <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5 w-fit">
+                                                        <Clock size={12}/> {formatDateTimeDisplay(log.operation_date || log.approved_at || log.created_at)}
+                                                    </span>
+                                                </div>
+                                                
+                                                <p className="text-sm font-medium text-slate-600 mb-3 flex items-center gap-2 flex-wrap">
+                                                    <UserCircle2 size={16} className="text-slate-400" />
+                                                    ผู้ดำเนินการ: <span className="text-indigo-600">{roleName}</span> 
+                                                    <span className="text-slate-400 font-normal">(ID: {log.user_id || log.reviewer_user_id || "ระบบ"})</span>
+                                                </p>
+
+                                                {/* แสดงเหตุผลถ้ามีการตีกลับใน Log นั้นๆ */}
+                                                {isRejectLog && (log.reject_reason || item.reject_reason) && (
+                                                    <div className="mt-3 p-4 bg-rose-50/80 border border-rose-100 rounded-xl">
+                                                        <p className="text-rose-800 font-bold text-xs mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
+                                                            <FileText size={12} /> เหตุผลที่แจ้งให้แก้ไข
+                                                        </p>
+                                                        <p className="text-rose-600 text-sm font-medium whitespace-pre-wrap leading-relaxed">
+                                                            {log.reject_reason || item.reject_reason}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
+                                    )
+                                }) : (
+                                    <div className="text-center py-10">
+                                        <History className="w-12 h-12 mx-auto text-slate-300 mb-3 opacity-50" />
+                                        <p className="text-slate-500 font-medium">ยังไม่มีประวัติการดำเนินการพิจารณาคำร้องนี้</p>
                                     </div>
-                                )) : <p className="text-center text-slate-400 text-sm py-4">-- ยังไม่มีประวัติการดำเนินการ --</p>}
+                                )}
                             </div>
                         </motion.div>
                     )}
@@ -571,28 +773,35 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                             <h4 className="text-lg font-black text-slate-800">เอกสารแนบประกอบพิจารณา</h4>
                         </div>
                         <div className="flex flex-col gap-3">
-                            {item.files.map((file: any, idx: number) => (
-                                <a 
-                                    key={idx} 
-                                    href={getFileUrl(file.file_path)}
-                                    target="_blank" 
-                                    rel="noreferrer"
-                                    className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-indigo-400 hover:shadow-md transition-all group"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
-                                            <FileText size={20} />
+                            {item.files.map((file: any, idx: number) => {
+                                let safePath = file.file_path;
+                                if (safePath.startsWith("api/")) safePath = safePath.replace("api/", "");
+                                if (safePath.startsWith("/api/")) safePath = safePath.replace("/api/", "");
+                                if (!safePath.startsWith("/")) safePath = "/" + safePath;
+
+                                const fileName = file.file_name || safePath.split('/').pop() || `Document_${idx + 1}.pdf`;
+
+                                return (
+                                    <a 
+                                        key={idx} 
+                                        href={safePath}
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="group flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:border-red-200 hover:shadow-md transition-all duration-300"
+                                    >
+                                        <div className="flex items-center gap-4 overflow-hidden">
+                                             <div className="w-12 h-12 bg-red-50 rounded-lg flex items-center justify-center text-red-500 font-bold text-xs group-hover:scale-110 transition-transform shrink-0">PDF</div>
+                                             <div className="min-w-0">
+                                                 <p className="text-sm font-bold text-gray-700 truncate group-hover:text-red-500 transition-colors">{fileName}</p>
+                                                 <p className="text-xs text-gray-400">{(file.file_size / 1024).toFixed(2)} KB</p>
+                                             </div>
                                         </div>
-                                        <div>
-                                            <p className="font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">เอกสารแนบ #{idx + 1}</p>
-                                            <p className="text-xs text-slate-400 uppercase">{file.file_type} • {(file.file_size / 1024 / 1024).toFixed(2)} MB</p>
-                                        </div>
-                                    </div>
-                                    <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                                        ดูเอกสาร
-                                    </span>
-                                </a>
-                            ))}
+                                        <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                            ดูเอกสาร
+                                        </span>
+                                    </a>
+                                );
+                            })}
                         </div>
                     </section>
                 )}

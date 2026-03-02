@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/axios"; 
-import { Search, ChevronDown, CheckCircle2, History, User, ChevronLeft, ChevronRight } from "lucide-react";
+import { 
+    Search, ChevronDown, CheckCircle2, History, User, 
+    ChevronLeft, ChevronRight, XCircle, Filter, ArrowUpDown, Building2
+} from "lucide-react";
 
 // ==========================================
 // 0. Configuration & Interfaces
@@ -47,23 +50,83 @@ const formatTimeTh = (isoDate: string) => {
 };
 
 // ==========================================
-// 2. Components
+// 2. Custom Components
 // ==========================================
 
 const ActionBadge = ({ action }: { action: string }) => {
-    const config: Record<string, { bg: string, text: string, border: string, label: string, dot: string }> = {
-        approve: { bg: "bg-emerald-50", text: "text-emerald-600", border: "border-emerald-200", label: "ตรวจสอบ/เห็นชอบ", dot: "bg-emerald-500" },
-        reject: { bg: "bg-rose-50", text: "text-rose-600", border: "border-rose-200", label: "ตีกลับ/ปฏิเสธ", dot: "bg-rose-500" },
-        other: { bg: "bg-gray-50", text: "text-gray-600", border: "border-gray-200", label: "อื่นๆ", dot: "bg-gray-400" }
+    const config: Record<string, { bg: string, text: string, border: string, label: string, icon: any }> = {
+        approve: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", label: "เห็นชอบ", icon: <CheckCircle2 size={14} className="mr-1.5" /> },
+        reject: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200", label: "ตีกลับ/ปฏิเสธ", icon: <XCircle size={14} className="mr-1.5" /> },
+        other: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200", label: "อัปเดตข้อมูล", icon: <History size={14} className="mr-1.5" /> }
     };
 
     const style = config[action] || config.other;
 
     return (
-        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${style.bg} ${style.text} ${style.border}`}>
-            <span className={`w-1.5 h-1.5 rounded-full mr-2 ${style.dot}`}></span>
+        <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-[11px] font-extrabold tracking-wide uppercase border shadow-sm ${style.bg} ${style.text} ${style.border}`}>
+            {style.icon}
             {style.label}
         </span>
+    );
+};
+
+// 🌟 Custom Dropdown Component
+const CustomSelect = ({ value, onChange, options, icon: Icon, placeholder }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+  
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+  
+    const selectedLabel = options.find((o: any) => o.v === value)?.l || placeholder;
+  
+    return (
+        <div className="relative w-full z-20" ref={dropdownRef}>
+            <div 
+                onClick={() => setIsOpen(!isOpen)}
+                className={`flex items-center justify-between w-full pl-11 pr-4 py-3 bg-white/80 backdrop-blur-sm border rounded-2xl cursor-pointer transition-all duration-300 shadow-sm
+                    ${isOpen ? 'border-indigo-400 ring-4 ring-indigo-500/10' : 'border-slate-200/80 hover:border-slate-300'}
+                `}
+            >
+                <Icon className={`w-4 h-4 absolute left-4 top-3.5 transition-colors ${isOpen ? 'text-indigo-500' : 'text-slate-400'}`} />
+                <span className={`text-sm font-medium truncate ${!value || value === "all" || value === "date_desc" ? 'text-slate-500' : 'text-slate-800'}`}>
+                    {selectedLabel}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-180 text-indigo-500' : ''}`} />
+            </div>
+  
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
+                        animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                        exit={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute left-0 w-full mt-2 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300"
+                    >
+                        {options.map((o: any, i: number) => (
+                            <div
+                                key={i}
+                                onClick={() => { onChange(o.v); setIsOpen(false); }}
+                                className={`px-4 py-3 cursor-pointer transition-all duration-200 text-sm font-medium flex items-center justify-between
+                                    ${value === o.v ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                                `}
+                            >
+                                {o.l}
+                                {value === o.v && <CheckCircle2 size={16} className="text-indigo-500" />}
+                            </div>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
     );
 };
 
@@ -75,8 +138,8 @@ export default function SDDHistoryPage() {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [loading, setLoading] = useState(true);
     
-    // Master Data สำหรับจับคู่ชื่อ User
-    const [usersList, setUsersList] = useState<any[]>([]);
+    // สำหรับโชว์ชื่อตัวเอง
+    const [currentUserInfo, setCurrentUserInfo] = useState<any>(null);
 
     // Filters (Server-Side)
     const [searchTerm, setSearchTerm] = useState("");
@@ -108,13 +171,13 @@ export default function SDDHistoryPage() {
             try {
                 if (USE_MOCK_DATA) return;
 
-                // โหลด Master Data ของ User ก่อน (ถ้ายังไม่มี) เพื่อเอาไว้โชว์ชื่อ
-                let currentUsers = usersList;
-                if (currentUsers.length === 0) {
-                    const userRes = await api.get(`${API_BASE_URL}/users`).catch(() => null);
-                    if (userRes && Array.isArray(userRes.data?.data)) {
-                        currentUsers = userRes.data.data;
-                        setUsersList(currentUsers);
+                // โหลดข้อมูลตัวเองมาใช้แทน ถ้าหา User ในลิสต์ไม่เจอ
+                let myInfo = currentUserInfo;
+                if (!myInfo) {
+                    const myRes = await api.get(`${API_BASE_URL}/auth/me`).catch(() => null);
+                    if (myRes && myRes.data) {
+                        myInfo = myRes.data.user || myRes.data.data || myRes.data;
+                        if (isMounted) setCurrentUserInfo(myInfo);
                     }
                 }
 
@@ -127,20 +190,30 @@ export default function SDDHistoryPage() {
                 };
 
                 if (debouncedSearch) params.keyword = debouncedSearch;
-                if (filterAction !== "all") params.operation = filterAction; // 'approve' หรือ 'reject'
+                if (filterAction !== "all") params.operation = filterAction; 
 
-                // เรียกใช้ API History ตัวใหม่
+                // เรียกใช้ API History
                 const res = await api.get(`${API_BASE_URL}/awards/my/approval-logs`, { params });
-                const rawLogs = res.data?.data || [];
+                
+                const rawData = res.data?.data;
+                const rawLogs = Array.isArray(rawData) ? rawData : []; 
                 const pagination = res.data?.pagination;
 
-                // 3. Map ข้อมูลให้เข้ากับรูปแบบของ UI
+                // Map ข้อมูลให้เข้ากับรูปแบบของ UI
                 const mappedLogs = rawLogs.map((log: any) => {
-                    // หาชื่อผู้ดำเนินการ
-                    const operator = currentUsers.find((u: any) => String(u.user_id) === String(log.reviewer_user_id));
-                    const operatorDisplayName = operator 
-                        ? `${operator.prefix || ""}${operator.firstname || ""} ${operator.lastname || ""}`.trim()
-                        : `รหัสผู้ดำเนินการ: ${log.reviewer_user_id || "?"}`;
+                    
+                    // ✅ แสดงชื่อตัวเอง (ถ้าตรงกับ ID ตัวเอง) หรือแสดงชื่อถ้ามีแนบมา
+                    let operatorDisplayName = "คุณ"; // Default เป็นคุณ เพราะหน้านี้คือ "My Approval Logs"
+                    
+                    if (myInfo && String(myInfo.user_id) === String(log.reviewer_user_id)) {
+                        operatorDisplayName = `${myInfo.prefix || ""}${myInfo.firstname || ""} ${myInfo.lastname || ""}`.trim();
+                    } else if (log.reviewer_name) { // เผื่อ backend แนบชื่อมาให้แล้ว
+                        operatorDisplayName = log.reviewer_name;
+                    }
+
+                    if(!operatorDisplayName || operatorDisplayName === "") {
+                         operatorDisplayName = `รหัสผู้ดำเนินการ: ${log.reviewer_user_id || "?"}`;
+                    }
 
                     // เช็คว่าฟอร์มนี้เป็นของนิสิตหรือองค์กร
                     const isOrg = log.student_lastname === "-" || !log.student_lastname;
@@ -157,10 +230,10 @@ export default function SDDHistoryPage() {
                         log_id: log.approval_log_id || Math.random(),
                         form_id: log.form_id,
                         changed_by: log.reviewer_user_id,
-                        created_at: log.operation_date,
+                        created_at: log.operation_date || log.approved_at,
                         operator_name: operatorDisplayName,
                         target_student_name: targetName || `Form #${log.form_id}`,
-                        target_student_id: isOrg ? "-" : (log.student_number || "-"),
+                        target_student_id: isOrg ? "ORG" : (log.student_number || "-"),
                         action_type: actionType,
                         detail_text: detailText
                     };
@@ -170,11 +243,17 @@ export default function SDDHistoryPage() {
                     setLogs(mappedLogs);
                     if (pagination) {
                         setTotalPages(pagination.total_pages || 1);
+                    } else {
+                        setTotalPages(1); 
                     }
                 }
 
             } catch (error) {
                 console.error("Failed to fetch logs:", error);
+                if (isMounted) {
+                    setLogs([]); 
+                    setTotalPages(1);
+                }
             } finally {
                 if (isMounted) setLoading(false);
             }
@@ -183,6 +262,18 @@ export default function SDDHistoryPage() {
         fetchData();
         return () => { isMounted = false; };
     }, [currentPage, debouncedSearch, filterAction, sortBy]);
+
+    // Options สำหรับ Dropdowns
+    const actionOptions = [
+        { v: "all", l: "ทุกการดำเนินการ" },
+        { v: "approve", l: "การเห็นชอบ (Approve)" },
+        { v: "reject", l: "การตีกลับ (Reject)" }
+    ];
+
+    const sortOptions = [
+        { v: "date_desc", l: "ทำรายการล่าสุดก่อน" },
+        { v: "date_asc", l: "ทำรายการเก่าสุดก่อน" }
+    ];
 
     // ==========================================
     // Render UI
@@ -204,14 +295,14 @@ export default function SDDHistoryPage() {
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 bg-white/70 backdrop-blur-xl p-8 rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/80 animate-fade-in-up">
                     <div>
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 text-xs font-bold mb-3 border border-blue-200 shadow-sm">
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-600 text-xs font-bold mb-3 border border-indigo-200 shadow-sm">
                             <History className="w-3.5 h-3.5" />ระบบประวัติการดำเนินการ
                         </div>
                         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
                            ประวัติการดำเนินการ
                         </h1>
                         <p className="text-slate-500 mt-1 text-sm font-medium">
-                           ติดตามสถานะการพิจารณา ตรวจสอบ และการส่งต่อข้อมูลในระบบทั้งหมด
+                            ติดตามสถานะการพิจารณา ตรวจสอบ และการส่งต่อข้อมูลในระบบทั้งหมดของคุณ
                         </p>
                     </div>
                 </div>
@@ -224,63 +315,58 @@ export default function SDDHistoryPage() {
                         <div className="flex flex-col md:flex-row gap-4 w-full lg:w-auto">
                             {/* Search */}
                             <div className="relative w-full md:w-80 group">
-                                <Search className="w-4 h-4 absolute left-4 top-3.5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                                <Search className="w-4 h-4 absolute left-4 top-3.5 text-slate-400 group-focus-within:text-indigo-500 transition-colors z-10" />
                                 <input 
                                     type="text" 
-                                    placeholder="ค้นหาชื่อนิสิต หรือ รหัสนิสิต..." 
-                                    className="w-full bg-white border border-slate-200/80 rounded-2xl pl-11 pr-4 py-3 text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 outline-none transition-all shadow-sm"
+                                    placeholder="ค้นหาชื่อ หรือ รหัสเป้าหมาย..." 
+                                    className="w-full bg-white/80 backdrop-blur-sm border border-slate-200/80 rounded-2xl pl-11 pr-4 py-3 text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm placeholder:text-slate-400 text-slate-800"
                                     value={searchTerm}
                                     onChange={e => setSearchTerm(e.target.value)}
                                 />
                             </div>
 
-                            {/* Action Filter */}
-                            <div className="relative group w-full md:w-64">
-                                <select 
-                                    className="w-full bg-white border border-slate-200/80 rounded-2xl pl-5 pr-10 py-3 text-sm font-medium outline-none cursor-pointer focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all shadow-sm appearance-none text-slate-600"
-                                    value={filterAction}
-                                    onChange={e => setFilterAction(e.target.value)}
-                                >
-                                    <option value="all">ทุกกิจกรรม</option>
-                                    <option value="approve">การตรวจสอบและเห็นชอบ (Approve)</option>
-                                    <option value="reject">การตีกลับ/ปฏิเสธ (Reject)</option>
-                                </select>
-                                <ChevronDown className="w-4 h-4 absolute right-4 top-3.5 text-slate-400 pointer-events-none" />
+                            {/* Action Filter (Custom Dropdown) */}
+                            <div className="w-full md:w-64">
+                                <CustomSelect 
+                                    value={filterAction} 
+                                    onChange={setFilterAction} 
+                                    options={actionOptions} 
+                                    icon={Filter}
+                                    placeholder="ทุกการดำเนินการ"
+                                />
                             </div>
                         </div>
 
-                        {/* Sort Filter */}
-                        <div className="relative group w-full lg:w-48">
-                            <select 
-                                className="w-full bg-white border border-slate-200/80 rounded-2xl pl-5 pr-10 py-3 text-sm font-medium outline-none cursor-pointer focus:ring-2 focus:ring-blue-500 transition-all shadow-sm appearance-none text-slate-600"
-                                value={sortBy}
-                                onChange={e => setSortBy(e.target.value)}
-                            >
-                                <option value="date_desc">ล่าสุดก่อน</option>
-                                <option value="date_asc">เก่าสุดก่อน</option>
-                            </select>
-                            <ChevronDown className="w-4 h-4 absolute right-4 top-3.5 text-slate-400 pointer-events-none" />
+                        {/* Sort Filter (Custom Dropdown) */}
+                        <div className="w-full lg:w-56">
+                            <CustomSelect 
+                                value={sortBy} 
+                                onChange={setSortBy} 
+                                options={sortOptions} 
+                                icon={ArrowUpDown}
+                                placeholder="ล่าสุดก่อน"
+                            />
                         </div>
                     </div>
 
                     {/* Table */}
-                    <div className="overflow-x-auto flex-1">
-                        <table className="w-full text-left border-collapse">
+                    <div className="overflow-x-auto flex-1 relative">
+                        <table className="w-full text-left border-collapse h-full">
                             <thead>
                                 <tr className="bg-slate-50/50 border-b border-slate-100 text-[11px] uppercase text-slate-500 font-extrabold tracking-widest">
                                     <th className="p-6 w-[18%]">วัน-เวลา</th>
-                                    <th className="p-6 w-[20%]">ผู้ทำรายการ</th>
+                                    <th className="p-6 w-[22%]">ผู้ทำรายการ (คุณ)</th>
                                     <th className="p-6 w-[15%] text-center">กิจกรรม</th>
                                     <th className="p-6 w-[20%]">เอกสารเป้าหมาย</th>
-                                    <th className="p-6 w-[27%]">รายละเอียด</th>
+                                    <th className="p-6 w-[25%]">รายละเอียด</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-50 bg-transparent text-sm">
+                            <tbody className="divide-y divide-slate-50 bg-transparent text-sm relative">
                                 {loading ? (
                                     [...Array(5)].map((_, i) => (
                                         <tr key={i} className="animate-pulse">
                                             <td className="p-6"><div className="h-4 bg-slate-200 rounded-md w-24 mb-2"></div><div className="h-3 bg-slate-100 rounded-md w-12"></div></td>
-                                            <td className="p-6"><div className="h-4 bg-slate-200 rounded-md w-32"></div></td>
+                                            <td className="p-6"><div className="flex gap-3 items-center"><div className="w-8 h-8 bg-slate-200 rounded-full"></div><div className="h-4 bg-slate-200 rounded-md w-32"></div></div></td>
                                             <td className="p-6"><div className="h-6 bg-slate-200 rounded-full w-24 mx-auto"></div></td>
                                             <td className="p-6"><div className="h-4 bg-slate-200 rounded-md w-32 mb-2"></div><div className="h-3 bg-slate-100 rounded-md w-20"></div></td>
                                             <td className="p-6"><div className="h-4 bg-slate-200 rounded-md w-48"></div></td>
@@ -288,11 +374,14 @@ export default function SDDHistoryPage() {
                                     ))
                                 ) : logs.length === 0 ? (
                                     <tr>
-                                        <td colSpan={5} className="p-20 text-center text-slate-400 flex flex-col items-center">
-                                            <span className="bg-slate-50 p-5 rounded-full mb-4 shadow-sm border border-slate-100">
-                                                <History className="w-10 h-10 text-slate-300" strokeWidth={1.5} />
-                                            </span>
-                                            <p className="text-xl font-bold text-slate-700">ไม่พบประวัติการดำเนินการ</p>
+                                        <td colSpan={5} className="p-0 h-full">
+                                            <div className="flex flex-col items-center justify-center text-slate-400 min-h-[400px] w-full">
+                                                <span className="bg-slate-50 p-5 rounded-full mb-4 shadow-sm border border-slate-100">
+                                                    <History className="w-10 h-10 text-slate-300" strokeWidth={1.5} />
+                                                </span>
+                                                <p className="text-xl font-bold text-slate-700">ไม่พบประวัติการดำเนินการ</p>
+                                                <p className="text-sm mt-2 text-slate-500">ยังไม่มีการอนุมัติหรือตีกลับเอกสารในระบบ</p>
+                                            </div>
                                         </td>
                                     </tr>
                                 ) : (
@@ -304,16 +393,18 @@ export default function SDDHistoryPage() {
                                                 animate={{ opacity: 1, y: 0 }}
                                                 exit={{ opacity: 0 }}
                                                 transition={{ delay: index * 0.05 }}
-                                                className="group hover:bg-blue-50/20 transition-colors"
+                                                className="group hover:bg-indigo-50/30 transition-colors"
                                             >
                                                 <td className="p-6 align-middle">
-                                                    <div className="font-extrabold text-slate-700 text-sm group-hover:text-blue-700 transition-colors">{formatDateTh(log.created_at)}</div>
-                                                    <div className="text-xs text-slate-400 mt-1 font-mono tracking-wide">{formatTimeTh(log.created_at)} น.</div>
+                                                    <div className="font-extrabold text-slate-700 text-sm group-hover:text-indigo-700 transition-colors">{formatDateTh(log.created_at)}</div>
+                                                    <div className="text-xs text-slate-400 mt-1 font-mono tracking-wide bg-slate-100 px-2 py-0.5 rounded-md w-fit border border-slate-200/60">{formatTimeTh(log.created_at)} น.</div>
                                                 </td>
                                                 <td className="p-6 align-middle">
-                                                    <div className="font-bold text-slate-800 flex items-center gap-2">
-                                                        <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0"><User size={12}/></div>
-                                                        <span className={log.operator_name?.includes("รหัสผู้ดำเนินการ") ? "font-mono text-slate-500 text-xs" : ""}>
+                                                    <div className="font-bold text-slate-800 flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0 shadow-sm border border-indigo-200">
+                                                            <User size={14} strokeWidth={2.5}/>
+                                                        </div>
+                                                        <span className="text-[13px] text-indigo-900">
                                                             {log.operator_name}
                                                         </span>
                                                     </div>
@@ -322,10 +413,17 @@ export default function SDDHistoryPage() {
                                                     <ActionBadge action={log.action_type || "other"} />
                                                 </td>
                                                 <td className="p-6 align-middle">
-                                                    <div className="font-medium text-slate-800 text-[13px]">{log.target_student_name}</div>
-                                                    <div className="text-[11px] text-slate-400 font-mono tracking-wide mt-1 bg-slate-50 px-2 py-0.5 rounded w-fit border border-slate-100">ID: {log.target_student_id !== "-" ? log.target_student_id : `Form #${log.form_id}`}</div>
+                                                    <div className="flex items-center gap-2 mb-1.5">
+                                                        {log.target_student_id === "ORG" ? (
+                                                            <Building2 size={14} className="text-blue-500" />
+                                                        ) : (
+                                                            <User size={14} className="text-emerald-500" />
+                                                        )}
+                                                        <div className="font-bold text-slate-800 text-[13px]">{log.target_student_name}</div>
+                                                    </div>
+                                                    <div className="text-[11px] text-slate-500 font-mono tracking-wide">ID: {log.target_student_id !== "ORG" && log.target_student_id !== "-" ? log.target_student_id : `Form #${log.form_id}`}</div>
                                                 </td>
-                                                <td className="p-6 text-[13px] font-medium text-slate-600 leading-relaxed align-middle">
+                                                <td className="p-6 text-[13px] font-medium text-slate-500 leading-relaxed align-middle">
                                                     {log.detail_text}
                                                 </td>
                                             </motion.tr>
@@ -337,12 +435,12 @@ export default function SDDHistoryPage() {
                     </div>
 
                     {/* Pagination Footer */}
-                    <div className="flex justify-between items-center p-5 border-t border-slate-100 bg-slate-50/80">
+                    <div className="flex justify-between items-center p-5 border-t border-slate-100 bg-slate-50/80 mt-auto">
                         <div className="flex items-center gap-2">
                             <button 
                                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
                                 disabled={currentPage === 1}
-                                className="flex items-center justify-center p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                                className="flex items-center justify-center p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                             >
                                 <ChevronLeft size={16} />
                             </button>
@@ -352,7 +450,7 @@ export default function SDDHistoryPage() {
                             <button 
                                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
                                 disabled={currentPage === totalPages || totalPages === 0}
-                                className="flex items-center justify-center p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                                className="flex items-center justify-center p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                             >
                                 <ChevronRight size={16} />
                             </button>

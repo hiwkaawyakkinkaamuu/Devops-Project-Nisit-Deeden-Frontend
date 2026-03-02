@@ -153,7 +153,8 @@ export default function SystemSettingsPage() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
             {/* Header Section */}
             <div className="flex flex-col">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 text-xs font-bold mb-3 border border-blue-200 shadow-sm">
+            {/* 🚨 แก้ไข: ใส่ w-fit เพื่อให้กล่องหดพอดีกับตัวหนังสือ */}
+            <div className="inline-flex w-fit items-center gap-2 px-3 py-1.5 rounded-md bg-blue-50 text-blue-600 text-xs font-bold mb-3 border border-blue-200 shadow-sm">
                 <Sparkles className="w-3.5 h-3.5" /> ระบบจัดการข้อมูลปีการศึกษา
             </div>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
@@ -201,7 +202,7 @@ export default function SystemSettingsPage() {
                     
                     <div className="relative z-10 h-full flex flex-col justify-between">
                         <div>
-                          <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[10px] font-bold tracking-wider border border-white/10 mb-6">
+                          <div className="inline-flex w-fit items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[10px] font-bold tracking-wider border border-white/10 mb-6">
                               {isNewSystem ? "SYSTEM INITIALIZATION" : "SYSTEM OPERATION"}
                           </div>
                           <h3 className="text-2xl font-bold leading-tight">เปลี่ยนผ่าน<br/>ภาคเรียนใหม่</h3>

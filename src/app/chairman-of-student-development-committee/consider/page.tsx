@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import NominationDetailModal from "@/components/Nomination-detail-modal";
 import Swal from "sweetalert2";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
   Search, Calendar, GraduationCap, CheckCircle2, XCircle,
   Eye, Award, Building2, ChevronLeft, ChevronRight, 
@@ -71,6 +71,74 @@ export interface Nomination {
 
 const ITEMS_PER_PAGE = 8; 
 
+const modalVariants: Variants = {
+  hidden: { opacity: 0, scale: 0.95 },
+  show: { opacity: 1, scale: 1, transition: { type: "spring", duration: 0.3 } },
+  exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
+};
+
+// 🌟 Custom Dropdown Component 🌟
+const CustomSelect = ({ value, onChange, options, icon: Icon, placeholder, className = "" }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+  
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+  
+    const selectedLabel = options.find((o: any) => String(o.v) === String(value))?.l || placeholder;
+  
+    return (
+        // 🚨 ปรับ z-index ให้เหมาะสม (ไม่สูงเกินไปจนบัง Modal) 🚨
+        <div className={`relative w-full ${className}`} style={{ zIndex: isOpen ? 40 : 1 }} ref={dropdownRef}>
+            <div 
+                onClick={() => setIsOpen(!isOpen)}
+                className={`flex items-center justify-between w-full pl-11 pr-4 py-3.5 bg-white border rounded-2xl cursor-pointer transition-all duration-300 shadow-sm
+                    ${isOpen ? 'border-indigo-400 ring-4 ring-indigo-500/10' : 'border-slate-200 hover:border-slate-300'}
+                `}
+            >
+                <Icon className={`w-4 h-4 absolute left-4 top-4 transition-colors ${isOpen ? 'text-indigo-500' : 'text-slate-400'}`} />
+                <span className={`text-sm font-medium truncate ${!value || value === "all" ? 'text-slate-500' : 'text-slate-800'}`}>
+                    {selectedLabel}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-180 text-indigo-500' : ''}`} />
+            </div>
+  
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        // 🚨 จำกัด z-index ให้อยู่ใต้ Modal (z-50) 🚨
+                        className="absolute top-[calc(100%+8px)] left-0 w-full bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl py-2 max-h-60 overflow-y-auto z-[50] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 hover:[&::-webkit-scrollbar-thumb]:bg-slate-300"
+                    >
+                        {options.map((o: any, i: number) => (
+                            <div
+                                key={i}
+                                onClick={() => { onChange(String(o.v)); setIsOpen(false); }}
+                                className={`px-4 py-3 cursor-pointer transition-all duration-200 text-sm font-medium flex items-center justify-between
+                                    ${String(value) === String(o.v) ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                                `}
+                            >
+                                {o.l}
+                                {String(value) === String(o.v) && <CheckCircle2 size={16} className="text-indigo-500" />}
+                            </div>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
 // ==========================================
 // 1. Main Component
 // ==========================================
@@ -88,8 +156,8 @@ export default function ChairmanApprovalPage() {
 
   // Filters & Sort
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterCategory, setFilterCategory] = useState("");
-  const [filterYear, setFilterYear] = useState("");
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterYear, setFilterYear] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Nomination | 'award_type_name' | null, direction: 'asc' | 'desc' | null }>({ key: 'latest_update', direction: 'desc' });
 
@@ -119,26 +187,22 @@ export default function ChairmanApprovalPage() {
         if (USE_MOCK_DATA) return;
 
         const params: Record<string, string> = { limit: "200" };
-        if (searchTerm) params.keyword = searchTerm;
-        if (filterCategory) params.award_type = filterCategory;
-        if (filterYear) params.student_year = filterYear;
 
         const response = await api.get(`${API_BASE_URL}/awards/search`, { params });
         
-        // ✅ ป้องกัน Error .map is not a function
         const fetchedData = response.data?.data || response.data;
         const rawData = Array.isArray(fetchedData) ? fetchedData : [];
 
         const mappedData = rawData.map((item: any) => {
             const isOrgNominated = item.org_name && item.org_name.trim() !== "";
             
-            // 💡 Mock Vote Summary (สุ่มเพื่อให้ UI สวยงาม กรณี API จริงยังไม่มีข้อมูลโหวต)
+            // 💡 Mock Vote Summary
             const mockApprove = (item.form_id % 3) + 3; // สุ่ม 3-5
             const mockReject = 5 - mockApprove;
 
             return {
                 ...item,
-                form_status: item.form_status_id || item.form_status, // ✅ แก้ไขให้รองรับ Field จาก Backend
+                form_status: item.form_status_id || item.form_status, 
                 award_type_name: item.award_type,
                 is_organization_nominated: isOrgNominated, 
                 organization_name: item.org_name,
@@ -146,8 +210,6 @@ export default function ChairmanApprovalPage() {
             };
         });
 
-        // ✅ ประธานคณะกรรมการ ดึงเฉพาะสถานะ 10 (อนุมัติโดยคณะกรรมการ) มารอลงนาม
-        // 💡 หมายเหตุ: ใส่ || 8 เผื่อไว้กรณี Backend ล็อกสิทธิ์ไว้ให้เห็นแค่ 8 จะได้มีข้อมูลโชว์ตอนทดสอบระบบ
         const TARGET_STATUS_ID = 10; 
         const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID || item.form_status === 8);
 
@@ -165,14 +227,30 @@ export default function ChairmanApprovalPage() {
     fetchAwardTypes();
     fetchData();
     return () => { isMounted = false; };
-  }, [searchTerm, filterCategory, filterYear]);
+  }, []);
 
   // ==========================================
   // 3. Logic & Handlers
   // ==========================================
   const processedData = useMemo(() => {
     let filtered = items;
-    if (filterCategory) filtered = filtered.filter(item => item.award_type_name === filterCategory);
+
+    if (searchTerm) {
+        const lowerTerm = searchTerm.toLowerCase();
+        filtered = filtered.filter(item => 
+          item.student_firstname?.toLowerCase().includes(lowerTerm) || 
+          item.student_lastname?.toLowerCase().includes(lowerTerm) ||
+          item.student_number?.includes(lowerTerm)
+        );
+    }
+
+    if (filterCategory && filterCategory !== "all") {
+        filtered = filtered.filter(item => item.award_type_name === filterCategory);
+    }
+
+    if (filterYear && filterYear !== "all") {
+        filtered = filtered.filter(item => String(item.student_year) === filterYear);
+    }
     
     if (sortConfig.key) {
       filtered.sort((a: any, b: any) => {
@@ -191,7 +269,7 @@ export default function ChairmanApprovalPage() {
       });
     }
     return filtered;
-  }, [items, filterCategory, sortConfig]);
+  }, [items, searchTerm, filterCategory, filterYear, sortConfig]);
 
   const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
   const currentItems = processedData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -247,7 +325,6 @@ export default function ChairmanApprovalPage() {
 
     try {
         if (!USE_MOCK_DATA) {
-            // ✅ สถานะ 12 = ลงนามโดยประธานคณะกรรมการ
             const NEXT_STATUS_ID = 12; 
             await api.put(`${API_BASE_URL}/awards/form-status/change/${id}`, { form_status: NEXT_STATUS_ID, reject_reason: "" });
         }
@@ -273,11 +350,24 @@ export default function ChairmanApprovalPage() {
     }
   };
 
+  // --- Options สำหรับ Dropdowns ---
+  const awardTypeOptions = [
+    { v: "all", l: "ทุกประเภทรางวัล" },
+    ...awardTypes.map(type => ({ v: type, l: type }))
+  ];
+
+  const yearOptions = [
+    { v: "all", l: "ทุกระดับชั้นปี" },
+    { v: "1", l: "ชั้นปีที่ 1" },
+    { v: "2", l: "ชั้นปีที่ 2" },
+    { v: "3", l: "ชั้นปีที่ 3" },
+    { v: "4", l: "ชั้นปีที่ 4" },
+  ];
+
   // ==========================================
   // 4. Render UI
   // ==========================================
   return (
-    // ✅ ลบ Gradient ออกและใช้พื้นหลังสีขาว
     <div className="min-h-screen bg-white p-6 pt-24 lg:p-10 lg:pt-28 font-sans pb-24 relative overflow-hidden">
       
       {/* --- CSS Animations --- */}
@@ -288,14 +378,13 @@ export default function ChairmanApprovalPage() {
 
       <div className="max-w-7xl mx-auto space-y-6 relative z-10">
         
-        {/* --- Header Section (Clean White) --- */}
-        <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 animate-fade-in-up">
+        {/* --- Header Section (Layer กลาง) --- */}
+        <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 animate-fade-in-up relative z-20">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 mb-3 text-indigo-600">
                 <Sparkles className="w-4 h-4" />
                 <span className="text-[11px] font-black uppercase tracking-[0.15em]">System Action Required</span>
             </div>
-            {/* ✅ ลบสี Gradient ของ Text ออก เปลี่ยนเป็นสีเทาเข้ม (slate-800) */}
             <h1 className="text-3xl lg:text-4xl font-black text-slate-800 flex items-center gap-3 tracking-tight">
               รับรองผลการคัดเลือก
             </h1>
@@ -315,38 +404,44 @@ export default function ChairmanApprovalPage() {
           </div>
         </div>
 
-        {/* --- Filters Grid --- */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
+        {/* --- Filters Grid (Layer 30 ให้อยู่เหนือตาราง) --- */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-up relative z-30" style={{ animationDelay: '100ms' }}>
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" /></div>
-              <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 pl-11 text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm" />
+              <input 
+                type="text" 
+                placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+                className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 pl-11 text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm placeholder:text-slate-400 text-slate-800" 
+              />
             </div>
             
-            <div className="relative group">
-               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Award className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" /></div>
-              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 pl-11 pr-10 text-sm font-medium text-slate-600 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm cursor-pointer appearance-none">
-                <option value="">ทุกประเภทรางวัล</option>
-                {awardTypes.map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              <ChevronDown className="w-4 h-4 absolute right-4 top-4 text-slate-400 pointer-events-none" />
+            <div className="relative">
+               <CustomSelect 
+                  value={filterCategory} 
+                  onChange={setFilterCategory} 
+                  options={awardTypeOptions} 
+                  icon={Award}
+                  placeholder="ทุกประเภทรางวัล"
+               />
             </div>
             
-            <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><GraduationCap className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" /></div>
-              <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 pl-11 pr-10 text-sm font-medium text-slate-600 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm cursor-pointer appearance-none">
-                <option value="">ทุกระดับชั้นปี</option>
-                <option value="1">ชั้นปีที่ 1</option><option value="2">ชั้นปีที่ 2</option><option value="3">ชั้นปีที่ 3</option><option value="4">ชั้นปีที่ 4</option>
-              </select>
-              <ChevronDown className="w-4 h-4 absolute right-4 top-4 text-slate-400 pointer-events-none" />
+            <div className="relative">
+               <CustomSelect 
+                  value={filterYear} 
+                  onChange={setFilterYear} 
+                  options={yearOptions} 
+                  icon={GraduationCap}
+                  placeholder="ทุกระดับชั้นปี"
+               />
             </div>
         </div>
 
-        {/* --- Data Table --- */}
-        <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 overflow-hidden animate-fade-in-up" style={{ animationDelay: '150ms' }}>
+        {/* --- Data Table (Layer 10 ต่ำสุด) --- */}
+        <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 overflow-visible animate-fade-in-up relative z-10" style={{ animationDelay: '150ms' }}>
           <div className="overflow-x-auto min-h-[400px]">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-[11px] font-extrabold uppercase tracking-widest border-b border-slate-200">
                   <th className="p-6 cursor-pointer hover:bg-slate-100 transition-colors w-[25%]" onClick={() => handleSort('student_firstname')}>
@@ -447,7 +542,6 @@ export default function ChairmanApprovalPage() {
 
                           {/* Column 5: Action (Sign) */}
                           <td className="p-6 text-center align-middle">
-                              {/* ✅ เปลี่ยนเป็นปุ่มสี Solid สีเดียวตามที่คุณต้องการ */}
                               <button 
                                   onClick={() => handleSign(item.form_id, fullName)}
                                   disabled={signingId === item.form_id}
@@ -491,7 +585,7 @@ export default function ChairmanApprovalPage() {
           </div>
 
           {/* --- Table Footer / Pagination --- */}
-          <div className="bg-slate-50 border-t border-slate-200 p-5 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="bg-slate-50 border-t border-slate-200 p-5 flex flex-col md:flex-row justify-between items-center gap-4 rounded-b-[32px]">
             <div className="flex items-center gap-2">
               <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronLeft className="w-4 h-4" /></button>
               <span className="text-sm font-bold text-slate-700 bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm">หน้า {currentPage} จาก {totalPages || 1}</span>

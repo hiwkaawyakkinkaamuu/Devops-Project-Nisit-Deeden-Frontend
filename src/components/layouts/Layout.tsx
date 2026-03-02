@@ -6,16 +6,29 @@ import axios from "axios";
 import { z } from "zod"; 
 import Swal from "sweetalert2";
 import Sidebar from "@/components/Sidebar"; 
+import { CalendarDays } from "lucide-react";
 
 // ==========================================
 // 1. Validation Schema (Zod)
 // ==========================================
 const TermSchema = z.object({
   year: z.number().or(z.string()).transform(String),
-  semester: z.number().or(z.string()).transform(String)
+  semester: z.number().or(z.string()).transform(String),
+  start_date: z.string().optional().nullable(),
+  end_date: z.string().optional().nullable()
 });
 
 type TermResponse = z.infer<typeof TermSchema>;
+
+// ฟังก์ชันแปลงวันที่ให้เป็นรูปแบบทางการ (เช่น 1 สิงหาคม 2567)
+const formatFormalDate = (dateStr: string) => {
+  if (!dateStr) return "";
+  return new Date(dateStr).toLocaleDateString('th-TH', { 
+      day: 'numeric', 
+      month: 'long',
+      year: 'numeric'
+  });
+};
 
 // ==========================================
 // 2. Main Layout Component
@@ -99,7 +112,7 @@ export default function FormLayout({
       <motion.main
         initial={false}
         animate={{
-          marginLeft: isCollapsed ? "80px" : "280px", // ปรับความกว้างให้สอดคล้องกับ Sidebar ใหม่ (80px/280px)
+          marginLeft: isCollapsed ? "80px" : "280px", 
         }}
         transition={{ type: "spring", stiffness: 300, damping: 30, mass: 0.8 }}
         className="flex-1 min-h-screen flex flex-col relative w-full"
@@ -110,10 +123,9 @@ export default function FormLayout({
            ========================================== */}
         <header className="sticky top-0 z-30 px-8 py-4 h-[90px] flex justify-end items-center bg-white/80 backdrop-blur-xl border-b border-gray-100/50 shadow-sm transition-all">
             
-            {/* Status Badge */}
+            {/* Status & Period Badge (Formal & Elegant) */}
             <AnimatePresence mode="wait">
               {isLoading ? (
-                // Skeleton Loader
                 <motion.div
                   key="loading"
                   initial={{ opacity: 0 }}
@@ -125,25 +137,38 @@ export default function FormLayout({
                   <div className="h-4 w-32 bg-gray-100 rounded-md animate-pulse" />
                 </motion.div>
               ) : (
-                // Actual Data Badge (Emerald Themed)
                 <motion.div
                   key="loaded"
                   initial={{ scale: 0.9, opacity: 0, y: -10 }}
                   animate={{ scale: 1, opacity: 1, y: 0 }}
                   transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                  className="group flex items-center gap-3 px-5 py-2.5 bg-white/90 hover:bg-white rounded-2xl border border-emerald-100/50 shadow-sm hover:shadow-emerald-100/50 hover:shadow-md transition-all duration-300 cursor-default"
+                  className="flex items-center bg-white/95 rounded-full border border-emerald-100/60 shadow-sm hover:shadow-md transition-all duration-300 cursor-default p-1.5"
                 >
-                  <div className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-gradient-to-tr from-emerald-500 to-teal-500"></span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-gray-400 font-medium text-xs uppercase tracking-wider">ปีการศึกษา/เทอม:</span>
-                    <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 text-base">
-                      {termData ? `${displayYear} / ${termData.semester}` : "N/A"}
+                  {/* ส่วนแสดงเทอมและปีการศึกษา (เน้นความทางการ) */}
+                  <div className="flex items-center gap-2.5 px-4 py-1.5 bg-emerald-50/50 rounded-full">
+                    <div className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-gradient-to-tr from-emerald-500 to-teal-500"></span>
+                    </div>
+                    <span className="font-bold text-emerald-800 text-sm tracking-wide">
+                      {termData ? `ปีการศึกษา ${displayYear} ภาคเรียนที่ ${termData.semester}` : "ไม่มีข้อมูลปีการศึกษา"}
                     </span>
                   </div>
+
+                  {/* ส่วนแสดงช่วงเวลาเปิดรับสมัครแบบทางการ */}
+                  {termData?.start_date && termData?.end_date && (
+                    <>
+                      <div className="w-px h-5 bg-gray-200 mx-2"></div>
+                      <div className="flex items-center gap-2 px-3 pr-4 text-slate-600">
+                        <CalendarDays size={16} className="text-emerald-500" />
+                        <span className="text-sm font-medium">
+                          เปิดรับสมัคร: <span className="font-bold text-slate-800">{formatFormalDate(termData.start_date)}</span>
+                          <span className="mx-2 text-slate-400">-</span>
+                          <span className="font-bold text-slate-800">{formatFormalDate(termData.end_date)}</span>
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

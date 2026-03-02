@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy, Lightbulb, Heart, Star, UploadCloud, FileText, XCircle, CheckCircle2,
   AlertCircle, Calendar, MapPin, User, Mail, Phone, GraduationCap,
-  ChevronRight, Percent
+  ChevronRight, Percent, ChevronDown, Clock
 } from "lucide-react";
 
 // ==========================================
@@ -19,7 +19,6 @@ import {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
-// ✅ แก้ไข: เพิ่ม Tailwind Class แบบเต็มๆ ให้กับ Card (ลดการใช้ String interpolation ที่ทำให้สีหาย)
 const THEME_STYLES: Record<string, any> = {
   activity: {
     accent: "orange", border: "border-orange-200/50", gradient: "from-orange-400 to-rose-500", shadow: "shadow-orange-500/20", text: "text-orange-600", ring: "focus:ring-orange-500/30",
@@ -155,6 +154,7 @@ export default function StudentNominationForm() {
   const [loading, setLoading] = useState(true);
   const [hasNominated, setHasNominated] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+  const [isOutOfPeriod, setIsOutOfPeriod] = useState(false);
   const [currentTermInfo, setCurrentTermInfo] = useState<{year: number, semester: number} | null>(null);
 
   // --- Form Data ---
@@ -192,6 +192,13 @@ export default function StudentNominationForm() {
 
       try {
         const termData = await nominationService.getCurrentTerm(token);
+        
+        if (!termData) {
+            setIsOutOfPeriod(true);
+            setLoading(false);
+            return;
+        }
+        
         if (termData) {
             setCurrentTermInfo({ year: termData.year, semester: termData.semester });
             const isSubmitted = await nominationService.checkSubmissionHistory(token, termData.year, termData.semester);
@@ -291,10 +298,10 @@ export default function StudentNominationForm() {
     if (!token) return;
 
     let awardName = "";
-    if (awardType === "activity") awardName = "นอกหลักสูตรกิจกรรม";
+    if (awardType === "activity") awardName = "กิจกรรมนอกหลักสูตร";
     else if (awardType === "innovation") awardName = "ความคิดสร้างสรรค์เเละนวัตกรรม";
     else if (awardType === "behavior") awardName = "ความประพฤติดี";
-    else if (awardType === "other") awardName = otherTitle.trim();
+    else if (awardType === "other") awardName = otherTitle.trim(); // ยัด otherTitle เข้าไปเป็นชื่อรางวัลเลย
 
     const res = await Swal.fire({
       title: "ยืนยันการเสนอชื่อ?",
@@ -329,26 +336,24 @@ export default function StudentNominationForm() {
       fd.append("gpa", userProfile.gpa);
       fd.append("student_date_of_birth", userProfile.date_of_birth);
 
-      // ✅ แก้ไข: ส่ง text ไปตรงๆ แทน Object หากเป็น awardType แบบปกติ
-      let formDetailValue = otherDetails;
+      // ✅ แก้ไข: ส่งข้อมูล otherDetails เข้าสู่ form_detail โดยตรง เป็น Text เสมอ ไม่หุ้ม JSON 
+      fd.append("form_detail", otherDetails);
       
-      // ✅ คงรูปแบบ Object ไว้เฉพาะกรณีที่เป็น "อื่นๆ" เพราะต้องส่งชื่อรางวัลไปด้วย
-      if (awardType === "other") {
-          formDetailValue = JSON.stringify({
-            award_title: otherTitle,
-            other_details: otherDetails
-          });
-      }
-
-      fd.append("form_detail", formDetailValue);
       selectedFiles.forEach(f => fd.append("files", f));
 
       await nominationService.submitNomination(token, fd);
       setHasNominated(true);
     } catch (e: any) {
       console.error("Submit Error:", e);
-      if (e.response?.data?.message?.toLowerCase().includes("duplicate")) setAlreadySubmitted(true);
-      else Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาดในการส่งข้อมูล", text: e.message });
+      
+      const errorMsg = e.response?.data?.message?.toLowerCase() || "";
+      if (errorMsg.includes("duplicate")) {
+        setAlreadySubmitted(true);
+      } else if (errorMsg.includes("เวลา") || errorMsg.includes("period") || errorMsg.includes("closed")) {
+        setIsOutOfPeriod(true);
+      } else {
+        Swal.fire({ icon: "error", title: "เกิดข้อผิดพลาดในการส่งข้อมูล", text: e.response?.data?.message || e.message });
+      }
     } finally { setLoading(false); }
   };
 
@@ -357,14 +362,12 @@ export default function StudentNominationForm() {
   // ==========================================
 
   if (loading) return <LoadingScreen />;
+  if (isOutOfPeriod) return <StatusScreen icon={Clock} color="rose" title="ไม่อยู่ในช่วงเวลา" msg="เลยเวลารับสมัคร หรือ ไม่อยู่ในช่วงเวลาที่สามารถส่งข้อมูลการเสนอชื่อได้" />;
   if (hasNominated) return <StatusScreen icon={CheckCircle2} color="emerald" title="สำเร็จ!" msg="ระบบได้รับข้อมูลการเสนอชื่อของท่านเรียบร้อยแล้ว ท่านสามารถติดตามสถานะการพิจารณาได้ที่เมนูติดตามสถานะ" />;
   if (alreadySubmitted) return <StatusScreen icon={AlertCircle} color="amber" title="ดำเนินการแล้ว" msg={`ท่านได้ทำการเสนอชื่อในปีการศึกษา ${displaycurrentTermInfo}/${currentTermInfo?.semester} เรียบร้อยแล้ว ไม่สามารถส่งซ้ำได้`} />;
 
   return (
-    <div className="min-h-screen bg-[#F4F7FC] text-slate-800 font-sans selection:bg-blue-200 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Abstract Background Shapes */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-400/20 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-5%] w-[30%] h-[50%] bg-purple-400/20 blur-[120px] rounded-full pointer-events-none" />
+    <div className="min-h-screen bg-transparent text-slate-800 font-sans py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
 
       <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: "easeOut" }} className="max-w-6xl mx-auto">
         <div className="bg-white/70 backdrop-blur-xl shadow-2xl shadow-slate-200/50 rounded-[2.5rem] p-8 md:p-14 border border-white">
@@ -375,7 +378,7 @@ export default function StudentNominationForm() {
                 ยื่นเสนอประวัติและผลงาน
               </motion.h1>
               <p className="text-slate-500 text-lg flex items-center gap-2 justify-center md:justify-start">
-                <User className="w-5 h-5 text-blue-500" /> สำหรับนิสิต (พิจารณาตนเอง)
+                <User className="w-5 h-5 text-blue-500" /> สำหรับนิสิต
               </p>
             </div>
           </header>
@@ -385,7 +388,7 @@ export default function StudentNominationForm() {
             {/* Step 1: Award Type */}
             <Section num={1} title="เลือกประเภทรางวัลที่ต้องการเสนอชื่อ" theme={theme}>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <TypeCard type="activity" active={awardType} set={setAwardType} title="นอกหลักสูตรกิจกรรม" sub="ผู้นำ/แข่งขัน" icon={Trophy} />
+                <TypeCard type="activity" active={awardType} set={setAwardType} title="กิจกรรมนอกหลักสูตร" sub="ผู้นำ/แข่งขัน" icon={Trophy} />
                 <TypeCard type="innovation" active={awardType} set={setAwardType} title="ความคิดสร้างสรรค์เเละนวัตกรรม" sub="สิ่งประดิษฐ์/วิจัย" icon={Lightbulb} />
                 <TypeCard type="behavior" active={awardType} set={setAwardType} title="ความประพฤติดี" sub="จิตอาสา/คุณธรรม" icon={Heart} />
                 <TypeCard type="other" active={awardType} set={setAwardType} title="อื่นๆ" sub="ระบุชื่อรางวัลเอง" icon={Star} />
@@ -447,7 +450,7 @@ export default function StudentNominationForm() {
                   </Section>
 
                   {/* Step 4: File Uploads */}
-                  <Section num={4} title="แนบเอกสารหลักฐาน (PDF)" theme={theme}>
+                  <Section num={4} title="แนบเอกสารหลักฐาน" theme={theme}>
                     <div onClick={() => fileInputRef.current?.click()} className={`group relative overflow-hidden border-2 border-dashed border-slate-300 hover:border-${theme.accent}-400 rounded-[2rem] p-12 text-center cursor-pointer transition-all duration-300 bg-white/40 hover:bg-white/80`}>
                       <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
                       <motion.div whileHover={{ scale: 1.05 }} className={`w-20 h-20 mx-auto bg-${theme.accent}-100 rounded-full flex items-center justify-center mb-6 shadow-sm`}>
@@ -523,7 +526,6 @@ const Section = ({ num, title, children, theme }: any) => (
   </motion.div>
 );
 
-// ✅ แก้ไข: ให้ TypeCard เรียกใช้สีจาก THEME_STYLES โดยตรง
 const TypeCard = ({ type, active, set, title, sub, icon: Icon }: any) => {
   const isActive = active === type;
   const t = THEME_STYLES[type];
@@ -554,20 +556,82 @@ const Input = ({ label, val, set, icon: Icon, theme, type = "text", req, max, pl
   </div>
 );
 
-const Select = ({ label, val, set, options, icon: Icon, theme, req, disabled }: any) => (
-  <div className={disabled ? "opacity-50 pointer-events-none" : ""}>
-    <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">{label} {req && <span className="text-rose-500">*</span>}</label>
-    <div className="relative group">
-      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-        <Icon className={`w-5 h-5 text-slate-400 group-focus-within:${theme.text} transition-colors`} />
+const Select = ({ label, val, set, options, icon: Icon, theme, req, disabled }: any) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedLabel = options.find((o: any) => o.v === val)?.l || "-- เลือก --";
+
+  return (
+    <div className={disabled ? "opacity-50 pointer-events-none" : ""} ref={dropdownRef}>
+      <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
+        {label} {req && <span className="text-rose-500">*</span>}
+      </label>
+      <div className="relative group">
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
+          <Icon className={`w-5 h-5 transition-colors duration-300 ${isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500'}`} />
+        </div>
+        
+        <div 
+          onClick={() => !disabled && setIsOpen(!isOpen)}
+          className={`w-full cursor-pointer bg-white/50 backdrop-blur-sm border rounded-2xl pl-12 pr-4 py-4 outline-none transition-all duration-300 flex items-center justify-between
+            ${isOpen ? `border-slate-300 shadow-md ${theme.ring} bg-white` : 'border-slate-200 hover:border-slate-300'}
+          `}
+        >
+          <span className={`font-medium truncate pr-4 transition-colors ${val ? 'text-slate-800' : 'text-slate-400'}`}>
+            {selectedLabel}
+          </span>
+          <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 flex-shrink-0 ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
+        </div>
+
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="absolute z-50 w-full mt-2 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full"
+            >
+              <div
+                onClick={() => { set(""); setIsOpen(false); }}
+                className={`px-5 py-3 cursor-pointer transition-all duration-200 hover:bg-slate-50 text-slate-500 font-medium ${val === "" ? "bg-slate-50 text-slate-800" : ""}`}
+              >
+                -- เลือก --
+              </div>
+              {options.map((o: any, i: number) => (
+                <div
+                  key={i}
+                  onClick={() => { set(o.v); setIsOpen(false); }}
+                  className={`px-5 py-3 cursor-pointer transition-all duration-200 font-medium truncate flex items-center justify-between
+                    ${val === o.v ? `bg-slate-50 ${theme.text}` : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'}
+                  `}
+                >
+                  {o.l}
+                  {val === o.v && (
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                      <CheckCircle2 className={`w-4 h-4 ${theme.text}`} />
+                    </motion.div>
+                  )}
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-      <select value={val} onChange={e => set(e.target.value)} disabled={disabled} className={`w-full appearance-none bg-white/50 backdrop-blur-sm border border-slate-200 rounded-2xl pl-12 pr-10 py-4 outline-none transition-all ${theme.ring} hover:border-slate-300 focus:bg-white text-slate-800 font-medium`}>
-        <option value="">-- เลือก --</option>
-        {options.map((o: any, i: number) => <option key={i} value={o.v}>{o.l}</option>)}
-      </select>
     </div>
-  </div>
-);
+  );
+};
 
 const ReadOnly = ({ label, val }: { label: string, val: string }) => (
   <div className="bg-slate-50/80 border border-slate-100 p-5 rounded-2xl">
@@ -585,14 +649,14 @@ const formatBytes = (bytes: number) => {
 };
 
 const LoadingScreen = () => (
-  <div className="h-screen w-full flex flex-col items-center justify-center bg-[#F4F7FC]">
+  <div className="h-screen w-full flex flex-col items-center justify-center bg-transparent">
     <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, ease: "linear", duration: 1 }} className="w-16 h-16 border-4 border-slate-200 border-t-blue-500 rounded-full mb-6" />
     <p className="text-slate-500 font-bold tracking-widest animate-pulse">กำลังโหลดข้อมูลระบบ...</p>
   </div>
 );
 
 const StatusScreen = ({ icon: Icon, color, title, msg }: any) => (
-  <div className="min-h-screen bg-[#F4F7FC] flex items-center justify-center p-6">
+  <div className="min-h-screen bg-transparent flex items-center justify-center p-6">
     <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white max-w-lg w-full rounded-[3rem] p-12 text-center shadow-2xl shadow-slate-200/50 border border-slate-50">
       <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.2 }} className={`w-28 h-28 mx-auto bg-${color}-50 text-${color}-500 rounded-full flex items-center justify-center mb-8`}>
         <Icon className="w-14 h-14" strokeWidth={2.5} />

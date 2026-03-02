@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom"; // ✅ Import Portal
 import { motion, AnimatePresence } from "framer-motion";
 import Swal from "sweetalert2";
 import { z } from "zod";
@@ -10,8 +11,11 @@ import {
   Award, Building2, User, Phone, Mail, MapPin, 
   ChevronLeft, ChevronRight, FileText, ChevronDown, 
   ShieldCheck, AlertTriangle, Sparkles, Inbox,
-  ArrowUp, ArrowDown, ArrowUpDown
+  ArrowUp, ArrowDown, ArrowUpDown,
+  AlertCircle
 } from "lucide-react";
+
+import NominationDetailModal from "@/components/Nomination-detail-modal";
 
 // ==========================================
 // 0. Configuration & Validation
@@ -78,7 +82,125 @@ export interface Nomination {
 }
 
 // ==========================================
-// 2. Main Component
+// 2. Custom Dropdown — แก้ด้วย Portal
+// ==========================================
+
+const CustomAwardTypeDropdown = ({ value, onChange, options }: any) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null); // ✅ ref ของ dropdown menu
+
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+  // คำนวณตำแหน่ง dropdown ทุกครั้งที่เปิด
+  useEffect(() => {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        position: "fixed",
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+        zIndex: 99999,
+      });
+    }
+  }, [isOpen]);
+
+  // ปิด dropdown เมื่อคลิกข้างนอก (ต้องไม่อยู่ใน trigger และไม่อยู่ใน menu)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const inTrigger = triggerRef.current?.contains(target);
+      const inMenu = menuRef.current?.contains(target);
+      if (!inTrigger && !inMenu) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  // ✅ ปิด dropdown เมื่อ scroll เฉพาะนอก dropdown menu เท่านั้น
+  // ถ้า scroll เกิดใน menuRef (เลื่อนดูตัวเลือก) → ไม่ปิด
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return; // scroll ใน menu → ไม่ปิด
+      setIsOpen(false); // scroll นอก menu → ปิด
+    };
+    window.addEventListener("scroll", handleScroll, true);
+    return () => window.removeEventListener("scroll", handleScroll, true);
+  }, [isOpen]);
+
+  const selectedLabel = value === "all" ? "ทุกประเภทรางวัล" : value;
+
+  // ✅ Portal target — render dropdown menu ออกไปที่ body โดยตรง
+  // หลุดพ้นจาก stacking context ของ backdrop-blur และ overflow ทุกชั้น
+  const dropdownMenu = (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          ref={menuRef} // ✅ ผูก ref เพื่อให้ scroll listener รู้ว่า scroll อยู่ใน menu หรือเปล่า
+          initial={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+          transition={{ duration: 0.18 }}
+          style={dropdownStyle}
+          className="bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300"
+        >
+          <div
+            onClick={() => { onChange("all"); setIsOpen(false); }}
+            className={`px-4 py-3 cursor-pointer transition-all duration-200 text-sm font-medium flex items-center justify-between
+              ${value === "all" ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}
+            `}
+          >
+            ทุกประเภทรางวัล
+            {value === "all" && <CheckCircle2 size={16} className="text-blue-500" />}
+          </div>
+          {options.map((type: string, i: number) => (
+            <div
+              key={i}
+              onClick={() => { onChange(type); setIsOpen(false); }}
+              className={`px-4 py-3 cursor-pointer transition-all duration-200 text-sm font-medium truncate flex items-center justify-between
+                ${value === type ? "bg-blue-50 text-blue-600" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}
+              `}
+            >
+              {type}
+              {value === type && <CheckCircle2 size={16} className="text-blue-500" />}
+            </div>
+          ))}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  return (
+    // ✅ ไม่ต้องใส่ z-index บน wrapper อีกต่อไป เพราะ menu ถูก portal ไป body แล้ว
+    <div className="relative w-full sm:w-64" ref={triggerRef}>
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center justify-between w-full pl-11 pr-4 py-3 bg-white/80 backdrop-blur-sm border rounded-2xl cursor-pointer transition-all duration-300 shadow-sm
+          ${isOpen ? "border-blue-400 ring-4 ring-blue-500/10" : "border-slate-200/80 hover:border-slate-300"}
+        `}
+      >
+        <Award
+          className={`w-4 h-4 absolute left-4 top-3.5 transition-colors ${isOpen ? "text-blue-500" : "text-slate-400"}`}
+        />
+        <span className={`text-sm font-medium truncate ${value === "all" ? "text-slate-500" : "text-slate-800"}`}>
+          {selectedLabel}
+        </span>
+        <ChevronDown
+          className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isOpen ? "rotate-180 text-blue-500" : ""}`}
+        />
+      </div>
+
+      {/* ✅ Portal: render ออกไปที่ document.body ทันที ไม่ถูก clip โดย overflow หรือ stacking context ใดๆ */}
+      {typeof document !== "undefined" && createPortal(dropdownMenu, document.body)}
+    </div>
+  );
+};
+
+// ==========================================
+// 3. Main Component
 // ==========================================
 
 export default function SDDVerifyPage() {
@@ -137,9 +259,7 @@ export default function SDDVerifyPage() {
 
         const response = await api.get(`${API_BASE_URL}/awards/search`, { params });
         
-        // 1. ดึงข้อมูลออกมาก่อน
         const fetchedData = response.data?.data || response.data;
-        // 2. เช็คว่าเป็น Array ไหม ถ้าเป็นให้ใช้ ถ้าไม่เป็นให้ใช้ค่าว่าง
         const rawData = Array.isArray(fetchedData) ? fetchedData : [];
 
         const mappedData = rawData.map((item: any) => ({
@@ -149,7 +269,6 @@ export default function SDDVerifyPage() {
             organization_name: item.org_name 
         }));
 
-        // ✅ กองพัฒนานิสิต ตรวจสอบเอกสารที่ "คณบดีอนุมัติมาแล้ว" (สถานะ = 6)
         const TARGET_STATUS_ID = 6; 
         const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID);
 
@@ -233,15 +352,6 @@ export default function SDDVerifyPage() {
     return d ? (d.department_name || d.departmentName || d.name) : "-";
   };
 
-  const calculateAge = (dob: string) => {
-      if (!dob) return "-";
-      const birthDate = new Date(dob);
-      if(isNaN(birthDate.getTime())) return "-";
-      const ageDifMs = Date.now() - birthDate.getTime();
-      const ageDate = new Date(ageDifMs); 
-      return Math.abs(ageDate.getUTCFullYear() - 1970);
-  };
-
   const handleApprove = async () => {
     if (!selectedItem) return;
     const studentName = getDisplayName(selectedItem);
@@ -260,7 +370,6 @@ export default function SDDVerifyPage() {
 
     if (result.isConfirmed) {
       try {
-        // ✅ ยิง API เปลี่ยนสถานะเป็น 8 (อนุมัติโดยกองพัฒนานิสิต) ทันที
         await api.put(`${API_BASE_URL}/awards/form-status/change/${selectedItem.form_id}`, { 
             form_status: 8, 
             reject_reason: "" 
@@ -284,7 +393,6 @@ export default function SDDVerifyPage() {
     }
 
     try {
-      // ✅ เปลี่ยนสถานะเป็น 9 (ปฏิเสธ/ตีกลับ โดยกองพัฒนานิสิต)
       await api.put(`${API_BASE_URL}/awards/form-status/change/${selectedItem.form_id}`, { 
           form_status: 9, 
           reject_reason: rejectReason 
@@ -298,18 +406,6 @@ export default function SDDVerifyPage() {
     }
   };
 
-  // ==========================================
-  // Render UI
-  // ==========================================
-  let detailObj: any = {};
-  if (selectedItem) {
-      try {
-          detailObj = typeof selectedItem.form_detail === 'string' && selectedItem.form_detail.startsWith('{') 
-                      ? JSON.parse(selectedItem.form_detail) 
-                      : { other_details: selectedItem.form_detail };
-      } catch(e) { detailObj = { other_details: selectedItem.form_detail }; }
-  }
-
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans relative">
       
@@ -322,6 +418,10 @@ export default function SDDVerifyPage() {
       <style jsx global>{`
           @keyframes fadeInUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
           .animate-fade-in-up { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+          ::-webkit-scrollbar { width: 8px; height: 8px; }
+          ::-webkit-scrollbar-track { background: transparent; }
+          ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+          ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       `}</style>
 
       {/* 📄 Main Content Area */}
@@ -342,31 +442,25 @@ export default function SDDVerifyPage() {
                   </p>
               </div>
               
-              <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                  <div className="relative group">
-                      <Search className="w-4 h-4 absolute left-4 top-3.5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+              <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+                  {/* Search Input */}
+                  <div className="relative group w-full sm:w-64">
+                      <Search className="w-4 h-4 absolute left-4 top-3.5 text-slate-400 group-focus-within:text-blue-500 transition-colors z-10" />
                       <input 
                           type="text" 
-                          placeholder="ค้นหาชื่อ, รหัส..." 
-                          className="w-full sm:w-56 pl-11 pr-4 py-3 bg-white/80 backdrop-blur-sm border border-slate-200/80 rounded-2xl outline-none text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all shadow-sm"
+                          placeholder="ค้นหาชื่อ, รหัสนิสิต..." 
+                          className="w-full pl-11 pr-4 py-3 bg-white/80 backdrop-blur-sm border border-slate-200/80 rounded-2xl outline-none text-sm font-medium focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all shadow-sm text-slate-800 placeholder:text-slate-400"
                           value={searchTerm}
                           onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                       />
                   </div>
-                  <div className="relative group">
-                    <Award className="w-4 h-4 absolute left-4 top-3.5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                    <select 
-                        className="w-full sm:w-56 pl-11 pr-10 py-3 bg-white/80 backdrop-blur-sm border border-slate-200/80 rounded-2xl outline-none text-sm cursor-pointer focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all appearance-none text-slate-600 font-medium shadow-sm"
-                        value={filterType}
-                        onChange={e => { setFilterType(e.target.value); setCurrentPage(1); }}
-                    >
-                        <option value="all">ทุกประเภทรางวัล</option>
-                        {awardTypes.map((type) => (
-                            <option key={type} value={type}>{type}</option>
-                        ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 absolute right-4 top-3.5 text-slate-400 pointer-events-none" />
-                  </div>
+                  
+                  {/* ✅ Dropdown — ใช้ Portal แล้ว ไม่ถูก clip อีก */}
+                  <CustomAwardTypeDropdown 
+                      value={filterType} 
+                      onChange={(val: string) => { setFilterType(val); setCurrentPage(1); }} 
+                      options={awardTypes} 
+                  />
               </div>
             </div>
 
@@ -418,7 +512,7 @@ export default function SDDVerifyPage() {
                             key={item.form_id} 
                             className="group hover:bg-blue-50/30 transition-all duration-300 animate-fade-in-up cursor-pointer"
                             style={{ opacity: 0, animationDelay: `${index * 50}ms`, animationFillMode: 'forwards' }}
-                            onClick={() => { setSelectedItem(item); setIsModalOpen(true); }}
+                            onClick={() => { setSelectedItem(item); setIsModalOpen(true); setIsRejectMode(false); }}
                         >
                         <td className="p-6 text-center text-slate-300 font-mono text-xs">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                         <td className="p-6 align-middle">
@@ -452,7 +546,7 @@ export default function SDDVerifyPage() {
                         </td>
                         <td className="p-6 text-center align-middle" onClick={(e) => e.stopPropagation()}>
                             <button 
-                                onClick={() => { setSelectedItem(item); setIsModalOpen(true); }}
+                                onClick={() => { setSelectedItem(item); setIsModalOpen(true); setIsRejectMode(false); }}
                                 className="bg-white hover:bg-blue-600 hover:text-white text-slate-600 border border-slate-200 hover:border-blue-600 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm hover:shadow-md active:scale-95 flex items-center gap-2 mx-auto"
                             >
                                 <Eye size={14} /> ตรวจสอบเอกสาร
@@ -486,185 +580,71 @@ export default function SDDVerifyPage() {
         </div>
       </div>
 
-      {/* ==========================================
-        MODAL SECTION
-        ==========================================
-      */}
+      {/* Modal Section */}
       <AnimatePresence>
-        {isModalOpen && selectedItem && (
-          <div className="absolute inset-0 z-[9999] pointer-events-none">
-             
-             {/* Sticky container limits modal to visible screen */}
-             <div className="sticky top-0 left-0 w-full h-screen flex items-center justify-center p-4 sm:p-6 z-50 pointer-events-auto">
-                 
-                 {/* Backdrop */}
-                 <motion.div 
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
-                    exit={{ opacity: 0 }} 
-                    className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" 
-                    onClick={() => setIsModalOpen(false)} 
-                 />
-                 
-                 {/* Modal Content */}
-                 <motion.div 
-                    initial={{ scale: 0.95, opacity: 0, y: 20 }} 
-                    animate={{ scale: 1, opacity: 1, y: 0 }} 
-                    exit={{ scale: 0.95, opacity: 0, y: 20 }} 
-                    className="relative bg-[#F8F9FB] w-full max-w-4xl h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden"
-                 >
-                    {/* Modal Header */}
-                    <div className="px-8 py-5 border-b border-slate-200 flex justify-between items-center bg-white z-10 shrink-0 shadow-sm">
-                        <div>
-                            <h2 className="text-xl font-black text-slate-800 flex items-center gap-3">
-                                <CheckCircle2 className="text-blue-500" size={24} />
-                                พิจารณาคุณสมบัติ: {selectedItem.award_type_name || selectedItem.award_type}
-                            </h2>
-                            <p className="text-sm font-medium text-slate-500 pl-9 mt-1">
-                                {getDisplayName(selectedItem)} 
-                                {selectedItem.student_lastname !== "-" && <span className="font-mono ml-2 bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">({selectedItem.student_number})</span>}
-                            </p>
-                        </div>
-                        <button onClick={() => setIsModalOpen(false)} className="p-2.5 rounded-full bg-slate-50 border border-slate-100 text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all shadow-sm">
-                            <XCircle size={24} />
-                        </button>
+        {isModalOpen && selectedItem && !isRejectMode && (
+           <NominationDetailModal 
+               isOpen={isModalOpen} 
+               onClose={() => setIsModalOpen(false)} 
+               data={selectedItem} 
+               faculties={faculties}
+               departments={departments}
+           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isModalOpen && selectedItem && !isRejectMode && (
+           <div className="fixed bottom-0 left-0 w-full z-[10000] p-6 pointer-events-none flex justify-center">
+               <motion.div 
+                   initial={{ y: 100, opacity: 0 }} 
+                   animate={{ y: 0, opacity: 1 }} 
+                   exit={{ y: 100, opacity: 0 }}
+                   className="bg-white/90 backdrop-blur-xl p-4 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.15)] border border-slate-200 pointer-events-auto flex items-center gap-4"
+               >
+                    <button onClick={() => setIsRejectMode(true)} className="px-8 py-3.5 rounded-xl text-sm font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-transparent transition-colors shadow-sm">
+                        ปฏิเสธฟอร์ม
+                    </button>
+                    <button onClick={handleApprove} className="px-10 py-3.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-[0_8px_20px_rgba(37,99,235,0.3)] hover:-translate-y-0.5 transition-all flex items-center gap-2">
+                        บันทึกและส่งต่อ <ChevronRight size={16}/>
+                    </button>
+               </motion.div>
+           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Reject Reason Modal */}
+      <AnimatePresence>
+        {isRejectMode && selectedItem && (
+          <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsRejectMode(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100">
+                <div className="bg-rose-50/50 px-6 py-5 border-b border-rose-100 flex items-center justify-between">
+                    <h3 className="text-xl font-bold text-rose-800 flex items-center gap-2"><AlertCircle className="w-6 h-6 text-rose-500" /> ระบุเหตุผล "ไม่เห็นชอบ"</h3>
+                    <button onClick={() => setIsRejectMode(false)} className="text-rose-400 hover:text-rose-600 bg-white p-1.5 rounded-full hover:bg-rose-100 transition-colors"><XCircle className="w-5 h-5"/></button>
+                </div>
+                <div className="p-6">
+                    <p className="text-slate-600 font-medium mb-4 text-sm">
+                        เอกสารของ <b className="text-slate-800">{getDisplayName(selectedItem)}</b> จะถูกปฏิเสธ
+                    </p>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">เหตุผลที่ตีกลับเอกสาร <span className="text-rose-500">*</span></label>
+                    <textarea 
+                        value={rejectReason} 
+                        onChange={(e) => setRejectReason(e.target.value)} 
+                        className="w-full border border-slate-300 rounded-xl p-4 text-sm outline-none transition-all h-32 resize-none bg-slate-50/50 focus:ring-4 focus:ring-rose-100 focus:border-rose-400" 
+                        placeholder="ระบุเหตุผลอย่างน้อย 5 ตัวอักษร..." 
+                        autoFocus 
+                    />
+                    <div className="mt-6 flex justify-end gap-3">
+                        <button onClick={() => setIsRejectMode(false)} className="px-5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-medium">ยกเลิก</button>
+                        <button onClick={handleReject} className="px-6 py-2.5 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-lg shadow-rose-600/20 flex items-center gap-2"><XCircle size={16}/> ยืนยันการตีกลับ</button>
                     </div>
-
-                    {/* Modal Body */}
-                    <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
-                        {!isRejectMode ? (
-                            <div className="space-y-6">
-                                {/* 1. General Info */}
-                                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
-                                    <h3 className="font-black text-slate-800 mb-6 flex items-center gap-3 text-lg">
-                                        <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">1</div>
-                                        ข้อมูลทั่วไป
-                                    </h3>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                        <ReadOnlyField label="วิทยาเขต" value={`วิทยาเขต${getCampusName(selectedItem.campus_id)}`} fullWidth className="bg-blue-50/30 border-blue-100" />
-                                        <ReadOnlyField label="คณะ" value={getFacultyName(selectedItem.faculty_id)} />
-                                        <ReadOnlyField label="สาขา/ภาควิชา" value={getDepartmentName(selectedItem.department_id)} />
-                                        <ReadOnlyField label="อาจารย์ที่ปรึกษา" value={selectedItem.advisor_name} />
-                                        <ReadOnlyField label="เกรดเฉลี่ย (GPA)" value={selectedItem.gpa} />
-                                        <ReadOnlyField label="วันเกิด" value={selectedItem.student_date_of_birth ? new Date(selectedItem.student_date_of_birth).toLocaleDateString('th-TH') : "-"} />
-                                        <ReadOnlyField label="อายุ" value={`${calculateAge(selectedItem.student_date_of_birth)} ปี`} />
-                                        <ReadOnlyField label="เบอร์โทรศัพท์" value={selectedItem.student_phone_number} icon={Phone} />
-                                        <ReadOnlyField label="อีเมล" value={selectedItem.student_email} icon={Mail} />
-                                        <ReadOnlyField label="ที่อยู่ปัจจุบัน" value={selectedItem.student_address} icon={MapPin} fullWidth />
-                                    </div>
-                                </div>
-
-                                {/* 2. Award Details */}
-                                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
-                                    <h3 className="font-black text-slate-800 mb-6 flex items-center gap-3 text-lg">
-                                        <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center">2</div>
-                                        รายละเอียดผลงาน/รางวัล
-                                    </h3>
-                                    
-                                    {detailObj.project_title && (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-6">
-                                            <ReadOnlyField label="ชื่อโครงการ/กิจกรรม" value={detailObj.project_title} fullWidth />
-                                            <ReadOnlyField label="รางวัล/บทบาทหน้าที่" value={detailObj.prize} />
-                                            <ReadOnlyField label="วันที่ได้รับ/เข้าร่วม" value={detailObj.date_received} />
-                                            <ReadOnlyField label="หน่วยงานที่จัด" value={detailObj.organized_by} />
-                                            <ReadOnlyField label="ชื่อทีม (ถ้ามี)" value={detailObj.team_name} />
-                                        </div>
-                                    )}
-
-                                    <ReadOnlyField 
-                                        label="เหตุผลในการเสนอชื่อ (โดยละเอียด)" 
-                                        value={detailObj.other_details || detailObj.behavior_desc || "-"} 
-                                        isTextArea 
-                                        className="bg-slate-50"
-                                    />
-                                </div>
-
-                                {/* 3. Files */}
-                                {selectedItem.files && selectedItem.files.length > 0 && (
-                                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
-                                        <h3 className="font-black text-slate-800 mb-6 flex items-center gap-3 text-lg">
-                                            <div className="w-8 h-8 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">3</div>
-                                            เอกสารแนบ
-                                        </h3>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            {selectedItem.files.map((f, i) => (
-                                                <a key={i} href={getFileUrl(f.file_path)} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:border-blue-400 hover:shadow-md transition-all group">
-                                                    <div className="p-3 bg-white rounded-xl shadow-sm text-rose-500 group-hover:scale-110 transition-transform">
-                                                        <FileText size={24} />
-                                                    </div>
-                                                    <div className="overflow-hidden">
-                                                        <p className="font-bold text-sm text-slate-700 truncate group-hover:text-blue-600 transition-colors">{f.file_name || `เอกสารประกอบ #${i+1}`}</p>
-                                                        <p className="text-xs text-slate-400 font-mono mt-0.5">{(f.file_size / 1024).toFixed(2)} KB</p>
-                                                    </div>
-                                                </a>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            // Reject Mode View
-                            <div className="max-w-2xl mx-auto mt-10">
-                                <div className="bg-rose-50 p-10 rounded-[32px] border border-rose-200 shadow-inner text-center">
-                                    <div className="w-24 h-24 bg-rose-100 text-rose-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-sm border border-white">
-                                        <AlertTriangle size={48} strokeWidth={2} />
-                                    </div>
-                                    <h3 className="text-3xl font-black text-rose-800 mb-3">ระบุเหตุผลการตีกลับเอกสาร</h3>
-                                    <p className="text-rose-600 font-medium mb-10 text-lg">
-                                        เอกสารของ <b className="text-rose-900 bg-white px-2 py-1 rounded-lg shadow-sm">{getDisplayName(selectedItem)}</b> จะถูกส่งกลับไปให้แก้ไข
-                                    </p>
-                                    <div className="text-left">
-                                        <label className="block text-sm font-bold text-rose-800 mb-3 pl-1 uppercase tracking-wider">เหตุผล <span className="text-rose-500">*</span></label>
-                                        <textarea 
-                                            className="w-full h-48 p-6 rounded-2xl border-2 border-rose-200 focus:ring-4 focus:ring-rose-100 focus:border-rose-400 outline-none text-base resize-none shadow-sm font-medium text-slate-700 bg-white placeholder:text-slate-300" 
-                                            placeholder="เช่น เอกสารแนบไม่ครบถ้วน, ข้อมูลวันที่ไม่ถูกต้องตามเกณฑ์ประกาศ..." 
-                                            value={rejectReason} 
-                                            onChange={e => setRejectReason(e.target.value)}
-                                        ></textarea>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Modal Footer Actions */}
-                    <div className="px-8 py-6 border-t border-slate-200 bg-white flex justify-end gap-4 z-10 shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
-                        {!isRejectMode ? (
-                            <>
-                                <button onClick={() => setIsRejectMode(true)} className="px-8 py-3.5 rounded-xl text-sm font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-transparent transition-colors shadow-sm">ตีกลับให้แก้ไข (Reject)</button>
-                                <button onClick={handleApprove} className="px-10 py-3.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-[0_8px_20px_rgba(37,99,235,0.3)] hover:-translate-y-0.5 transition-all flex items-center gap-2">บันทึกและส่งต่อ <ChevronRight size={16}/></button>
-                            </>
-                        ) : (
-                            <>
-                                 <button onClick={() => setIsRejectMode(false)} className="px-8 py-3.5 rounded-xl text-sm font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 transition-colors shadow-sm">ยกเลิก</button>
-                                <button onClick={handleReject} className="px-10 py-3.5 rounded-xl text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-[0_8px_20px_rgba(225,29,72,0.3)] hover:-translate-y-0.5 transition-all flex items-center gap-2"><XCircle size={16}/> ยืนยันการตีกลับ</button>
-                            </>
-                        )}
-                    </div>
-                 </motion.div>
-             </div>
+                </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
+
     </div>
   );
-}
-
-// ==========================================
-// Helper Sub-Components
-// ==========================================
-
-function ReadOnlyField({ label, value, className = "", isTextArea = false, icon: Icon, fullWidth = false }: any) {
-    return (
-        <div className={`p-5 bg-slate-50/80 border border-slate-200/60 rounded-2xl ${fullWidth ? 'sm:col-span-2' : ''} ${className}`}>
-            <span className="text-[10px] uppercase font-black text-slate-400 tracking-widest flex items-center gap-1.5 mb-2">
-                {Icon && <Icon size={14} className="text-slate-400" />} {label}
-            </span>
-            {isTextArea ? (
-                <p className="font-semibold text-slate-800 whitespace-pre-wrap text-sm leading-relaxed p-4 bg-white rounded-xl border border-slate-200 min-h-[120px] shadow-sm">{value || "-"}</p>
-            ) : (
-                <span className="font-bold text-slate-800 text-[15px] block">{value || "-"}</span>
-            )}
-        </div>
-    );
 }
