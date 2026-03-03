@@ -4,11 +4,11 @@ import { useState, useRef, useEffect, useMemo, ChangeEvent } from "react";
 import Link from "next/link";
 import Swal from "sweetalert2";
 import { useRouter } from "next/navigation";
-import axios from "axios";
+import { api } from "@/lib/axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy, Lightbulb, Heart, Star, UploadCloud, FileText, XCircle, CheckCircle2,
-  AlertCircle, Calendar, MapPin, User, Mail, Phone, GraduationCap,
+  AlertCircle, Calendar, User, Phone, GraduationCap,
   ChevronRight, Percent, ChevronDown, Clock
 } from "lucide-react";
 
@@ -16,7 +16,6 @@ import {
 // 0. Configuration & Types
 // ==========================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 const THEME_STYLES: Record<string, any> = {
@@ -56,7 +55,7 @@ interface UserProfile {
 const nominationService = {
   getProfile: async (token: string) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/auth/me`, {
+      const response = await api.get(`/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 10000,
       });
@@ -71,21 +70,21 @@ const nominationService = {
       const fetchRequests: Promise<any>[] = [];
       
       if (st.faculty_id) {
-          fetchRequests.push(axios.get(`${API_BASE_URL}/faculty/${st.faculty_id}`, { headers: { Authorization: `Bearer ${token}` } })
+          fetchRequests.push(api.get(`/faculty/${st.faculty_id}`, { headers: { Authorization: `Bearer ${token}` } })
               .then(res => { facultyName = res.data.data?.faculty_name || res.data.faculty_name || "-"; })
               .catch(err => console.error("Failed to fetch faculty:", err))
           );
       }
 
       if (st.department_id) {
-          fetchRequests.push(axios.get(`${API_BASE_URL}/department/${st.department_id}`, { headers: { Authorization: `Bearer ${token}` } })
+          fetchRequests.push(api.get(`/department/${st.department_id}`, { headers: { Authorization: `Bearer ${token}` } })
               .then(res => { departmentName = res.data.data?.department_name || res.data.department_name || "-"; })
               .catch(err => console.error("Failed to fetch department:", err))
           );
       }
 
       if (u.campus_id) {
-          fetchRequests.push(axios.get(`${API_BASE_URL}/campus`, { headers: { Authorization: `Bearer ${token}` } })
+          fetchRequests.push(api.get(`/campus`, { headers: { Authorization: `Bearer ${token}` } })
               .then(res => {
                   const campuses = res.data.data || res.data || [];
                   if (Array.isArray(campuses)) {
@@ -122,21 +121,21 @@ const nominationService = {
 
   getCurrentTerm: async (token: string) => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/academic-years/current`, { headers: { Authorization: `Bearer ${token}` } });
+        const response = await api.get(`/academic-years/current`, { headers: { Authorization: `Bearer ${token}` } });
         return response.data.data;
     } catch (e) { return null; }
   },
 
   checkSubmissionHistory: async (token: string, currentYear: number, currentSemester: number) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/awards/my/submissions`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await api.get(`/awards/my/submissions`, { headers: { Authorization: `Bearer ${token}` } });
       const submissions = response.data.data || [];
       return submissions.some((sub: any) => Number(sub.academic_year) === Number(currentYear) && Number(sub.semester) === Number(currentSemester));
     } catch (error) { return false; }
   },
 
   submitNomination: async (token: string, formData: FormData) => {
-    const response = await axios.post(`${API_BASE_URL}/awards/submit`, formData, {
+    const response = await api.post(`/awards/submit`, formData, {
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
     });
     return response.data;
@@ -298,7 +297,7 @@ export default function StudentNominationForm() {
     if (!token) return;
 
     let awardName = "";
-    if (awardType === "activity") awardName = "กิจกรรมนอกหลักสูตร";
+    if (awardType === "activity") awardName = "นอกหลักสูตรกิจกรรม";
     else if (awardType === "innovation") awardName = "ความคิดสร้างสรรค์เเละนวัตกรรม";
     else if (awardType === "behavior") awardName = "ความประพฤติดี";
     else if (awardType === "other") awardName = otherTitle.trim(); // ยัด otherTitle เข้าไปเป็นชื่อรางวัลเลย
@@ -335,8 +334,6 @@ export default function StudentNominationForm() {
       fd.append("student_address", userProfile.address);
       fd.append("gpa", userProfile.gpa);
       fd.append("student_date_of_birth", userProfile.date_of_birth);
-
-      // ✅ แก้ไข: ส่งข้อมูล otherDetails เข้าสู่ form_detail โดยตรง เป็น Text เสมอ ไม่หุ้ม JSON 
       fd.append("form_detail", otherDetails);
       
       selectedFiles.forEach(f => fd.append("files", f));
@@ -388,7 +385,7 @@ export default function StudentNominationForm() {
             {/* Step 1: Award Type */}
             <Section num={1} title="เลือกประเภทรางวัลที่ต้องการเสนอชื่อ" theme={theme}>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <TypeCard type="activity" active={awardType} set={setAwardType} title="กิจกรรมนอกหลักสูตร" sub="ผู้นำ/แข่งขัน" icon={Trophy} />
+                <TypeCard type="activity" active={awardType} set={setAwardType} title="นอกหลักสูตรกิจกรรม" sub="ผู้นำ/แข่งขัน" icon={Trophy} />
                 <TypeCard type="innovation" active={awardType} set={setAwardType} title="ความคิดสร้างสรรค์เเละนวัตกรรม" sub="สิ่งประดิษฐ์/วิจัย" icon={Lightbulb} />
                 <TypeCard type="behavior" active={awardType} set={setAwardType} title="ความประพฤติดี" sub="จิตอาสา/คุณธรรม" icon={Heart} />
                 <TypeCard type="other" active={awardType} set={setAwardType} title="อื่นๆ" sub="ระบุชื่อรางวัลเอง" icon={Star} />

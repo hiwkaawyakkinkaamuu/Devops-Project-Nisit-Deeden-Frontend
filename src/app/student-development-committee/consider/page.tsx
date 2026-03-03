@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import NominationDetailModal from "@/components/Nomination-detail-modal"; 
 import Swal from "sweetalert2";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
-  Search, Calendar, Filter, GraduationCap, CheckCircle2, XCircle,
-  Eye, AlertCircle, Award, Clock, FileText, Check, X, Building2, UserCircle2,
+  Search, Calendar, GraduationCap, CheckCircle2, XCircle,
+  Eye, AlertCircle, Award, Clock, X, Building2,
   ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown
 } from "lucide-react";
 import { api } from "@/lib/axios";
@@ -15,8 +15,6 @@ import { api } from "@/lib/axios";
 // 0. Configuration & Types
 // ==========================================
 const USE_MOCK_DATA = false;
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 export interface FileResponse {
   file_dir_id: number;
@@ -170,7 +168,7 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
     
     const fetchAwardTypes = async () => {
       try {
-        const response = await api.get(`${API_BASE_URL}/awards/types`);
+        const response = await api.get(`/awards/types`);
         const types = response.data?.data || response.data || [];
         if (isMounted) setAwardTypes(types);
       } catch (error) {
@@ -186,7 +184,7 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
           return;
         }
 
-        const response = await api.get(`${API_BASE_URL}/awards/search`);
+        const response = await api.get(`/awards/search`);
         
         const fetchedData = response.data?.data || response.data;
         const rawData = Array.isArray(fetchedData) ? fetchedData : [];
@@ -300,14 +298,14 @@ export default function StudentDevelopmentCommitteeConsiderPage() {
         const operationType = statusId === 10 ? "approve" : "reject";
 
         // 1. ส่งผลโหวตไปจัดการสถานะหลัก
-        await api.post(`${API_BASE_URL}/awards/committee/vote/${id}`, { 
+        await api.post(`/awards/committee/vote/${id}`, { 
            operation: operationType,
            reason: reason // แนบเหตุผลไปด้วยเผื่อหลังบ้านต้องการ
         });
 
         // 2. ยิงเข้าตาราง Approval Logs ตรงๆ (ตามที่หน้าอื่นทำ)
         try {
-            await api.post(`${API_BASE_URL}/awards/approval-logs`, {
+            await api.post(`/awards/approval-logs`, {
                 form_id: id,
                 operation: operationType,
                 comment: reason,

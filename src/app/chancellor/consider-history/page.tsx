@@ -1,13 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import NominationDetailModal from "@/components/Nomination-detail-modal";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
-  Search, Calendar, GraduationCap, CheckCircle2,
+  Search, GraduationCap, CheckCircle2,
   Eye, Award, Building2, ChevronLeft, ChevronRight, 
-  ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Check,
-  Sparkles, FileSignature, History
+  ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, History
 } from "lucide-react";
 import { api } from "@/lib/axios";
 
@@ -15,7 +14,6 @@ import { api } from "@/lib/axios";
 // 0. Configuration & Types
 // ==========================================
 const USE_MOCK_DATA = false;
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 export interface FileResponse {
   file_dir_id: number;
@@ -172,7 +170,7 @@ export default function ChancellorHistoryPage() {
     
     const fetchAwardTypes = async () => {
       try {
-        const response = await api.get(`${API_BASE_URL}/awards/types`);
+        const response = await api.get(`/awards/types`);
         const types = response.data?.data || response.data || [];
         if (isMounted) setAwardTypes(types);
       } catch (error) {
@@ -186,7 +184,7 @@ export default function ChancellorHistoryPage() {
         if (USE_MOCK_DATA) return;
 
         const params: Record<string, string> = { limit: "500" };
-        const response = await api.get(`${API_BASE_URL}/awards/search`, { params });
+        const response = await api.get(`/awards/search`, { params });
         
         const fetchedData = response.data?.data || response.data;
         const rawData = Array.isArray(fetchedData) ? fetchedData : [];
@@ -202,7 +200,7 @@ export default function ChancellorHistoryPage() {
             };
         });
 
-        // 🚨 ดึงเฉพาะสถานะ 13 (ลงนามโดยอธิการบดีเสร็จสิ้นแล้ว) มาแสดงในหน้าประวัติ
+        // ดึงเฉพาะสถานะ 13 (ลงนามโดยอธิการบดีเสร็จสิ้นแล้ว) มาแสดงในหน้าประวัติ
         const TARGET_STATUS_ID = 13; 
         const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID);
 

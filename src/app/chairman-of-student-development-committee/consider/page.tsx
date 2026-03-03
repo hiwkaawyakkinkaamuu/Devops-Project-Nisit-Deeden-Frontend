@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import NominationDetailModal from "@/components/Nomination-detail-modal";
 import Swal from "sweetalert2";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
-  Search, Calendar, GraduationCap, CheckCircle2,
+  Search, GraduationCap, CheckCircle2,
   Eye, Award, Building2, ChevronLeft, ChevronRight, 
   ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, PenTool, Check, X,
   Sparkles, Users, FileSignature
@@ -16,7 +16,6 @@ import { api } from "@/lib/axios";
 // 0. Configuration & Types
 // ==========================================
 const USE_MOCK_DATA = false;
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 interface VoteSummary {
   approve: number;
@@ -76,7 +75,7 @@ const modalVariants: Variants = {
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
 };
 
-// 🌟 Custom Dropdown Component 🌟
+// Custom Dropdown Component
 const CustomSelect = ({ value, onChange, options, icon: Icon, placeholder, className = "" }: any) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -167,7 +166,7 @@ export default function ChairmanApprovalPage() {
     
     const fetchAwardTypes = async () => {
       try {
-        const response = await api.get(`${API_BASE_URL}/awards/types`);
+        const response = await api.get(`/awards/types`);
         const types = response.data?.data || response.data || [];
         if (isMounted) setAwardTypes(types);
       } catch (error) {
@@ -183,7 +182,7 @@ export default function ChairmanApprovalPage() {
         // ดึงเผื่อมาเยอะๆ เพื่อให้เจอกรณีที่สถานะ 10 ไปอยู่หน้าหลังๆ (ถ้าหลังบ้านยังไม่เพิ่ม Filter ให้)
         const params: Record<string, string> = { limit: "500" };
 
-        const response = await api.get(`${API_BASE_URL}/awards/search`, { params });
+        const response = await api.get(`/awards/search`, { params });
         
         const fetchedData = response.data?.data || response.data;
         const rawData = Array.isArray(fetchedData) ? fetchedData : [];
@@ -191,7 +190,7 @@ export default function ChairmanApprovalPage() {
         const mappedData = rawData.map((item: any) => {
             const isOrgNominated = item.org_name && item.org_name.trim() !== "";
             
-            // 💡 Mock Vote Summary
+            // Mock Vote Summary
             const mockApprove = (item.form_id % 3) + 3; // สุ่ม 3-5
             const mockReject = 5 - mockApprove;
 
@@ -205,7 +204,7 @@ export default function ChairmanApprovalPage() {
             };
         });
 
-        // 🚨 ประธานกรรมการ ดึงเฉพาะ "สถานะ 10: อนุมัติโดยคณะกรรมการ" เพื่อมาลงนาม
+        // ประธานกรรมการ ดึงเฉพาะ "สถานะ 10: อนุมัติโดยคณะกรรมการ" เพื่อมาลงนาม
         const TARGET_STATUS_ID = 10; 
         const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID);
 
@@ -321,9 +320,9 @@ export default function ChairmanApprovalPage() {
 
     try {
         if (!USE_MOCK_DATA) {
-            // 🚨 สถานะ 12 = ลงนามโดยประธานคณะกรรมการ
+            // สถานะ 12 = ลงนามโดยประธานคณะกรรมการ
             const NEXT_STATUS_ID = 12; 
-            await api.put(`${API_BASE_URL}/awards/form-status/change/${id}`, { 
+            await api.put(`/awards/form-status/change/${id}`, { 
                 form_status_id: NEXT_STATUS_ID, // ส่งไปเผื่อ backend ใช้ field นี้
                 form_status: NEXT_STATUS_ID,    // ส่งไปเผื่อ backend ใช้ field นี้
                 reject_reason: "" 

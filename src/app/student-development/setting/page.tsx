@@ -5,7 +5,6 @@ import { api } from "@/lib/axios";
 import Swal from "sweetalert2";
 import { 
   Calendar, 
-  ChevronDown, 
   CheckCircle2, 
   Sparkles, 
   Clock,
@@ -17,9 +16,6 @@ import {
 // ==========================================
 
 const USE_MOCK_DATA = false;
-const CENTRAL_ID = 99;
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 interface AcademicYear {
   academic_year_id: number;
@@ -66,7 +62,7 @@ export default function SystemSettingsPage() {
     setLoading(true);
     try {
       if (!USE_MOCK_DATA) {
-        const res = await api.get(`${API_BASE_URL}/academic-years/current`);
+        const res = await api.get(`/academic-years/current`);
         const data = res.data.data || res.data;
         if (data) {
           // convert year to Buddhist era if API returns CE
@@ -129,7 +125,7 @@ export default function SystemSettingsPage() {
       setSaving(true);
       try {
           // only creation is supported now
-          await api.post(`${API_BASE_URL}/academic-years/create`, {
+          await api.post(`/academic-years/create`, {
               start_date: new Date(config.start_date).toISOString(),
               end_date: new Date(config.end_date).toISOString(),
           });

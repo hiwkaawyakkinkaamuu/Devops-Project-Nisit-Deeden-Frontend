@@ -1,25 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import axios from "axios";
+import { api } from "@/lib/axios";
 import { 
   CheckCircle2, XCircle, Clock, Award, FileText, 
   History, UserCheck, ShieldCheck, Landmark, GraduationCap,
   ChevronDown, ChevronUp, ArrowRight, ArrowLeft,
-  User, Building2, Search, CalendarDays, Phone, Mail, MapPin, Map, AlertCircle, Filter,
+  User, Building2, CalendarDays, Phone, Mail, MapPin, AlertCircle, Filter,
   UserCircle2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
-
-const getFileUrl = (filePath: string) => {
-  if (!filePath) return "#";
-  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api").replace(/\/api$/, "");
-  const cleanPath = filePath.startsWith("/") ? filePath.substring(1) : filePath;
-  return `${backendUrl}/${cleanPath}`;
-};
 
 // ==========================================
 // 1. Logic Mapping 
@@ -57,7 +48,6 @@ export default function StudentTraceAndDetails() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [studentProfile, setStudentProfile] = useState<any>(null);
   
-  // 🌟 State สำหรับจัดการ Filter ปีการศึกษา
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [selectedYear, setSelectedYear] = useState<string>("all");
   
@@ -76,13 +66,13 @@ export default function StudentTraceAndDetails() {
         if (!token) return;
 
         const [profileRes, statusRes, subRes, facRes, deptRes, campusRes, yearsRes] = await Promise.all([
-          axios.get(`${API_BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/form-statuses/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
-          axios.get(`${API_BASE_URL}/awards/my/submissions`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE_URL}/faculty/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
-          axios.get(`${API_BASE_URL}/department/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
-          axios.get(`${API_BASE_URL}/campus/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
-          axios.get(`${API_BASE_URL}/academic-years/all`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } }))
+          api.get(`/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),
+          api.get(`/form-statuses/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
+          api.get(`/awards/my/submissions`, { headers: { Authorization: `Bearer ${token}` } }),
+          api.get(`/faculty/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
+          api.get(`/department/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
+          api.get(`/campus/`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } })),
+          api.get(`/academic-years/all`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { data: [] } }))
         ]);
 
         const profile = profileRes.data?.user || profileRes.data?.data || profileRes.data;
@@ -102,7 +92,7 @@ export default function StudentTraceAndDetails() {
 
         const detailed = await Promise.all(rawSubmissions.map(async (item: any) => {
             try {
-                const detailRes = await axios.get(`${API_BASE_URL}/awards/details/${item.form_id}`, { 
+                const detailRes = await api.get(`/awards/details/${item.form_id}`, { 
                     headers: { Authorization: `Bearer ${token}` } 
                 });
                 
@@ -190,7 +180,7 @@ export default function StudentTraceAndDetails() {
             ) : (
                 <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
                     
-                    {/* 🌟 ส่วนหัวที่มี Custom Filter Dropdown */}
+                    {/* ส่วนหัวที่มี Custom Filter Dropdown */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-1.5 h-6 bg-indigo-600 rounded-full"></div>
@@ -443,11 +433,10 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
   const showDept = detailObj.department || metaData.departments.find((d: any) => d.department_id === item.department_id)?.department_name || "ไม่ระบุ";
   const showCampus = detailObj.campus || metaData.campuses.find((c: any) => c.campusId === item.campusId)?.campusName || "ไม่ระบุ";
 
-  // ✅ แก้ไข: ใช้ axios ดึงข้อมูล Logs จาก API พร้อมแนบ Headers ให้ถูกต้อง (แก้ไข error "api is not defined")
   useEffect(() => {
       const token = localStorage.getItem("token");
       if(token) {
-          axios.get(`${API_BASE_URL}/awards/approval-logs/${item.form_id}`, {
+          api.get(`/awards/approval-logs/${item.form_id}`, {
               headers: { Authorization: `Bearer ${token}` }
           })
              .then(res => {
@@ -462,7 +451,7 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
       }
   }, [item.form_id]);
 
-  // ✅ รวม Log ทั้งจาก API และสร้าง Log จำลอง (Fallback) ในกรณีที่ API พังแต่สถานะฟอร์มระบุว่าถูกตีกลับ
+  //  รวม Log ทั้งจาก API และสร้าง Log จำลอง (Fallback) ในกรณีที่ API พังแต่สถานะฟอร์มระบุว่าถูกตีกลับ
   const safeLogs = Array.isArray(approvalLogs) ? approvalLogs : [];
   let displayLogs = [...safeLogs];
   
@@ -509,7 +498,7 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
 
   return (
     <div className="space-y-8 animate-fade-in-up">
-        {/* ✅ กล่องแสดงเหตุผลการปฏิเสธ (ถ้ามี) */}
+        {/*  กล่องแสดงเหตุผลการปฏิเสธ (ถ้ามี) */}
         {rejectedLogs.length > 0 && (
             <div className="space-y-4">
                 {rejectedLogs.map((log: any, index: number) => (
@@ -635,7 +624,7 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                 </div>
             </div>
 
-            {/* ✅ Decision Log Toggle & Display */}
+            {/*  Decision Log Toggle & Display */}
             <div className="mt-14 border-t border-slate-100 pt-6 flex flex-col items-center">
                 <button onClick={() => setShowLogs(!showLogs)} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-all bg-slate-50 hover:bg-indigo-50 px-6 py-2.5 rounded-full border border-slate-200">
                     <History size={16} /> 

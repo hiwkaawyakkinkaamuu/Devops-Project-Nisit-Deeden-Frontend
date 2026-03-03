@@ -70,8 +70,7 @@ interface SidebarProps { isCollapsed: boolean; toggleSidebar: () => void; }
 // 2. Constants & Helpers
 // ==========================================
 
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+const API_BASE_URL = "";
 const ROLE_NAMES_TH: Record<string, string> = {
   student: "นักศึกษา",
   head_of_department: "หัวหน้าภาควิชา",
@@ -167,7 +166,7 @@ const MENU_CONFIG: Record<string, MenuItemType[]> = {
   ],
   student_development: [
     
-      { href: "/student-development/hall-of-fame", label: "ทำเนียบนิสิตดีเด่น", icon: Icons.User },
+    { href: "/student-development/hall-of-fame", label: "ทำเนียบนิสิตดีเด่น", icon: Icons.User },
     { href: "/student-development/verify-submit", label: "ตรวจสอบความถูกต้อง", icon: Icons.DocumentCheck },
     { href: "/student-development/history-verify-submit", label: "ประวัติการเเก้ไขประเภท", icon: Icons.History },
     // { href: "/student-development/committee-setup", label: "จัดการคณะกรรมการ", icon: Icons.UsersGroup },
@@ -462,11 +461,11 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
             const headers = { Authorization: `Bearer ${token}` };
             
             const [resMe, resFac, resDept, resRoles, resCampus] = await Promise.all([
-                api.get(`${API_BASE_URL}/auth/me`, { headers }),
-                api.get(`${API_BASE_URL}/faculty`, { headers }),
-                api.get(`${API_BASE_URL}/department`, { headers }),
-                api.get(`${API_BASE_URL}/roles`, { headers }),
-                api.get(`${API_BASE_URL}/campus`, { headers })
+                api.get(`/auth/me`, { headers }),
+                api.get(`/faculty`, { headers }),
+                api.get(`/department`, { headers }),
+                api.get(`/roles`, { headers }),
+                api.get(`/campus`, { headers })
             ]);
 
             const fetchedUser = resMe.data?.user || resMe.data;

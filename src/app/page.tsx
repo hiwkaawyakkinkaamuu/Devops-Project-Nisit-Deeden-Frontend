@@ -4,14 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Swal from "sweetalert2";
-import axios from "axios"; 
+import { api } from "@/lib/axios";
 import { useAuth } from "@/context/AuthContext";
 
 // ==========================================
 // 0. Configuration & Service Layer
 // ==========================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+const API_BASE_URL = "";
 
 interface LoginResponse {
   token: string;
@@ -52,7 +52,7 @@ export default function LoginPage() {
         .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
     });
 
-    window.location.href = `${API_BASE_URL}/auth/google/login`;
+    window.location.href = `/auth/google/login`;
   };
 
   // Helper: Role-based Redirect พร้อม Logic เช็ค isChairman
@@ -113,42 +113,10 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // 🚨 ตั้งค่า validateStatus ให้ Axios ไม่พ่น Error สีแดงเมื่อได้โค้ด 401 หรือ 400
-      const response = await axios.post(
-        `${API_BASE_URL}/auth/login`, 
-        { email, password },
-        {
-          validateStatus: function (status) {
-            return status < 500; // ถ้ารหัสน้อยกว่า 500 (เช่น 200, 401, 404) จะไม่กระโดดไป catch
-          }
-        }
-      );
-
+      const response = await api.post(`/auth/login`, { email, password });
       const backendData = response.data;
-
-      // 🚨 ตรวจสอบสถานะดัก 401 แบบแมนนวลแทน
-      if (response.status === 401 || response.status === 404 || response.status === 400) {
-          let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
-          const backendError = backendData?.error || backendData?.message;
-          
-          if (backendError === "invalid credentials" || backendError === "record not found") {
-              errorMessage = "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
-          }
-
-          Swal.fire({
-            icon: "error",
-            title: "เข้าสู่ระบบไม่สำเร็จ",
-            text: errorMessage,
-            confirmButtonColor: "#d33",
-            confirmButtonText: "ลองใหม่อีกครั้ง",
-          });
-          
-          setLoading(false);
-          return; // หยุดการทำงานตรงนี้ ข้อมูลที่พิมพ์ไว้ใน Input จะยังคงอยู่ ไม่รีเฟรชหน้า
-      }
-
-      // หากผ่าน (Status 200) ทำการล็อกอินตามปกติ
       const roleId = backendData.user.role_id;
+
       login(backendData.token, roleId.toString(), backendData.user);
 
       await Swal.fire({
@@ -156,18 +124,26 @@ export default function LoginPage() {
         title: "เข้าสู่ระบบสำเร็จ",
         text: `ยินดีต้อนรับคุณ ${backendData.user.firstname}`,
         timer: 1500,
-        showConfirmButton: false,
-      });
+        showConfirmButton: false
+    });
 
       handleRedirect(backendData.user);
+    } catch (error: any) {
+      console.error("Login Error:", error);
+      let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
 
-    } catch (err: any) {
-      console.error("Login Fatal Error:", err);
+      // ดึง Error Message จาก Backend
+      const backendError = error.response?.data?.error || error.response?.data?.message;
+      if (backendError === "invalid credentials" || backendError === "record not found") {
+          errorMessage = "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
+      }
+
       Swal.fire({
         icon: "error",
-        title: "ระบบขัดข้อง",
-        text: "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้ในขณะนี้",
+        title: "เข้าสู่ระบบไม่สำเร็จ",
+        text: errorMessage,
         confirmButtonColor: "#d33",
+        confirmButtonText: "ลองอีกครั้ง"
       });
     } finally {
       setLoading(false);

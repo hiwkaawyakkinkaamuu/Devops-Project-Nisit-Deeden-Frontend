@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useMemo, ChangeEvent } from "react";
 import Link from "next/link";
 import Swal from "sweetalert2";
 import { useRouter } from "next/navigation";
-import axios from "axios";
+import { api } from "@/lib/axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy, Lightbulb, Heart, Star, UploadCloud, FileText, XCircle, CheckCircle2,
@@ -16,7 +16,6 @@ import {
 // 0. Configuration & Types
 // ==========================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 // คลาสสีแบบเต็ม เพื่อป้องกันบัค Tailwind ไม่ยอม Render สีตามประเภท
@@ -54,11 +53,11 @@ interface ManualProfile {
 // 1. Service Layer
 // ==========================================
 const nominationService = {
-  getAllFaculties: async () => { try { return (await axios.get(`${API_BASE_URL}/faculty`)).data?.data || []; } catch { return []; } },
-  getAllDepartments: async () => { try { return (await axios.get(`${API_BASE_URL}/department`)).data?.data || []; } catch { return []; } },
+  getAllFaculties: async () => { try { return (await api.get(`/faculty`)).data?.data || []; } catch { return []; } },
+  getAllDepartments: async () => { try { return (await api.get(`/department`)).data?.data || []; } catch { return []; } },
   getOrgProfile: async (token: string) => {
     try {
-      const { data } = await axios.get(`${API_BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+      const { data } = await api.get(`/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
       const u = data.user || data.data || data;
       const org = u.OrganizationData || u.organization_data || {};
       return {
@@ -70,16 +69,16 @@ const nominationService = {
     } catch { return null; }
   },
   getCurrentTerm: async (token: string) => {
-    try { return (await axios.get(`${API_BASE_URL}/academic-years/current`, { headers: { Authorization: `Bearer ${token}` } })).data?.data; } catch { return null; }
+    try { return (await api.get(`/academic-years/current`, { headers: { Authorization: `Bearer ${token}` } })).data?.data; } catch { return null; }
   },
   checkSubmissionHistory: async (token: string, year: number, sem: number) => {
     try {
-      const subs = (await axios.get(`${API_BASE_URL}/awards/my/submissions`, { headers: { Authorization: `Bearer ${token}` } })).data?.data || [];
+      const subs = (await api.get(`/awards/my/submissions`, { headers: { Authorization: `Bearer ${token}` } })).data?.data || [];
       return subs.some((s: any) => Number(s.academic_year) === Number(year) && Number(s.semester) === Number(sem));
     } catch { return false; }
   },
   submitNomination: async (token: string, formData: FormData) => {
-    return (await axios.post(`${API_BASE_URL}/awards/submit`, formData, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } })).data;
+    return (await api.post(`/awards/submit`, formData, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } })).data;
   },
 };
 

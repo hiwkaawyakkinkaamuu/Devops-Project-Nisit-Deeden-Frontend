@@ -18,5 +18,5 @@ export const getProfileImageUrl = (imagePath: string | undefined | null) => {
   // ตัด / ตัวแรกออกถ้ามีซ้ำกัน เพื่อความสวยงาม (Optional)
   const cleanPath = imagePath.startsWith("/") ? imagePath : `/${imagePath}`;
   
-  return `${API_BASE_URL}${cleanPath}`;
+  return `${cleanPath}`;
 };

@@ -13,9 +13,7 @@ import {
 // ==========================================
 
 const USE_MOCK_DATA = false;
-const ITEMS_PER_PAGE = 8;
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+const ITEMS_PER_PAGE = 6;
 
 export interface LogEntry {
     log_id: number;
@@ -23,7 +21,6 @@ export interface LogEntry {
     changed_by: number;
     created_at: string;
     
-    // Custom Fields (Mapped from API)
     operator_name?: string;
     target_student_name?: string;
     target_student_id?: string;
@@ -174,7 +171,7 @@ export default function SDDHistoryPage() {
                 // โหลดข้อมูลตัวเองมาใช้แทน ถ้าหา User ในลิสต์ไม่เจอ
                 let myInfo = currentUserInfo;
                 if (!myInfo) {
-                    const myRes = await api.get(`${API_BASE_URL}/auth/me`).catch(() => null);
+                    const myRes = await api.get('/auth/me').catch(() => null);
                     if (myRes && myRes.data) {
                         myInfo = myRes.data.user || myRes.data.data || myRes.data;
                         if (isMounted) setCurrentUserInfo(myInfo);
@@ -193,7 +190,7 @@ export default function SDDHistoryPage() {
                 if (filterAction !== "all") params.operation = filterAction; 
 
                 // เรียกใช้ API History
-                const res = await api.get(`${API_BASE_URL}/awards/my/approval-logs`, { params });
+                const res = await api.get(`/awards/my/approval-logs`, { params });
                 
                 const rawData = res.data?.data;
                 const rawLogs = Array.isArray(rawData) ? rawData : []; 
@@ -202,7 +199,6 @@ export default function SDDHistoryPage() {
                 // Map ข้อมูลให้เข้ากับรูปแบบของ UI
                 const mappedLogs = rawLogs.map((log: any) => {
                     
-                    // ✅ แสดงชื่อตัวเอง (ถ้าตรงกับ ID ตัวเอง) หรือแสดงชื่อถ้ามีแนบมา
                     let operatorDisplayName = "คุณ"; // Default เป็นคุณ เพราะหน้านี้คือ "My Approval Logs"
                     
                     if (myInfo && String(myInfo.user_id) === String(log.reviewer_user_id)) {

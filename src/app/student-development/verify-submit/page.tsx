@@ -1,16 +1,15 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { createPortal } from "react-dom"; // ✅ Import Portal
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import Swal from "sweetalert2";
 import { z } from "zod";
 import { api } from "@/lib/axios";
 import { 
-  Search, Calendar, CheckCircle2, XCircle, Eye, 
-  Award, Building2, User, Phone, Mail, MapPin, 
-  ChevronLeft, ChevronRight, FileText, ChevronDown, 
-  ShieldCheck, AlertTriangle, Sparkles, Inbox,
+  Search, CheckCircle2, XCircle, Eye, 
+  Award, ChevronLeft, ChevronRight, ChevronDown, 
+  ShieldCheck, Sparkles, Inbox,
   ArrowUp, ArrowDown, ArrowUpDown,
   AlertCircle
 } from "lucide-react";
@@ -22,17 +21,7 @@ import NominationDetailModal from "@/components/Nomination-detail-modal";
 // ==========================================
 
 const USE_MOCK_DATA = false;
-const ITEMS_PER_PAGE = 8;
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
-
-const getFileUrl = (filePath: string) => {
-  if (!filePath) return "#";
-  const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api").replace(/\/api$/, "");
-  const cleanPath = filePath.startsWith("/") ? filePath.substring(1) : filePath;
-  return `${backendUrl}/${cleanPath}`;
-};
-
+const ITEMS_PER_PAGE = 6;
 const RejectionSchema = z.string().min(5, "กรุณาระบุเหตุผลอย่างน้อย 5 ตัวอักษร");
 
 // ==========================================
@@ -88,7 +77,7 @@ export interface Nomination {
 const CustomAwardTypeDropdown = ({ value, onChange, options }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null); // ✅ ref ของ dropdown menu
+  const menuRef = useRef<HTMLDivElement>(null); //  ref ของ dropdown menu
 
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
@@ -119,7 +108,7 @@ const CustomAwardTypeDropdown = ({ value, onChange, options }: any) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  // ✅ ปิด dropdown เมื่อ scroll เฉพาะนอก dropdown menu เท่านั้น
+  //  ปิด dropdown เมื่อ scroll เฉพาะนอก dropdown menu เท่านั้น
   // ถ้า scroll เกิดใน menuRef (เลื่อนดูตัวเลือก) → ไม่ปิด
   useEffect(() => {
     if (!isOpen) return;
@@ -133,13 +122,13 @@ const CustomAwardTypeDropdown = ({ value, onChange, options }: any) => {
 
   const selectedLabel = value === "all" ? "ทุกประเภทรางวัล" : value;
 
-  // ✅ Portal target — render dropdown menu ออกไปที่ body โดยตรง
+  //  Portal target — render dropdown menu ออกไปที่ body โดยตรง
   // หลุดพ้นจาก stacking context ของ backdrop-blur และ overflow ทุกชั้น
   const dropdownMenu = (
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          ref={menuRef} // ✅ ผูก ref เพื่อให้ scroll listener รู้ว่า scroll อยู่ใน menu หรือเปล่า
+          ref={menuRef} //  ผูก ref เพื่อให้ scroll listener รู้ว่า scroll อยู่ใน menu หรือเปล่า
           initial={{ opacity: 0, y: -8, filter: "blur(4px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
           exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
@@ -174,7 +163,7 @@ const CustomAwardTypeDropdown = ({ value, onChange, options }: any) => {
   );
 
   return (
-    // ✅ ไม่ต้องใส่ z-index บน wrapper อีกต่อไป เพราะ menu ถูก portal ไป body แล้ว
+    //  ไม่ต้องใส่ z-index บน wrapper อีกต่อไป เพราะ menu ถูก portal ไป body แล้ว
     <div className="relative w-full sm:w-64" ref={triggerRef}>
       <div
         onClick={() => setIsOpen(!isOpen)}
@@ -193,7 +182,7 @@ const CustomAwardTypeDropdown = ({ value, onChange, options }: any) => {
         />
       </div>
 
-      {/* ✅ Portal: render ออกไปที่ document.body ทันที ไม่ถูก clip โดย overflow หรือ stacking context ใดๆ */}
+      {/*  Portal: render ออกไปที่ document.body ทันที ไม่ถูก clip โดย overflow หรือ stacking context ใดๆ */}
       {typeof document !== "undefined" && createPortal(dropdownMenu, document.body)}
     </div>
   );
@@ -234,10 +223,10 @@ export default function SDDVerifyPage() {
     const fetchMasterData = async () => {
         try {
             const [facRes, deptRes, campRes, typeRes] = await Promise.all([
-                api.get(`${API_BASE_URL}/faculty`),
-                api.get(`${API_BASE_URL}/department`),
-                api.get(`${API_BASE_URL}/campus`),
-                api.get(`${API_BASE_URL}/awards/types`)
+                api.get(`/faculty`),
+                api.get(`/department`),
+                api.get(`/campus`),
+                api.get(`/awards/types`)
             ]);
             if(isMounted) {
                 setFaculties(facRes.data?.data || facRes.data || []);
@@ -257,7 +246,7 @@ export default function SDDVerifyPage() {
         if (searchTerm) params.keyword = searchTerm;
         if (filterType !== "all") params.award_type = filterType;
 
-        const response = await api.get(`${API_BASE_URL}/awards/search`, { params });
+        const response = await api.get(`/awards/search`, { params });
         
         const fetchedData = response.data?.data || response.data;
         const rawData = Array.isArray(fetchedData) ? fetchedData : [];
@@ -370,7 +359,7 @@ export default function SDDVerifyPage() {
 
     if (result.isConfirmed) {
       try {
-        await api.put(`${API_BASE_URL}/awards/form-status/change/${selectedItem.form_id}`, { 
+        await api.put(`/awards/form-status/change/${selectedItem.form_id}`, { 
             form_status: 8, 
             reject_reason: "" 
         });
@@ -393,7 +382,7 @@ export default function SDDVerifyPage() {
     }
 
     try {
-      await api.put(`${API_BASE_URL}/awards/form-status/change/${selectedItem.form_id}`, { 
+      await api.put(`/awards/form-status/change/${selectedItem.form_id}`, { 
           form_status: 9, 
           reject_reason: rejectReason 
       });
@@ -455,7 +444,7 @@ export default function SDDVerifyPage() {
                       />
                   </div>
                   
-                  {/* ✅ Dropdown — ใช้ Portal แล้ว ไม่ถูก clip อีก */}
+                  {/*  Dropdown — ใช้ Portal แล้ว ไม่ถูก clip อีก */}
                   <CustomAwardTypeDropdown 
                       value={filterType} 
                       onChange={(val: string) => { setFilterType(val); setCurrentPage(1); }} 

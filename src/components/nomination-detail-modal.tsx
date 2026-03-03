@@ -1,13 +1,7 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
-import { 
-  AlertCircle, Clock, CheckCircle2, XCircle, Award, FileText, 
-  History, UserCheck, ShieldCheck, Landmark, GraduationCap,
-  ChevronDown, ChevronUp, User, Building2, Phone, Mail, MapPin, Map,
-  UserCircle2, CalendarDays
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState, useMemo } from "react";
+import { AlertCircle, Clock, XCircle } from "lucide-react";
 import { api } from "@/lib/axios";
 
 // ==========================================
@@ -81,18 +75,6 @@ interface ModalProps {
 // ==========================================
 // 2. Helpers & Configurations
 // ==========================================
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
-
-const getFileUrl = (filePath: string) => {
-  if (!filePath) return "#";
-  const backendUrl = API_BASE_URL.replace(/\/api$/, "");
-  let cleanPath = filePath;
-  if (cleanPath.startsWith("api/")) cleanPath = cleanPath.replace("api/", "");
-  if (cleanPath.startsWith("/api/")) cleanPath = cleanPath.replace("/api/", "");
-  if (!cleanPath.startsWith("/")) cleanPath = "/" + cleanPath;
-  return `${backendUrl}${cleanPath}`;
-};
 
 const formatDateDisplay = (isoDate: string) => {
     if (!isoDate) return "-";
@@ -239,12 +221,15 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
             setCampusName(parsedDetail?.campus || "-");
         }
 
-        // Fetch Approval Logs
-        if (data.logs && Array.isArray(data.logs)) {
-            setApprovalLogs(data.logs);
-        } else {
-            setApprovalLogs([]);
-        }
+        api.get(`/awards/approval-logs/${data.form_id}`)
+            .then(res => {
+                const logs = res.data?.data || res.data;
+                // เช็คให้ชัวร์ว่าเป็น Array เท่านั้น ถ้าเป็น Object (เช่น 404 response) ให้เป็น []
+                setApprovalLogs(Array.isArray(logs) ? logs : []);
+            }).catch(err => {
+                console.error("Failed to fetch approval logs:", err);
+                setApprovalLogs([]);
+            });
 
     } else {
         setIsVisible(false);
@@ -256,8 +241,6 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
   }, [isOpen, data, parsedDetail]);
 
   if (!isOpen || !data) return null;
-
-  const isOrganization = data.org_name && data.org_name.trim() !== ""; 
 
   // --- กำหนดประเภทและ Theme ---
   const awardStr = data.award_type || data.award_type_name || "";
@@ -272,6 +255,8 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
   if (isBehavior) themeKey = "behavior";
   if (isOther && awardStr) themeKey = "other";
   const theme = THEME_STYLES[themeKey];
+
+  const isOrganization = (data.org_name && data.org_name.trim() !== "") || data.student_lastname === "-";
 
   const displayStudentName = data.student_lastname === "-" 
       ? data.student_firstname 

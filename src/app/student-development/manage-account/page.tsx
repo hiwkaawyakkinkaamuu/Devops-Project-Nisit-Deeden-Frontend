@@ -19,8 +19,6 @@ import {
 const ITEMS_PER_PAGE = 6; 
 const PREFIX_OPTIONS = ["นาย", "นาง", "นางสาว", "อ.", "ดร.", "ผศ.", "รศ.", "ศ.", "ผศ.ดร.", "รศ.ดร.", "ศ.ดร.", "-"];
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
-
 // --- Interfaces ---
 interface User {
   user_id: number;
@@ -132,7 +130,7 @@ const Avatar = ({ src, name }: { src?: string, name: string }) => {
   return (
     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl text-white font-bold shadow-md bg-gradient-to-br ${colors[colorIndex]} overflow-hidden shrink-0 border border-white/20 ring-2 ring-slate-50`}>
       {!imgError && src ? (
-        <img src={src.startsWith('http') ? src : `${API_BASE_URL.replace('/api', '')}${src}`} alt={name} onError={() => setImgError(true)} className="w-full h-full object-cover" />
+        <img src={src.startsWith('http') ? src : `${src}`} alt={name} onError={() => setImgError(true)} className="w-full h-full object-cover" />
       ) : (
         <span>{initial}</span>
       )}
@@ -250,11 +248,11 @@ export default function UserManagementPage() {
       if (filterRole !== "all") params.role_id = filterRole; 
 
       const [usersRes, rolesRes, campusRes, facRes, deptRes] = await Promise.all([
-        api.get(`${API_BASE_URL}/users`, { params }),
-        api.get(`${API_BASE_URL}/roles/`).catch(() => ({ data: { data: [] } })), 
-        api.get(`${API_BASE_URL}/campus/`).catch(() => ({ data: { data: [] } })),
-        api.get(`${API_BASE_URL}/faculty/`).catch(() => ({ data: { data: [] } })),
-        api.get(`${API_BASE_URL}/department/`).catch(() => ({ data: { data: [] } }))
+        api.get(`/users`, { params }),
+        api.get(`/roles/`).catch(() => ({ data: { data: [] } })), 
+        api.get(`/campus/`).catch(() => ({ data: { data: [] } })),
+        api.get(`/faculty/`).catch(() => ({ data: { data: [] } })),
+        api.get(`/department/`).catch(() => ({ data: { data: [] } }))
       ]);
 
       const rawUsers = usersRes.data?.data || usersRes.data || [];
@@ -352,7 +350,7 @@ export default function UserManagementPage() {
 
     if (result.isConfirmed) {
       try {
-        await api.delete(`${API_BASE_URL}/users/${id}`);
+        await api.delete(`/users/${id}`);
         Toast.fire({ icon: 'success', title: 'ลบบัญชีสำเร็จ' });
         
         if (users.length === 1 && currentPage > 1) {
@@ -414,10 +412,10 @@ export default function UserManagementPage() {
       }
 
       if (modalMode === 'create') {
-        await api.post(`${API_BASE_URL}/auth/register`, payload);
+        await api.post(`/auth/register`, payload);
         Toast.fire({ icon: 'success', title: 'สร้างบัญชีสำเร็จ' });
       } else {
-        await api.put(`${API_BASE_URL}/users/update/${formData.user_id}`, payload);
+        await api.put(`/users/update/${formData.user_id}`, payload);
         Toast.fire({ icon: 'success', title: 'แก้ไขข้อมูลสำเร็จ' });
       }
 

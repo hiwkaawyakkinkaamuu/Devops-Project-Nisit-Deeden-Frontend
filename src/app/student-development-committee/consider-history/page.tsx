@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import NominationDetailModal from "@/components/Nomination-detail-modal";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
-  Search, Calendar, GraduationCap, CheckCircle2, XCircle,
-  Eye, AlertCircle, Award, Clock, Building2, User, History,
+  Search, CheckCircle2, XCircle,
+  Eye, Award, Building2, History,
   ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Filter
 } from "lucide-react";
 import { api } from "@/lib/axios";
@@ -14,8 +14,7 @@ import { api } from "@/lib/axios";
 // 0. Configuration & Types
 // ==========================================
 const USE_MOCK_DATA = false;
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
-const ITEMS_PER_PAGE = 8; 
+const ITEMS_PER_PAGE = 6; 
 
 export interface FileResponse {
   file_dir_id: number;
@@ -189,7 +188,7 @@ export default function CommitteeHistoryPage() {
 
     const fetchAwardTypes = async () => {
       try {
-        const response = await api.get(`${API_BASE_URL}/awards/types`);
+        const response = await api.get(`/awards/types`);
         const types = response.data?.data || response.data || [];
         if (isMounted) setAwardTypes(types);
       } catch (error) {
@@ -215,7 +214,7 @@ export default function CommitteeHistoryPage() {
         if (filterAction !== "all") params.operation = filterAction;
 
         // 💡 ถ้าในอนาคต Backend มีเส้น /awards/committee/vote-logs ให้เปลี่ยน URL ด้านล่างเป็นเส้นนั้น
-        const response = await api.get(`${API_BASE_URL}/awards/my/approval-logs`, { params });
+        const response = await api.get(`/awards/my/approval-logs`, { params });
         const rawData = response.data?.data || [];
         const pagination = response.data?.pagination;
 

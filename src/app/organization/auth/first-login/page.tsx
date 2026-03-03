@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
-import axios from "axios";
-import { motion, AnimatePresence, Variants } from "framer-motion";
+import { api } from "@/lib/axios";
+import { motion, Variants } from "framer-motion";
 import {
   Building2, Briefcase, Phone, MapPin, Mail, UploadCloud, 
   ChevronRight, Trophy, CheckCircle2, Star
@@ -13,7 +13,6 @@ import {
 // ==========================================
 // 0. Configuration
 // ==========================================
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 interface Campus { campus_id: number; campus_name: string; campus_code?: string; }
 interface OrganizationProfile {
@@ -53,7 +52,7 @@ export default function OrganizationFirstLoginPage() {
       const headers = { Authorization: `Bearer ${token}` };
 
       try {
-        const resMe = await axios.get(`${API_BASE_URL}/auth/me`, { headers });
+        const resMe = await api.get(`/auth/me`, { headers });
         const user = resMe.data.user || resMe.data || {};
         setFormData(prev => ({
           ...prev, email: user.email || "", image_url: user.image_path || "",
@@ -61,7 +60,7 @@ export default function OrganizationFirstLoginPage() {
         }));
 
         try {
-          const resCam = await axios.get(`${API_BASE_URL}/campus`, { headers });
+          const resCam = await api.get(`/campus`, { headers });
           const camData = resCam.data?.data || resCam.data;
           setCampuses(Array.isArray(camData) ? camData.map((c: any) => ({
             campus_id: c.campus_id || c.campusID, campus_name: c.campus_name || c.campusName, campus_code: c.campus_code || c.campusCode
@@ -115,7 +114,7 @@ export default function OrganizationFirstLoginPage() {
       payload.append("organization_phone", formData.organization_phone);
       if (selectedFile) payload.append("profile_image", selectedFile);
 
-      await axios.put(`${API_BASE_URL}/auth/first-login`, payload, { headers: { Authorization: `Bearer ${token}` } });
+      await api.put(`/auth/first-login`, payload, { headers: { Authorization: `Bearer ${token}` } });
       await Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกข้อมูลหน่วยงานเรียบร้อย', timer: 1500, showConfirmButton: false });
       window.location.href = "/organization/main/organization-nomination-form";
     } catch (error: any) {

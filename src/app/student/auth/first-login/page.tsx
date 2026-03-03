@@ -3,17 +3,16 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
-import axios from "axios";
-import { motion, AnimatePresence, Variants } from "framer-motion";
+import { api } from "@/lib/axios";
+import { motion, Variants } from "framer-motion";
 import {
   UploadCloud, User, Mail, Hash, MapPin, BookOpen, GraduationCap,
-  ChevronRight, CheckCircle2, AlertCircle
+  ChevronRight, CheckCircle2
 } from "lucide-react";
 
 // ==========================================
 // 0. Configuration
 // ==========================================
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 
 interface Faculty { faculty_id: number; faculty_name: string; }
 interface Department { department_id: number; department_name: string; }
@@ -62,7 +61,7 @@ export default function FirstLoginPage() {
       const headers = { Authorization: `Bearer ${token}` };
 
       try {
-        const resMe = await axios.get(`${API_BASE_URL}/auth/me`, { headers });
+        const resMe = await api.get(`/auth/me`, { headers });
         const user = resMe.data.user || resMe.data || {};
         setFormData(prev => ({
           ...prev, email: user.email || "", firstname: user.firstname || "",
@@ -72,12 +71,12 @@ export default function FirstLoginPage() {
         }));
 
         try {
-          const resFac = await axios.get(`${API_BASE_URL}/faculty`, { headers });
+          const resFac = await api.get(`/faculty`, { headers });
           setFaculties(Array.isArray(resFac.data?.data) ? resFac.data.data : resFac.data || []);
         } catch (err) { console.error("Error faculties", err); }
 
         try {
-          const resCam = await axios.get(`${API_BASE_URL}/campus`, { headers });
+          const resCam = await api.get(`/campus`, { headers });
           const camData = resCam.data?.data || resCam.data;
           setCampuses(Array.isArray(camData) ? camData.map((c: any) => ({
             campus_id: c.campus_id || c.campusID, campus_name: c.campus_name || c.campusName, campus_code: c.campus_code || c.campusCode
@@ -98,7 +97,7 @@ export default function FirstLoginPage() {
       if (!formData.faculty_id) { setDepartments([]); return; }
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get(`${API_BASE_URL}/department/faculty/${formData.faculty_id}`, {
+        const res = await api.get(`/department/faculty/${formData.faculty_id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setDepartments(Array.isArray(res.data?.data) ? res.data.data : res.data || []);
@@ -170,7 +169,9 @@ export default function FirstLoginPage() {
       }
 
       // ยิง API
-      await axios.put(`${API_BASE_URL}/auth/first-login`, payload, { headers: { Authorization: `Bearer ${token}` } });
+      await api.put(`/auth/first-login`, payload, { headers: {
+        Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } 
+      });
       
       await Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกข้อมูลเรียบร้อย', timer: 1500, showConfirmButton: false });
       window.location.href = "/student/main/student-nomination-form";

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import NominationDetailModal from "@/components/Nomination-detail-modal";
-import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
   Search, Calendar, CheckCircle2, XCircle,
   Eye, Award, Building2,
@@ -11,7 +10,7 @@ import {
 import { api } from "@/lib/axios";
 
 // ==========================================
-// 0. Types (อัปเดตให้ตรงกับ Backend DTO ล่าสุด)
+// 0. Types
 // ==========================================
 export interface Nomination {
   approval_log_id: number;
@@ -31,17 +30,6 @@ export interface Nomination {
   is_organization_nominated?: boolean; 
   organization_name?: string;
 }
-
-// ==========================================
-// 1. Framer Motion Variants
-// ==========================================
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
-const modalVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95 },
-  show: { opacity: 1, scale: 1, transition: { type: "spring", duration: 0.3 } },
-  exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
-};
 
 // ==========================================
 // 2. Main Component
@@ -84,7 +72,7 @@ export default function DeanHistoryPage() {
     return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute:'2-digit' });
   };
 
-  // ✅ ใช้ operation จาก Backend โดยตรง (approve / reject)
+  //  ใช้ operation จาก Backend โดยตรง (approve / reject)
   const getStatusBadge = (operation: string) => {
       if (operation === "reject") { 
           return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-600 text-xs font-bold border border-rose-200"><XCircle className="w-3.5 h-3.5"/> ไม่เห็นชอบ</span>;
@@ -104,7 +92,7 @@ export default function DeanHistoryPage() {
     let isMounted = true;
     const fetchAwardTypes = async () => {
       try {
-        const response = await api.get(`${API_BASE_URL}/awards/types`);
+        const response = await api.get(`/awards/types`);
         if (isMounted) setAwardTypes(response.data?.data || []);
       } catch (error) {
         console.error("Error fetching award types:", error);
@@ -114,7 +102,7 @@ export default function DeanHistoryPage() {
     return () => { isMounted = false; };
   }, []);
 
-  // ✅ ยิง API ขอข้อมูลประวัติ (Server-Side)
+  // ยิง API ขอข้อมูลประวัติ (Server-Side)
   useEffect(() => {
     let isMounted = true;
 
@@ -132,7 +120,7 @@ export default function DeanHistoryPage() {
         if (filterCategory) params.award_type = filterCategory;
         if (filterDate) params.date = filterDate;
 
-        const response = await api.get(`${API_BASE_URL}/awards/my/approval-logs`, { params });
+        const response = await api.get(`/awards/my/approval-logs`, { params });
         const rawData = response.data?.data || [];
         const pagination = response.data?.pagination;
 
@@ -174,7 +162,7 @@ export default function DeanHistoryPage() {
 
   const openDetailModal = async (formId: number) => {
     try {
-        const response = await api.get(`${API_BASE_URL}/awards/details/${formId}`); // ✅ เติม /details
+        const response = await api.get(`/awards/details/${formId}`); 
         setModalData(response.data?.data);
         setIsDetailModalOpen(true);
     } catch (err) {
@@ -304,7 +292,7 @@ export default function DeanHistoryPage() {
                              <p className="text-sm font-bold text-slate-800">
                                 {getDisplayName(item)}
                              </p>
-                             {/* ✅ เอาปีการศึกษาออก แสดงแค่ นิสิต หรือ องค์กร */}
+                             {/* เอาปีการศึกษาออก แสดงแค่ นิสิต หรือ องค์กร */}
                              <p className="text-xs text-slate-500">
                                 {(!item.student_lastname || item.student_lastname === "-") ? 'องค์กร/หน่วยงาน' : `นิสิต`}
                              </p>
@@ -332,12 +320,12 @@ export default function DeanHistoryPage() {
                       <td className="p-5 text-sm text-center text-slate-500">
                         <div className="flex items-center justify-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5" />
-                          {/* ✅ ใช้วันที่อนุมัติจาก Operation Date */}
+                          {/* ใช้วันที่อนุมัติจาก Operation Date */}
                           {formatDateTh(item.operation_date)}
                         </div>
                       </td>
                       <td className="p-5 text-center">
-                         {/* ✅ ใช้สถานะจาก Operation (Approve/Reject) */}
+                         {/* ใช้สถานะจาก Operation (Approve/Reject) */}
                          {getStatusBadge(item.operation)}
                       </td>
                       <td className="p-5 text-center" onClick={(e) => e.stopPropagation()}>

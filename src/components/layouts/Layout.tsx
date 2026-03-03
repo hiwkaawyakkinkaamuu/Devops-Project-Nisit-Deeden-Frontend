@@ -53,9 +53,9 @@ export default function FormLayout({
       
       try {
         const token = localStorage.getItem("token");
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api";
+        // const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api";
 
-        const response = await axios.get(`${apiUrl}/academic-years/current`, {
+        const response = await axios.get(`/academic-years/current`, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",

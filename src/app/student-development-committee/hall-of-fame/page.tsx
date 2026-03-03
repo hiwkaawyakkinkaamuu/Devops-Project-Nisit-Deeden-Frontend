@@ -1,14 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Trophy, Medal, GraduationCap, Building2, 
+  Trophy, Medal, GraduationCap,
   Sparkles, Award, CalendarDays, X, BookOpen, Info
 } from "lucide-react";
 import { api } from "@/lib/axios";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 const USE_MOCK_DATA = true; 
 
 const MAIN_CATEGORIES = [
@@ -58,7 +57,6 @@ export default function HallOfFamePage() {
   const [activePeriodId, setActivePeriodId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
 
-  // ✅ State สำหรับ floating bar — แยก isFloating (มีหรือยัง) กับ isVisible (แสดงผลด้วย animation)
   const [isFloating, setIsFloating] = useState(false);
   const [isNavVisible, setIsNavVisible] = useState(true);
   const lastScrollY = useRef(0);
@@ -79,9 +77,9 @@ export default function HallOfFamePage() {
       }
       try {
         const [facultyRes, departmentRes, awardsRes] = await Promise.all([
-          api.get(`${API_BASE_URL}/faculty/`).catch(() => null),
-          api.get(`${API_BASE_URL}/department/`).catch(() => null),
-          api.get(`${API_BASE_URL}/awards/search`, { params: { limit: 3000 } }).catch(() => null)
+          api.get(`/faculty/`).catch(() => null),
+          api.get(`/department/`).catch(() => null),
+          api.get(`/awards/search`, { params: { limit: 3000 } }).catch(() => null)
         ]);
         const facultyMap: Record<number, string> = {};
         facultyRes?.data?.data?.forEach((f: any) => { facultyMap[f.faculty_id] = f.faculty_name; });
@@ -167,7 +165,7 @@ export default function HallOfFamePage() {
       const currentY = window.scrollY;
       lastScrollY.current = currentY;
 
-      // ✅ เปลี่ยนเป็น floating เมื่อ scroll เลย hero — แสดงตลอดทั้งขึ้นและลง
+      //  เปลี่ยนเป็น floating เมื่อ scroll เลย hero — แสดงตลอดทั้งขึ้นและลง
       setIsFloating(currentY > 350);
 
       // Track active section
@@ -222,7 +220,7 @@ export default function HallOfFamePage() {
         </div>
       </div>
 
-      {/* ✅ Navbar — ใช้ AnimatePresence + motion.div เพื่อ animate การเปลี่ยน layout */}
+      {/*  Navbar — ใช้ AnimatePresence + motion.div เพื่อ animate การเปลี่ยน layout */}
       <div className="h-[72px] relative z-[100]">
         <AnimatePresence mode="wait">
           {isFloating ? (
@@ -242,7 +240,7 @@ export default function HallOfFamePage() {
               exit={{ y: -80, opacity: 0, scale: 0.95 }}
               transition={{ type: "spring", stiffness: 400, damping: 35, mass: 0.8 }}
               className="fixed top-4 z-[100]"
-              // ✅ offset sidebar ซ้าย 16rem ตาม layout ของโปรเจกต์
+              //  offset sidebar ซ้าย 16rem ตาม layout ของโปรเจกต์
               style={{ left: "calc(16rem + 1rem)", right: "1rem" }}
             >
               <div className="max-w-3xl mx-auto">
