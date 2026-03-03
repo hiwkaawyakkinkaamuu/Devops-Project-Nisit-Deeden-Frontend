@@ -130,39 +130,57 @@ const Icons = {
 
 const MENU_CONFIG: Record<string, MenuItemType[]> = {
   student: [
+    
+    { href: "/student/main/hall-of-fame", label: "ทำเนียบนิสิตดีเด่น", icon: Icons.User },
     { href: "/student/main/student-nomination-form", label: "เสนอรายชื่อนิสิตดีเด่น", icon: Icons.Badge },
     { href: "/student/main/student-trace-and-details", label: "ติดตามและดูรายละเอียด", icon: Icons.Track },
   ],
   head_of_department: [
+    
+    { href: "/head-of-department/hall-of-fame", label: "ทำเนียบนิสิตดีเด่น", icon: Icons.User },
     { href: "/head-of-department/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
     { href: "/head-of-department/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
   ],
   dean: [
+    
+    { href: "/dean/hall-of-fame", label: "ทำเนียบนิสิตดีเด่น", icon: Icons.User },
     { href: "/dean/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
     { href: "/dean/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
   ],
   associate_dean: [
+    
+    { href: "/associate-dean/hall-of-fame", label: "ทำเนียบนิสิตดีเด่น", icon: Icons.User },
     { href: "/associate-dean/consider", label: "อนุมัติเห็นชอบ/ไม่ชอบ", icon: Icons.CheckUser },
     { href: "/associate-dean/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
   ],
   chairman_of_student_development_committee: [
-    { href: "/chairman-of-student-development-committee/consider", label: "รับรองผลการคัดเลือก", icon: Icons.CheckUser }
+    
+    { href: "/chairman-of-student-development-committee/hall-of-fame", label: "ทำเนียบนิสิตดีเด่น", icon: Icons.User },
+    { href: "/chairman-of-student-development-committee/consider", label: "รับรองผลการคัดเลือก", icon: Icons.CheckUser },
+    { href: "/chairman-of-student-development-committee/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
   ],
   student_development_committee: [
+    
+    { href: "/student-development-committee/hall-of-fame", label: "ทำเนียบนิสิตดีเด่น", icon: Icons.User },
     { href: "/student-development-committee/consider", label: "พิจารณาอนุมัติ/ไม่อนุมัติ", icon: Icons.CheckUser },
-    { href: "/student-development-committee/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History }
+    { href: "/student-development-committee/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
   ],
   student_development: [
+    
+      { href: "/student-development/hall-of-fame", label: "ทำเนียบนิสิตดีเด่น", icon: Icons.User },
     { href: "/student-development/verify-submit", label: "ตรวจสอบความถูกต้อง", icon: Icons.DocumentCheck },
     { href: "/student-development/history-verify-submit", label: "ประวัติการเเก้ไขประเภท", icon: Icons.History },
-    { href: "/student-development/committee-setup", label: "จัดการคณะกรรมการ", icon: Icons.UsersGroup },
+    // { href: "/student-development/committee-setup", label: "จัดการคณะกรรมการ", icon: Icons.UsersGroup },
     { href: "/student-development/manage-account", label: "จัดการบัญชีผู้ใช้", icon: Icons.DocumentCheck },
     { href: "/student-development/setting", label: "ตั้งค่าช่วงเวลารับสมัคร", icon: Icons.History },
   ],
   chancellor: [
-    { href: "/chancellor/dashboard", label: "หน้าหลัก", icon: Icons.Badge },
+    { href: "/chancellor/hall-of-fame", label: "ทำเนียบนิสิตดีเด่น", icon: Icons.User },
+    { href: "/chancellor/consider", label: "รับรองผลการคัดเลือก", icon: Icons.CheckUser },
+    { href: "/chancellor/consider-history", label: "ประวัติการพิจารณา", icon: Icons.History },
   ],
   organization: [
+    { href: "/organization/main/hall-of-fame", label: "ทำเนียบนิสิตดีเด่น", icon: Icons.User },
     { href: "/organization/main/organization-nomination-form", label: "เสนอรายชื่อนิสิตดีเด่น", icon: Icons.Badge },
     { href: "/organization/main/organization-trace-and-details", label: "ติดตามและดูรายละเอียด", icon: Icons.Track },
   ]

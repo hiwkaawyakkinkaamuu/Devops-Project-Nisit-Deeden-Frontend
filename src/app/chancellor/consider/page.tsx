@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import NominationDetailModal from "@/components/Nomination-detail-modal";
 import Swal from "sweetalert2";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
   Search, Calendar, GraduationCap, CheckCircle2,
   Eye, Award, Building2, ChevronLeft, ChevronRight, 
-  ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, PenTool, Check, X,
+  ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, PenTool, Check,
   Sparkles, Users, FileSignature
 } from "lucide-react";
 import { api } from "@/lib/axios";
@@ -68,8 +68,6 @@ export interface Nomination {
   vote_summary?: VoteSummary; 
 }
 
-const ITEMS_PER_PAGE = 8; 
-
 const modalVariants: Variants = {
   hidden: { opacity: 0, scale: 0.95 },
   show: { opacity: 1, scale: 1, transition: { type: "spring", duration: 0.3 } },
@@ -98,14 +96,14 @@ const CustomSelect = ({ value, onChange, options, icon: Icon, placeholder, class
             <div 
                 onClick={() => setIsOpen(!isOpen)}
                 className={`flex items-center justify-between w-full pl-11 pr-4 py-3.5 bg-white border rounded-2xl cursor-pointer transition-all duration-300 shadow-sm
-                    ${isOpen ? 'border-indigo-400 ring-4 ring-indigo-500/10' : 'border-slate-200 hover:border-slate-300'}
+                    ${isOpen ? 'border-purple-400 ring-4 ring-purple-500/10' : 'border-slate-200 hover:border-slate-300'}
                 `}
             >
-                <Icon className={`w-4 h-4 absolute left-4 top-4 transition-colors ${isOpen ? 'text-indigo-500' : 'text-slate-400'}`} />
+                <Icon className={`w-4 h-4 absolute left-4 top-4 transition-colors ${isOpen ? 'text-purple-500' : 'text-slate-400'}`} />
                 <span className={`text-sm font-medium truncate ${!value || value === "all" ? 'text-slate-500' : 'text-slate-800'}`}>
                     {selectedLabel}
                 </span>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-180 text-indigo-500' : ''}`} />
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isOpen ? 'rotate-180 text-purple-500' : ''}`} />
             </div>
   
             <AnimatePresence>
@@ -119,11 +117,11 @@ const CustomSelect = ({ value, onChange, options, icon: Icon, placeholder, class
                                 key={i}
                                 onClick={() => { onChange(String(o.v)); setIsOpen(false); }}
                                 className={`px-4 py-3 cursor-pointer transition-all duration-200 text-sm font-medium flex items-center justify-between
-                                    ${String(value) === String(o.v) ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                                    ${String(value) === String(o.v) ? 'bg-purple-50 text-purple-700 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
                                 `}
                             >
                                 {o.l}
-                                {String(value) === String(o.v) && <CheckCircle2 size={16} className="text-indigo-500" />}
+                                {String(value) === String(o.v) && <CheckCircle2 size={16} className="text-purple-500" />}
                             </div>
                         ))}
                     </motion.div>
@@ -136,7 +134,7 @@ const CustomSelect = ({ value, onChange, options, icon: Icon, placeholder, class
 // ==========================================
 // 1. Main Component
 // ==========================================
-export default function ChairmanApprovalPage() {
+export default function ChancellorApprovalPage() {
   
   // --- States ---
   const [loading, setLoading] = useState(true);
@@ -148,16 +146,28 @@ export default function ChairmanApprovalPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [modalData, setModalData] = useState<Nomination | null>(null);
 
-  // Filters & Sort
+  // Filters, Sort & Backend Pagination
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterYear, setFilterYear] = useState("all");
+  
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortConfig, setSortConfig] = useState<{ key: keyof Nomination | 'award_type_name' | null, direction: 'asc' | 'desc' | null }>({ key: 'latest_update', direction: 'desc' });
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0); // เก็บจำนวนทั้งหมด
+  
+  const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc' | 'desc' | null }>({ key: 'date', direction: 'desc' });
 
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // รีเซ็ตไปหน้า 1 เสมอเมื่อมีการเปลี่ยน Filter
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterCategory, filterYear]);
+  }, [debouncedSearch, filterCategory, filterYear, sortConfig]);
 
   // ==========================================
   // 2. Data Fetching
@@ -180,13 +190,26 @@ export default function ChairmanApprovalPage() {
       try {
         if (USE_MOCK_DATA) return;
 
-        // ดึงเผื่อมาเยอะๆ เพื่อให้เจอกรณีที่สถานะ 10 ไปอยู่หน้าหลังๆ (ถ้าหลังบ้านยังไม่เพิ่ม Filter ให้)
-        const params: Record<string, string> = { limit: "500" };
+        // 🚨 ส่ง Parameters ไปหา Backend เพื่อทำ Server-side Pagination 🚨
+        const params: Record<string, any> = { 
+            page: currentPage, 
+            // 🚨 ไม่ส่ง limit เพื่อให้ backend ใช้ default ของมัน (สมมติว่า backend ล็อกไว้ที่ 6)
+            sortBy: sortConfig.key || "date",
+            sortOrder: sortConfig.direction || "desc",
+            // 🚨 แจ้ง Backend ว่าขอเฉพาะสถานะ 12 (ลงนามโดยประธานคณะกรรมการ)
+            form_status: 12, 
+            status: 12 // ส่งไปเผื่อไว้ กรณี Backend ตั้งชื่อตัวแปรไม่ตรงกัน
+        };
+
+        if (debouncedSearch) params.keyword = debouncedSearch;
+        if (filterCategory !== "all") params.award_type = filterCategory;
+        if (filterYear !== "all") params.student_year = filterYear;
 
         const response = await api.get(`${API_BASE_URL}/awards/search`, { params });
         
         const fetchedData = response.data?.data || response.data;
         const rawData = Array.isArray(fetchedData) ? fetchedData : [];
+        const pagination = response.data?.pagination;
 
         const mappedData = rawData.map((item: any) => {
             const isOrgNominated = item.org_name && item.org_name.trim() !== "";
@@ -205,16 +228,23 @@ export default function ChairmanApprovalPage() {
             };
         });
 
-        // 🚨 ประธานกรรมการ ดึงเฉพาะ "สถานะ 10: อนุมัติโดยคณะกรรมการ" เพื่อมาลงนาม
-        const TARGET_STATUS_ID = 10; 
+        // ตอนนี้เราไม่ต้อง Filter สถานะฝั่ง Frontend แล้ว เพราะ Backend ควรจะเป็นคน Filter ให้
+        // แต่ใส่กันเหนียวไว้เผื่อ Backend ยังไม่ได้ทำ
+        const TARGET_STATUS_ID = 12; 
         const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID);
 
-        if (isMounted) setItems(filteredData);
+        if (isMounted) {
+            setItems(filteredData);
+            if (pagination) {
+                setTotalPages(pagination.total_pages || 1);
+                setTotalItems(pagination.total_items || filteredData.length);
+            } else {
+                setTotalPages(1); 
+                setTotalItems(filteredData.length);
+            }
+        }
       } catch (error) {
         console.error("API Error:", error);
-        if (isMounted) {
-          Swal.fire({ icon: 'error', title: 'ไม่สามารถดึงข้อมูลได้', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
-        }
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -223,54 +253,12 @@ export default function ChairmanApprovalPage() {
     fetchAwardTypes();
     fetchData();
     return () => { isMounted = false; };
-  }, []);
+  }, [currentPage, debouncedSearch, filterCategory, filterYear, sortConfig]);
 
   // ==========================================
-  // 3. Logic & Handlers
+  // 3. Handlers
   // ==========================================
-  const processedData = useMemo(() => {
-    let filtered = items;
-
-    if (searchTerm) {
-        const lowerTerm = searchTerm.toLowerCase();
-        filtered = filtered.filter(item => 
-          item.student_firstname?.toLowerCase().includes(lowerTerm) || 
-          item.student_lastname?.toLowerCase().includes(lowerTerm) ||
-          item.student_number?.includes(lowerTerm)
-        );
-    }
-
-    if (filterCategory && filterCategory !== "all") {
-        filtered = filtered.filter(item => item.award_type_name === filterCategory);
-    }
-
-    if (filterYear && filterYear !== "all") {
-        filtered = filtered.filter(item => String(item.student_year) === filterYear);
-    }
-    
-    if (sortConfig.key) {
-      filtered.sort((a: any, b: any) => {
-        let valA = sortConfig.key ? a[sortConfig.key] : '';
-        let valB = sortConfig.key ? b[sortConfig.key] : '';
-        if (sortConfig.key === 'student_firstname') {
-          valA = `${a.student_firstname} ${a.student_lastname}`;
-          valB = `${b.student_firstname} ${b.student_lastname}`;
-        } else if (sortConfig.key === 'latest_update' || sortConfig.key === 'created_at') {
-          valA = new Date(a.latest_update || a.created_at).getTime();
-          valB = new Date(b.latest_update || b.created_at).getTime();
-        }
-        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-    return filtered;
-  }, [items, searchTerm, filterCategory, filterYear, sortConfig]);
-
-  const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
-  const currentItems = processedData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-  const handleSort = (key: keyof Nomination | 'award_type_name' | 'latest_update') => {
+  const handleSort = (key: string) => {
     setSortConfig(prev => {
       if (prev.key === key) return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
       return { key, direction: 'asc' };
@@ -300,13 +288,13 @@ export default function ChairmanApprovalPage() {
     if (!id) return;
 
     const result = await Swal.fire({
-        title: 'ยืนยันการลงนาม?',
-        html: `คุณต้องการรับรองผลการพิจารณาของ<br/><b class="text-indigo-600 text-lg">${name}</b> ใช่หรือไม่?`,
+        title: 'ยืนยันการลงนามขั้นสุดท้าย?',
+        html: `คุณต้องการลงนามอนุมัติรางวัลให้กับ<br/><b class="text-purple-600 text-lg">${name}</b> ใช่หรือไม่?<br/><span class="text-sm text-slate-500">(เมื่อลงนามแล้ว จะถือว่าสิ้นสุดกระบวนการพิจารณา)</span>`,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#4f46e5',
+        confirmButtonColor: '#9333ea', 
         cancelButtonColor: '#94a3b8',
-        confirmButtonText: 'ยืนยันลงนาม',
+        confirmButtonText: 'ยืนยันอนุมัติ',
         cancelButtonText: 'ยกเลิก',
         customClass: { 
             popup: 'rounded-[24px]',
@@ -321,13 +309,9 @@ export default function ChairmanApprovalPage() {
 
     try {
         if (!USE_MOCK_DATA) {
-            // 🚨 สถานะ 12 = ลงนามโดยประธานคณะกรรมการ
-            const NEXT_STATUS_ID = 12; 
-            await api.put(`${API_BASE_URL}/awards/form-status/change/${id}`, { 
-                form_status_id: NEXT_STATUS_ID, // ส่งไปเผื่อ backend ใช้ field นี้
-                form_status: NEXT_STATUS_ID,    // ส่งไปเผื่อ backend ใช้ field นี้
-                reject_reason: "" 
-            });
+            // สถานะ 13 = ลงนามโดยอธิการบดี (สิ้นสุดกระบวนการ)
+            const NEXT_STATUS_ID = 13; 
+            await api.put(`${API_BASE_URL}/awards/form-status/change/${id}`, { form_status: NEXT_STATUS_ID, reject_reason: "" });
         }
 
         setItems(prev => prev.filter(item => item.form_id !== id));
@@ -335,7 +319,7 @@ export default function ChairmanApprovalPage() {
         Swal.fire({
             icon: 'success',
             title: 'ลงนามสำเร็จ',
-            text: `รับรองผลการพิจารณาเรียบร้อยแล้ว ส่งต่อให้อธิการบดี`,
+            text: `บันทึกการอนุมัติขั้นสุดท้ายเรียบร้อยแล้ว`,
             toast: true,
             position: 'top-end',
             showConfirmButton: false,
@@ -348,8 +332,8 @@ export default function ChairmanApprovalPage() {
         if (error.response?.status === 403) {
             Swal.fire({ 
               icon: 'error', 
-              title: 'ติดสิทธิ์การเข้าถึง (403)', 
-              text: 'ระบบยังบล็อกไม่ให้ประธาน (Role 6) เปลี่ยนสถานะ กรุณาแจ้ง Backend ให้ปลดล็อกเงื่อนไขนี้' 
+              title: 'ไม่มีสิทธิ์เข้าถึง (403)', 
+              text: 'บัญชีอธิการบดีของคุณไม่ได้รับอนุญาต กรุณาแจ้ง Backend ให้ปลดล็อกสิทธิ์ API' 
             });
         } else {
             Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ไม่สามารถบันทึกการลงนามได้' });
@@ -377,7 +361,7 @@ export default function ChairmanApprovalPage() {
   // 4. Render UI
   // ==========================================
   return (
-    <div className="min-h-screen bg-transparent p-6 pt-24 lg:p-10 lg:pt-28 font-sans pb-24 relative overflow-hidden">
+    <div className="min-h-screen bg-white p-6 pt-24 lg:p-10 lg:pt-28 font-sans pb-24 relative overflow-hidden">
       
       {/* --- CSS Animations --- */}
       <style jsx global>{`
@@ -387,32 +371,32 @@ export default function ChairmanApprovalPage() {
 
       <div className="max-w-7xl mx-auto space-y-6 relative z-10">
         
-        {/* --- Header Section --- */}
+        {/* --- Header Section (Layer กลาง) --- */}
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 animate-fade-in-up relative z-20">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 mb-3 text-indigo-600">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-50 border border-purple-100 mb-3 text-purple-600">
                 <Sparkles className="w-4 h-4" />
-                <span className="text-[11px] font-black uppercase tracking-[0.15em]">การลงนามประธานคณะกรรมการ</span>
+                <span className="text-[11px] font-black uppercase tracking-[0.15em]">ลงนามขั้นสุดท้าย</span>
             </div>
             <h1 className="text-3xl lg:text-4xl font-black text-slate-800 flex items-center gap-3 tracking-tight">
-              รับรองผลการคัดเลือก
+              ลงนามอนุมัติขั้นสุดท้าย
             </h1>
             <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-indigo-400" /> สำหรับประธานคณะกรรมการ
+              <Building2 className="w-4 h-4 text-purple-400" /> สำหรับอธิการบดี
             </p>
           </div>
         </div>
 
-        {/* --- Filters Grid --- */}
+        {/* --- Filters Grid (Layer 30 ให้อยู่เหนือตาราง) --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-up relative z-30" style={{ animationDelay: '100ms' }}>
             <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" /></div>
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400 group-focus-within:text-purple-500 transition-colors" /></div>
               <input 
                 type="text" 
                 placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" 
                 value={searchTerm} 
                 onChange={(e) => setSearchTerm(e.target.value)} 
-                className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 pl-11 text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm placeholder:text-slate-400 text-slate-800" 
+                className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 pl-11 text-sm font-medium focus:ring-4 focus:ring-purple-500/10 focus:border-purple-400 outline-none transition-all shadow-sm placeholder:text-slate-400 text-slate-800" 
               />
             </div>
             
@@ -437,22 +421,23 @@ export default function ChairmanApprovalPage() {
             </div>
         </div>
 
-        {/* --- Data Table --- */}
+        {/* --- Data Table (Layer 10 ต่ำสุด) --- */}
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 overflow-visible animate-fade-in-up relative z-10" style={{ animationDelay: '150ms' }}>
           <div className="overflow-x-auto min-h-[400px]">
             <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-[11px] font-extrabold uppercase tracking-widest border-b border-slate-200">
-                  <th className="p-6 cursor-pointer hover:bg-slate-100 transition-colors w-[25%]" onClick={() => handleSort('student_firstname')}>
-                    <div className="flex items-center gap-1.5">ผู้ได้รับการเสนอชื่อ {sortConfig.key === 'student_firstname' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-500"/> : <ArrowDown className="w-3.5 h-3.5 text-indigo-500"/>) : <ArrowUpDown className="w-3.5 h-3.5 text-slate-300"/>}</div>
+                  <th className="p-6 cursor-pointer hover:bg-slate-100 transition-colors w-[30%]" onClick={() => handleSort('student_firstname')}>
+                    <div className="flex items-center gap-1.5">ผู้ได้รับการเสนอชื่อ {sortConfig.key === 'student_firstname' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-500"/> : <ArrowDown className="w-3.5 h-3.5 text-purple-500"/>) : <ArrowUpDown className="w-3.5 h-3.5 text-slate-300"/>}</div>
                   </th>
-                  <th className="p-6 text-center w-[15%]">
-                    <div className="flex items-center justify-center gap-1.5"><Users className="w-3.5 h-3.5"/> คะแนนโหวต</div>
+                  <th className="p-6 text-center w-[20%]">
+                    <div className="flex items-center justify-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5"/> สถานะมติกรรมการ</div>
                   </th>
-                  <th className="p-6 text-center w-[20%]">สรุปผลคะแนน</th>
-                  <th className="p-6 text-center w-[15%]">มติที่ประชุม</th>
+                  <th className="p-6 cursor-pointer hover:bg-slate-100 transition-colors text-center w-[20%]" onClick={() => handleSort('date')}>
+                     <div className="flex items-center justify-center gap-1.5">อัปเดตล่าสุด {sortConfig.key === 'date' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-500"/> : <ArrowDown className="w-3.5 h-3.5 text-purple-500"/>) : <ArrowUpDown className="w-3.5 h-3.5 text-slate-300"/>}</div>
+                  </th>
                   <th className="p-6 text-center w-[15%]">การดำเนินการ</th>
-                  <th className="p-6 text-center w-[10%]">รายละเอียด</th>
+                  <th className="p-6 text-center w-[15%]">รายละเอียด</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-sm">
@@ -460,35 +445,28 @@ export default function ChairmanApprovalPage() {
                   [1, 2, 3, 4, 5].map((i) => (
                     <tr key={i} className="animate-pulse">
                       <td className="p-6"><div className="h-4 bg-slate-200 rounded-md w-48 mb-2"></div><div className="h-3 bg-slate-100 rounded-md w-32"></div></td>
-                      <td className="p-6"><div className="h-8 w-16 bg-slate-200 rounded-lg mx-auto"></div></td>
-                      <td className="p-6"><div className="h-3 bg-slate-200 rounded-full w-full mb-2"></div><div className="h-2 bg-slate-100 rounded-md w-1/2 mx-auto"></div></td>
                       <td className="p-6"><div className="h-6 w-24 bg-slate-200 rounded-full mx-auto"></div></td>
+                      <td className="p-6"><div className="h-4 bg-slate-200 rounded w-24 mx-auto"></div></td>
                       <td className="p-6"><div className="h-10 w-28 bg-slate-200 rounded-xl mx-auto"></div></td>
                       <td className="p-6"><div className="h-10 w-10 bg-slate-200 rounded-xl mx-auto"></div></td>
                     </tr>
                   ))
-                ) : currentItems.length === 0 ? (
+                ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-20 text-center">
+                    <td colSpan={5} className="p-20 text-center">
                       <div className="flex flex-col items-center justify-center text-slate-400">
-                        <div className="bg-indigo-50 p-5 rounded-full mb-4 shadow-sm border border-indigo-100">
-                          <FileSignature className="w-12 h-12 text-indigo-300" strokeWidth={1.5} />
+                        <div className="bg-purple-50 p-5 rounded-full mb-4 shadow-sm border border-purple-100">
+                          <FileSignature className="w-12 h-12 text-purple-300" strokeWidth={1.5} />
                         </div>
-                        <p className="text-xl font-bold text-slate-700">ไม่มีรายการรอลงนาม</p>
-                        <p className="text-sm mt-2 font-medium text-slate-500">คุณได้ดำเนินการลงนามรับรองเอกสารทั้งหมดเรียบร้อยแล้ว</p>
+                        <p className="text-xl font-bold text-slate-700">ไม่มีรายการรออนุมัติ</p>
+                        <p className="text-sm mt-2 font-medium text-slate-500">ฟอร์มทั้งหมดได้รับการลงนามจากอธิการบดีเรียบร้อยแล้ว </p>
                       </div>
                     </td>
                   </tr>
                 ) : (
-                  currentItems.map((item, index) => {
+                  items.map((item, index) => {
                     const fullName = getDisplayName(item);
-                    const resolution = getResolution(item.vote_summary);
                     const isOrg = item.student_lastname === "-";
-                    
-                    let approvePercent = 0;
-                    if (item.vote_summary && item.vote_summary.total_voters > 0) {
-                        approvePercent = (item.vote_summary.approve / item.vote_summary.total_voters) * 100;
-                    }
 
                     return (
                         <tr 
@@ -498,54 +476,34 @@ export default function ChairmanApprovalPage() {
                         >
                           {/* Column 1: Info */}
                           <td className="p-6 align-middle">
-                            <div className="font-extrabold text-slate-800 text-[15px] group-hover:text-indigo-700 transition-colors">{fullName}</div>
+                            <div className="font-extrabold text-slate-800 text-[15px] group-hover:text-purple-700 transition-colors">{fullName}</div>
                             <div className="text-[12px] text-slate-500 mt-1 font-medium tracking-wide">
-                                {isOrg ? <span className="text-indigo-500 font-bold bg-indigo-50 px-2 py-0.5 rounded">องค์กรภายนอก</span> : <span className="font-mono bg-slate-100 px-2 py-0.5 rounded-md text-slate-600">{item.student_number}</span>} 
+                                {isOrg ? <span className="text-purple-500 font-bold bg-purple-50 px-2 py-0.5 rounded">องค์กรภายนอก</span> : <span className="font-mono bg-slate-100 px-2 py-0.5 rounded-md text-slate-600">{item.student_number}</span>} 
                             </div>
-                            <div className="text-[10.5px] font-bold text-indigo-600 mt-2.5 bg-indigo-50 inline-block px-3 py-1 rounded-lg border border-indigo-100 shadow-sm">
+                            <div className="text-[10.5px] font-bold text-purple-600 mt-2.5 bg-purple-50 inline-block px-3 py-1 rounded-lg border border-purple-100 shadow-sm">
                                 {item.award_type_name || item.award_type}
                             </div>
                           </td>
 
-                          {/* Column 2: Vote Numbers */}
+                          {/* Column 2: Status from Committee */}
                           <td className="p-6 text-center align-middle">
-                            <div className="flex flex-col items-center justify-center bg-white py-2 px-4 rounded-2xl border border-slate-200 group-hover:border-indigo-200 transition-colors w-fit mx-auto shadow-sm">
-                                <div className="text-[24px] font-black text-slate-700 tracking-tight leading-none">
-                                    {item.vote_summary?.approve || 0} <span className="text-slate-400 text-sm font-medium">/ {item.vote_summary?.total_voters || 0}</span>
-                                </div>
-                            </div>
-                          </td>
-
-                          {/* Column 3: Progress Bar */}
-                          <td className="p-6 align-middle">
-                              <div className="w-full h-3 rounded-full overflow-hidden bg-slate-100 flex shadow-inner">
-                                  <div 
-                                      className="h-full bg-emerald-500 transition-all duration-1000 ease-out" 
-                                      style={{ width: `${approvePercent}%` }}
-                                  ></div>
-                                  <div className="flex-1 bg-rose-300 transition-all duration-1000 ease-out opacity-80"></div>
-                              </div>
-                              <div className="flex justify-between text-[11px] font-bold text-slate-500 mt-2.5 px-1">
-                                  <span className="flex items-center gap-1.5 text-emerald-600"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>{item.vote_summary?.approve || 0} เสียง</span>
-                                  <span className="flex items-center gap-1.5 text-rose-500"><span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>{(item.vote_summary?.reject || 0) + (item.vote_summary?.abstain || 0)} เสียง</span>
-                              </div>
-                          </td>
-
-                          {/* Column 4: Resolution */}
-                          <td className="p-6 text-center align-middle">
-                              <span className={`inline-flex items-center px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm ${resolution.colorClass}`}>
-                                  {resolution.isPassed ? <Check className="w-3.5 h-3.5 mr-1" strokeWidth={3} /> : <X className="w-3.5 h-3.5 mr-1" strokeWidth={3} />}
-                                  {resolution.label}
+                              <span className="inline-flex items-center px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                  <Check className="w-3.5 h-3.5 mr-1" strokeWidth={3} /> ผ่านมติคณะกรรมการ
                               </span>
                           </td>
 
-                          {/* Column 5: Action (Sign) */}
+                          {/* Column 3: Date */}
+                          <td className="p-6 text-center align-middle">
+                              <div className="text-slate-600 font-medium">{new Date(item.latest_update || item.created_at).toLocaleDateString('th-TH')}</div>
+                          </td>
+
+                          {/* Column 4: Action (Sign) */}
                           <td className="p-6 text-center align-middle">
                               <button 
                                   onClick={() => handleSign(item.form_id, fullName)}
                                   disabled={signingId === item.form_id}
                                   className={`
-                                      relative overflow-hidden bg-indigo-600 hover:bg-indigo-700 
+                                      relative overflow-hidden bg-purple-600 hover:bg-purple-700 
                                       text-white text-[13px] font-bold px-6 py-3 rounded-xl shadow-md
                                       transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2 mx-auto w-full max-w-[140px]
                                       ${signingId === item.form_id ? 'opacity-80 cursor-not-allowed' : ''}
@@ -559,17 +517,17 @@ export default function ChairmanApprovalPage() {
                                   ) : (
                                       <>
                                           <PenTool className="w-4 h-4 relative z-10" />
-                                          <span className="relative z-10">ลงนาม</span>
+                                          <span className="relative z-10">อนุมัติ</span>
                                       </>
                                   )}
                               </button>
                           </td>
 
-                          {/* Column 6: Details */}
+                          {/* Column 5: Details */}
                           <td className="p-6 text-center align-middle">
                             <button 
                               onClick={() => { setModalData(item); setIsDetailModalOpen(true); }} 
-                              className="inline-flex items-center justify-center p-3 rounded-xl text-slate-500 bg-slate-50 hover:text-indigo-600 hover:bg-indigo-50 transition-all transform hover:scale-110 border border-slate-200 hover:border-indigo-200 shadow-sm"
+                              className="inline-flex items-center justify-center p-3 rounded-xl text-slate-500 bg-slate-50 hover:text-purple-600 hover:bg-purple-50 transition-all transform hover:scale-110 border border-slate-200 hover:border-purple-200 shadow-sm"
                               title="ดูรายละเอียดข้อมูล"
                             >
                               <Eye className="w-4 h-4" />
@@ -589,9 +547,6 @@ export default function ChairmanApprovalPage() {
               <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronLeft className="w-4 h-4" /></button>
               <span className="text-sm font-bold text-slate-700 bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm">หน้า {currentPage} จาก {totalPages || 1}</span>
               <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronRight className="w-4 h-4" /></button>
-            </div>
-            <div className="text-[13px] text-slate-600 font-bold bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm">
-                พบข้อมูลรอลงนามทั้งหมด <span className="text-indigo-600 text-[14px] ml-1">{processedData.length}</span> รายการ
             </div>
           </div>
         </div>

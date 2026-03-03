@@ -76,30 +76,30 @@ export default function LoginPage() {
 
     switch (roleId) {
       case 1:
-        targetPath = "/student/main/student-nomination-form";
+        targetPath = "/student/main/hall-of-fame";
         break;
       case 2:
-        targetPath = "/head-of-department/consider";
+        targetPath = "/head-of-department/hall-of-fame";
         break;
       case 3:
-        targetPath = "/associate-dean/consider";
+        targetPath = "/associate-dean/hall-of-fame";
         break;
       case 4:
-        targetPath = "/dean/consider";
+        targetPath = "/dean/hall-of-fame";
         break;
       case 5:
-        targetPath = "/student-development/verify-submit";
+        targetPath = "/student-development/hall-of-fame";
         break;
       case 6:
         targetPath = isChairman 
-          ? "/chairman-of-student-development-committee/consider"
-          : "/student-development-committee/consider";
+          ? "/chairman-of-student-development-committee/hall-of-fame"
+          : "/student-development-committee/hall-of-fame";
         break;
       case 7:
-        targetPath = "/chancellor/dashboard"; 
+        targetPath = "/chancellor/hall-of-fame"; 
         break;
       case 8:
-        targetPath = "/organization/main/organization-nomination-form"; 
+        targetPath = "/organization/main/hall-of-fame"; 
         break;
       default:
         targetPath = "/";

@@ -70,17 +70,16 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
             showConfirmButton: false
         });
         
-        // เพิ่มหน้าหลักของ role 8 และ 9
         const dashboardMap: Record<string, string> = {
-            student: "/student/main/student-nomination-form",
-            student_development: "/student-development/setting",
-            head_of_department: "/head-of-department/consider",
-            associate_dean: "/associate-dean/consider",
-            dean: "/dean/consider",
-            student_development_committee: "/student-development-committee/consider",
-            chairman_of_student_development_committee: "/chairman-of-student-development-committee/consider",
-            chancellor: "/chancellor/dashboard", // Role 8
-            organization: "/organization/main/organization-nomination-form" // Role 9
+            student: "/student/main/hall-of-fame",
+            student_development: "/student-development/hall-of-fame",
+            head_of_department: "/head-of-department/hall-of-fame",
+            associate_dean: "/associate-dean/hall-of-fame",
+            dean: "/dean/hall-of-fame",
+            student_development_committee: "/student-development-committee/hall-of-fame",
+            chairman_of_student_development_committee: "/chairman-of-student-development-committee/hall-of-fame",
+            chancellor: "/chancellor/hall-of-fame",
+            organization: "/organization/main/hall-of-fame" // Role 9
         };
         
         // ส่งกลับไปยังหน้าแรกของสิทธิ์นั้นๆ
