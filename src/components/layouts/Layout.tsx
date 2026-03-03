@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import axios from "axios";
+import { api } from "@/lib/axios";
 import { z } from "zod"; 
 import Swal from "sweetalert2";
 import Sidebar from "@/components/Sidebar"; 
@@ -55,7 +55,7 @@ export default function FormLayout({
         const token = localStorage.getItem("token");
         // const apiUrl = process.env.NEXT_PUBLIC_API_URL || "/api";
 
-        const response = await axios.get(`/academic-years/current`, {
+        const response = await api.get(`/academic-years/current`, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",

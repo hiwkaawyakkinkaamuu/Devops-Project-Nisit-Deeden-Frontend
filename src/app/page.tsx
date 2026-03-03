@@ -11,8 +11,6 @@ import { useAuth } from "@/context/AuthContext";
 // 0. Configuration & Service Layer
 // ==========================================
 
-const API_BASE_URL = "";
-
 interface LoginResponse {
   token: string;
   role: string;

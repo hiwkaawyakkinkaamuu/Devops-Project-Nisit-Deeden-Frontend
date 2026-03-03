@@ -29,9 +29,7 @@ interface AuthContextType {
   isLoading: boolean;
 }
 
-// const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
-const API_BASE_URL = "";
-
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -91,7 +89,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       // 3. มี Token -> ยืนยันกับ Backend
       try {
-        const res = await api.get(`/auth/me`);
+        const res = await api.get(`${API_BASE_URL}/auth/me`);
         if (res.data) {
           const userData = res.data.user || res.data;
           setUser({ ...userData, token });
