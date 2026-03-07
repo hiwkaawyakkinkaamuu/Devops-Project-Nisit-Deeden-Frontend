@@ -4,25 +4,22 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import Swal from "sweetalert2";
-import { z } from "zod";
 import { api } from "@/lib/axios";
 import { 
-  Search, CheckCircle2, XCircle, Eye, 
+  Search, CheckCircle2, Eye, 
   Award, ChevronLeft, ChevronRight, ChevronDown, 
   ShieldCheck, Sparkles, Inbox,
-  ArrowUp, ArrowDown, ArrowUpDown,
-  AlertCircle
+  ArrowUp, ArrowDown, ArrowUpDown
 } from "lucide-react";
 
 import NominationDetailModal from "@/components/Nomination-detail-modal";
 
 // ==========================================
-// 0. Configuration & Validation
+// 0. Configuration
 // ==========================================
 
 const USE_MOCK_DATA = false;
 const ITEMS_PER_PAGE = 6;
-const RejectionSchema = z.string().min(5, "กรุณาระบุเหตุผลอย่างน้อย 5 ตัวอักษร");
 
 // ==========================================
 // 1. Interfaces
@@ -77,11 +74,10 @@ export interface Nomination {
 const CustomAwardTypeDropdown = ({ value, onChange, options }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null); //  ref ของ dropdown menu
+  const menuRef = useRef<HTMLDivElement>(null); 
 
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
-  // คำนวณตำแหน่ง dropdown ทุกครั้งที่เปิด
   useEffect(() => {
     if (isOpen && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
@@ -95,7 +91,6 @@ const CustomAwardTypeDropdown = ({ value, onChange, options }: any) => {
     }
   }, [isOpen]);
 
-  // ปิด dropdown เมื่อคลิกข้างนอก (ต้องไม่อยู่ใน trigger และไม่อยู่ใน menu)
   useEffect(() => {
     if (!isOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
@@ -108,13 +103,11 @@ const CustomAwardTypeDropdown = ({ value, onChange, options }: any) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  //  ปิด dropdown เมื่อ scroll เฉพาะนอก dropdown menu เท่านั้น
-  // ถ้า scroll เกิดใน menuRef (เลื่อนดูตัวเลือก) → ไม่ปิด
   useEffect(() => {
     if (!isOpen) return;
     const handleScroll = (e: Event) => {
-      if (menuRef.current?.contains(e.target as Node)) return; // scroll ใน menu → ไม่ปิด
-      setIsOpen(false); // scroll นอก menu → ปิด
+      if (menuRef.current?.contains(e.target as Node)) return; 
+      setIsOpen(false); 
     };
     window.addEventListener("scroll", handleScroll, true);
     return () => window.removeEventListener("scroll", handleScroll, true);
@@ -122,13 +115,11 @@ const CustomAwardTypeDropdown = ({ value, onChange, options }: any) => {
 
   const selectedLabel = value === "all" ? "ทุกประเภทรางวัล" : value;
 
-  //  Portal target — render dropdown menu ออกไปที่ body โดยตรง
-  // หลุดพ้นจาก stacking context ของ backdrop-blur และ overflow ทุกชั้น
   const dropdownMenu = (
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          ref={menuRef} //  ผูก ref เพื่อให้ scroll listener รู้ว่า scroll อยู่ใน menu หรือเปล่า
+          ref={menuRef} 
           initial={{ opacity: 0, y: -8, filter: "blur(4px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
           exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
@@ -163,7 +154,6 @@ const CustomAwardTypeDropdown = ({ value, onChange, options }: any) => {
   );
 
   return (
-    //  ไม่ต้องใส่ z-index บน wrapper อีกต่อไป เพราะ menu ถูก portal ไป body แล้ว
     <div className="relative w-full sm:w-64" ref={triggerRef}>
       <div
         onClick={() => setIsOpen(!isOpen)}
@@ -182,7 +172,6 @@ const CustomAwardTypeDropdown = ({ value, onChange, options }: any) => {
         />
       </div>
 
-      {/*  Portal: render ออกไปที่ document.body ทันที ไม่ถูก clip โดย overflow หรือ stacking context ใดๆ */}
       {typeof document !== "undefined" && createPortal(dropdownMenu, document.body)}
     </div>
   );
@@ -211,8 +200,6 @@ export default function SDDVerifyPage() {
   // Modal State
   const [selectedItem, setSelectedItem] = useState<Nomination | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isRejectMode, setIsRejectMode] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
 
   // ==========================================
   // Fetch Data
@@ -258,6 +245,7 @@ export default function SDDVerifyPage() {
             organization_name: item.org_name 
         }));
 
+        // รอพิจารณาที่ Status 6 = อนุมัติโดยคณบดี (รอให้กองพัฒนานิสิตตรวจสอบ)
         const TARGET_STATUS_ID = 6; 
         const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID);
 
@@ -273,13 +261,6 @@ export default function SDDVerifyPage() {
     fetchData();
     return () => { isMounted = false; };
   }, [searchTerm, filterType]);
-
-  useEffect(() => {
-    if (isModalOpen && selectedItem) {
-      setRejectReason("");
-      setIsRejectMode(false);
-    }
-  }, [isModalOpen, selectedItem]);
 
   // ==========================================
   // Logic & Sorting
@@ -359,6 +340,7 @@ export default function SDDVerifyPage() {
 
     if (result.isConfirmed) {
       try {
+        // อัปเดตสถานะเป็น 8 (อนุมัติโดยกองพัฒนานิสิต) ตาม DB ล่าสุด
         await api.put(`/awards/form-status/change/${selectedItem.form_id}`, { 
             form_status: 8, 
             reject_reason: "" 
@@ -373,35 +355,12 @@ export default function SDDVerifyPage() {
     }
   };
 
-  const handleReject = async () => {
-    if (!selectedItem) return;
-
-    const validation = RejectionSchema.safeParse(rejectReason);
-    if (!validation.success) {
-      return Swal.fire({ icon: 'warning', title: 'กรุณาระบุเหตุผล', text: validation.error.issues[0].message, confirmButtonColor: '#f43f5e' });
-    }
-
-    try {
-      await api.put(`/awards/form-status/change/${selectedItem.form_id}`, { 
-          form_status: 9, 
-          reject_reason: rejectReason 
-      });
-
-      setItems(prev => prev.filter(c => c.form_id !== selectedItem.form_id));
-      setIsModalOpen(false);
-      Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, icon: 'info', title: 'ส่งกลับแก้ไขสำเร็จ' });
-    } catch (err) {
-      Swal.fire('Error', 'เกิดข้อผิดพลาด', 'error');
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans relative">
       
       {/* 🔮 Abstract Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-400/10 blur-[120px] rounded-full" />
-          <div className="absolute bottom-[-10%] right-[-5%] w-[30%] h-[50%] bg-indigo-400/10 blur-[120px] rounded-full" />
+          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-transparent/10 blur-[120px] rounded-full" />
       </div>
 
       <style jsx global>{`
@@ -444,7 +403,7 @@ export default function SDDVerifyPage() {
                       />
                   </div>
                   
-                  {/*  Dropdown — ใช้ Portal แล้ว ไม่ถูก clip อีก */}
+                  {/* Dropdown */}
                   <CustomAwardTypeDropdown 
                       value={filterType} 
                       onChange={(val: string) => { setFilterType(val); setCurrentPage(1); }} 
@@ -463,7 +422,7 @@ export default function SDDVerifyPage() {
                     <th className="p-6 cursor-pointer hover:bg-slate-100/50 transition-colors" onClick={() => handleSort('student_firstname')}>
                         <div className="flex items-center gap-1.5">ชื่อ-นามสกุล / รหัสนิสิต {sortConfig.key === 'student_firstname' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-blue-500"/> : <ArrowDown className="w-3.5 h-3.5 text-blue-500"/>) : <ArrowUpDown className="w-3.5 h-3.5 text-slate-300"/>}</div>
                     </th>
-                    <th className="p-6">วิทยาเขต / คณะ / สาขาวิชา</th>
+                    <th className="p-6">คณะ / สาขาวิชา</th>
                     <th className="p-6 cursor-pointer hover:bg-slate-100/50 transition-colors text-center" onClick={() => handleSort('award_type_name')}>
                         <div className="flex items-center justify-center gap-1.5">รางวัลที่เสนอ {sortConfig.key === 'award_type_name' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-blue-500"/> : <ArrowDown className="w-3.5 h-3.5 text-blue-500"/>) : <ArrowUpDown className="w-3.5 h-3.5 text-slate-300"/>}</div>
                     </th>
@@ -501,7 +460,7 @@ export default function SDDVerifyPage() {
                             key={item.form_id} 
                             className="group hover:bg-blue-50/30 transition-all duration-300 animate-fade-in-up cursor-pointer"
                             style={{ opacity: 0, animationDelay: `${index * 50}ms`, animationFillMode: 'forwards' }}
-                            onClick={() => { setSelectedItem(item); setIsModalOpen(true); setIsRejectMode(false); }}
+                            onClick={() => { setSelectedItem(item); setIsModalOpen(true); }}
                         >
                         <td className="p-6 text-center text-slate-300 font-mono text-xs">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                         <td className="p-6 align-middle">
@@ -516,9 +475,6 @@ export default function SDDVerifyPage() {
                             </div>
                         </td>
                         <td className="p-6 text-sm text-slate-600 align-middle">
-                            <div className="font-extrabold text-blue-700 text-[11px] mb-1 bg-blue-50/80 w-fit px-2 py-0.5 rounded-md border border-blue-100">
-                                วิทยาเขต{getCampusName(item.campus_id)}
-                            </div>
                             <div className="font-bold text-slate-700">{getFacultyName(item.faculty_id)}</div>
                             <div className="text-xs text-slate-400 mt-0.5 font-medium">{getDepartmentName(item.department_id)}</div>
                         </td>
@@ -535,7 +491,7 @@ export default function SDDVerifyPage() {
                         </td>
                         <td className="p-6 text-center align-middle" onClick={(e) => e.stopPropagation()}>
                             <button 
-                                onClick={() => { setSelectedItem(item); setIsModalOpen(true); setIsRejectMode(false); }}
+                                onClick={() => { setSelectedItem(item); setIsModalOpen(true); }}
                                 className="bg-white hover:bg-blue-600 hover:text-white text-slate-600 border border-slate-200 hover:border-blue-600 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm hover:shadow-md active:scale-95 flex items-center gap-2 mx-auto"
                             >
                                 <Eye size={14} /> ตรวจสอบเอกสาร
@@ -571,7 +527,7 @@ export default function SDDVerifyPage() {
 
       {/* Modal Section */}
       <AnimatePresence>
-        {isModalOpen && selectedItem && !isRejectMode && (
+        {isModalOpen && selectedItem && (
            <NominationDetailModal 
                isOpen={isModalOpen} 
                onClose={() => setIsModalOpen(false)} 
@@ -583,7 +539,7 @@ export default function SDDVerifyPage() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {isModalOpen && selectedItem && !isRejectMode && (
+        {isModalOpen && selectedItem && (
            <div className="fixed bottom-0 left-0 w-full z-[10000] p-6 pointer-events-none flex justify-center">
                <motion.div 
                    initial={{ y: 100, opacity: 0 }} 
@@ -591,46 +547,11 @@ export default function SDDVerifyPage() {
                    exit={{ y: 100, opacity: 0 }}
                    className="bg-white/90 backdrop-blur-xl p-4 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.15)] border border-slate-200 pointer-events-auto flex items-center gap-4"
                >
-                    <button onClick={() => setIsRejectMode(true)} className="px-8 py-3.5 rounded-xl text-sm font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-transparent transition-colors shadow-sm">
-                        ปฏิเสธฟอร์ม
-                    </button>
                     <button onClick={handleApprove} className="px-10 py-3.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-[0_8px_20px_rgba(37,99,235,0.3)] hover:-translate-y-0.5 transition-all flex items-center gap-2">
-                        บันทึกและส่งต่อ <ChevronRight size={16}/>
+                        บันทึกและส่งต่อคณะกรรมการ <ChevronRight size={16}/>
                     </button>
                </motion.div>
            </div>
-        )}
-      </AnimatePresence>
-
-      {/* Reject Reason Modal */}
-      <AnimatePresence>
-        {isRejectMode && selectedItem && (
-          <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsRejectMode(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100">
-                <div className="bg-rose-50/50 px-6 py-5 border-b border-rose-100 flex items-center justify-between">
-                    <h3 className="text-xl font-bold text-rose-800 flex items-center gap-2"><AlertCircle className="w-6 h-6 text-rose-500" /> ระบุเหตุผล "ไม่เห็นชอบ"</h3>
-                    <button onClick={() => setIsRejectMode(false)} className="text-rose-400 hover:text-rose-600 bg-white p-1.5 rounded-full hover:bg-rose-100 transition-colors"><XCircle className="w-5 h-5"/></button>
-                </div>
-                <div className="p-6">
-                    <p className="text-slate-600 font-medium mb-4 text-sm">
-                        เอกสารของ <b className="text-slate-800">{getDisplayName(selectedItem)}</b> จะถูกปฏิเสธ
-                    </p>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">เหตุผลที่ตีกลับเอกสาร <span className="text-rose-500">*</span></label>
-                    <textarea 
-                        value={rejectReason} 
-                        onChange={(e) => setRejectReason(e.target.value)} 
-                        className="w-full border border-slate-300 rounded-xl p-4 text-sm outline-none transition-all h-32 resize-none bg-slate-50/50 focus:ring-4 focus:ring-rose-100 focus:border-rose-400" 
-                        placeholder="ระบุเหตุผลอย่างน้อย 5 ตัวอักษร..." 
-                        autoFocus 
-                    />
-                    <div className="mt-6 flex justify-end gap-3">
-                        <button onClick={() => setIsRejectMode(false)} className="px-5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-medium">ยกเลิก</button>
-                        <button onClick={handleReject} className="px-6 py-2.5 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-lg shadow-rose-600/20 flex items-center gap-2"><XCircle size={16}/> ยืนยันการตีกลับ</button>
-                    </div>
-                </div>
-            </motion.div>
-          </div>
         )}
       </AnimatePresence>
 

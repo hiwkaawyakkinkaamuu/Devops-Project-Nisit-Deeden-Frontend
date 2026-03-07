@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy, Lightbulb, Heart, Star, UploadCloud, FileText, XCircle, CheckCircle2,
   AlertCircle, Calendar, User, Phone, GraduationCap,
-  ChevronRight, Percent, ChevronDown, Clock
+  ChevronRight, Percent, ChevronDown, Clock, X, ChevronLeft
 } from "lucide-react";
 
 // ==========================================
@@ -21,23 +21,28 @@ const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 const THEME_STYLES: Record<string, any> = {
   activity: {
     accent: "orange", border: "border-orange-200/50", gradient: "from-orange-400 to-rose-500", shadow: "shadow-orange-500/20", text: "text-orange-600", ring: "focus:ring-orange-500/30",
-    cardBorder: "border-orange-500", cardBg: "bg-orange-50", cardIconBg: "bg-orange-500", cardIconText: "text-white", cardShadow: "shadow-orange-500/30", titleText: "text-orange-700", subText: "text-orange-500"
+    cardBorder: "border-orange-500", cardBg: "bg-orange-50", cardIconBg: "bg-orange-500", cardIconText: "text-white", cardShadow: "shadow-orange-500/30", titleText: "text-orange-700", subText: "text-orange-500",
+    dateSel: "bg-orange-500 text-white shadow-orange-500/40", dateToday: "text-orange-600 bg-orange-50 border-orange-200", dateHover: "hover:bg-orange-50 hover:text-orange-600"
   },
   innovation: {
     accent: "purple", border: "border-purple-200/50", gradient: "from-purple-500 to-indigo-500", shadow: "shadow-purple-500/20", text: "text-purple-600", ring: "focus:ring-purple-500/30",
-    cardBorder: "border-purple-500", cardBg: "bg-purple-50", cardIconBg: "bg-purple-500", cardIconText: "text-white", cardShadow: "shadow-purple-500/30", titleText: "text-purple-700", subText: "text-purple-500"
+    cardBorder: "border-purple-500", cardBg: "bg-purple-50", cardIconBg: "bg-purple-500", cardIconText: "text-white", cardShadow: "shadow-purple-500/30", titleText: "text-purple-700", subText: "text-purple-500",
+    dateSel: "bg-purple-500 text-white shadow-purple-500/40", dateToday: "text-purple-600 bg-purple-50 border-purple-200", dateHover: "hover:bg-purple-50 hover:text-purple-600"
   },
   behavior: {
     accent: "blue", border: "border-blue-200/50", gradient: "from-blue-400 to-cyan-500", shadow: "shadow-blue-500/20", text: "text-blue-600", ring: "focus:ring-blue-500/30",
-    cardBorder: "border-blue-500", cardBg: "bg-blue-50", cardIconBg: "bg-blue-500", cardIconText: "text-white", cardShadow: "shadow-blue-500/30", titleText: "text-blue-700", subText: "text-blue-500"
+    cardBorder: "border-blue-500", cardBg: "bg-blue-50", cardIconBg: "bg-blue-500", cardIconText: "text-white", cardShadow: "shadow-blue-500/30", titleText: "text-blue-700", subText: "text-blue-500",
+    dateSel: "bg-blue-500 text-white shadow-blue-500/40", dateToday: "text-blue-600 bg-blue-50 border-blue-200", dateHover: "hover:bg-blue-50 hover:text-blue-600"
   },
   other: {
     accent: "emerald", border: "border-emerald-200/50", gradient: "from-emerald-400 to-teal-500", shadow: "shadow-emerald-500/20", text: "text-emerald-600", ring: "focus:ring-emerald-500/30",
-    cardBorder: "border-emerald-500", cardBg: "bg-emerald-50", cardIconBg: "bg-emerald-500", cardIconText: "text-white", cardShadow: "shadow-emerald-500/30", titleText: "text-emerald-700", subText: "text-emerald-500"
+    cardBorder: "border-emerald-500", cardBg: "bg-emerald-50", cardIconBg: "bg-emerald-500", cardIconText: "text-white", cardShadow: "shadow-emerald-500/30", titleText: "text-emerald-700", subText: "text-emerald-500",
+    dateSel: "bg-emerald-500 text-white shadow-emerald-500/40", dateToday: "text-emerald-600 bg-emerald-50 border-emerald-200", dateHover: "hover:bg-emerald-50 hover:text-emerald-600"
   },
   default: {
     accent: "gray", border: "border-gray-200/50", gradient: "from-gray-600 to-slate-800", shadow: "shadow-gray-500/20", text: "text-gray-800", ring: "focus:ring-gray-500/30",
-    cardBorder: "border-slate-300", cardBg: "bg-white/60", cardIconBg: "bg-slate-100", cardIconText: "text-slate-400", cardShadow: "", titleText: "text-slate-600", subText: "text-slate-400"
+    cardBorder: "border-slate-300", cardBg: "bg-white/60", cardIconBg: "bg-slate-100", cardIconText: "text-slate-400", cardShadow: "", titleText: "text-slate-600", subText: "text-slate-400",
+    dateSel: "bg-slate-700 text-white shadow-slate-500/40", dateToday: "text-slate-700 bg-slate-100 border-slate-300", dateHover: "hover:bg-slate-100 hover:text-slate-800"
   }
 };
 
@@ -141,6 +146,253 @@ const nominationService = {
     return response.data;
   },
 };
+
+// ==========================================
+// 🌟 Premium Birth Date Picker Component
+// ==========================================
+const MONTH_NAMES = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+const DAY_NAMES = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+
+function PremiumBirthDatePicker({ value, onChange, label, theme, req }: any) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'date' | 'month' | 'year'>('date');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Default ให้เป็น 20 ปีที่แล้ว ถ้านิสิตยังไม่เคยเลือกวันเกิด
+  const defaultDate = new Date();
+  defaultDate.setFullYear(defaultDate.getFullYear() - 20);
+  
+  const [viewDate, setViewDate] = useState(() => value ? new Date(value) : defaultDate);
+  const [yearPage, setYearPage] = useState(() => viewDate.getFullYear());
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setViewMode('date');
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const formatDisplayDate = (dateStr: string) => {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  const handleSelectDate = (day: number, month: number, year: number) => {
+    const selected = new Date(year, month, day);
+    // Format C.E. (ค.ศ.) YYYY-MM-DD สำหรับส่งไปหลังบ้าน
+    const y = selected.getFullYear();
+    const m = String(selected.getMonth() + 1).padStart(2, '0');
+    const d = String(selected.getDate()).padStart(2, '0');
+    onChange(`${y}-${m}-${d}`);
+    setIsOpen(false);
+    setViewMode('date');
+  };
+
+  // 42-grid system for days
+  const getCalendarDays = () => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+    
+    const daysArray = [];
+    for (let i = firstDayOfMonth - 1; i >= 0; i--) {
+      daysArray.push({ day: daysInPrevMonth - i, month: month - 1, year: year, isCurrentMonth: false });
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      daysArray.push({ day: i, month: month, year: year, isCurrentMonth: true });
+    }
+    const remainingSlots = 42 - daysArray.length;
+    for (let i = 1; i <= remainingSlots; i++) {
+      daysArray.push({ day: i, month: month + 1, year: year, isCurrentMonth: false });
+    }
+    return daysArray;
+  };
+
+  const calendarDays = getCalendarDays();
+  const isSelected = (d: number, m: number, y: number) => {
+    if (!value) return false;
+    const date = new Date(value);
+    return d === date.getDate() && m === date.getMonth() && y === date.getFullYear();
+  };
+
+  const startYear = Math.floor(yearPage / 20) * 20;
+  const yearsArray = Array.from({length: 20}, (_, i) => startYear + i);
+
+  return (
+    // 🚨 ปรับ z-index ให้เวลาเปิด ปฏิทินลอยทับทุกอย่าง
+    <div className={`relative w-full group ${isOpen ? 'z-[100]' : 'z-10'}`} ref={containerRef}>
+      <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
+        {label} {req && <span className="text-rose-500">*</span>}
+      </label>
+      
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex w-full items-center justify-between bg-white/50 backdrop-blur-sm hover:bg-white transition-all border border-slate-200 rounded-2xl px-4 py-[14px] pl-12 shadow-sm focus-within:ring-4 focus-within:bg-white cursor-pointer ${theme.ring} ${isOpen ? 'border-slate-300 bg-white ring-4 ring-emerald-500/10' : 'hover:border-slate-300'}`}
+      >
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <Calendar className={`w-5 h-5 transition-colors ${isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500'}`} />
+        </div>
+        <span className={`text-base font-medium truncate ${value ? 'text-slate-800' : 'text-slate-400'}`}>
+          {value ? formatDisplayDate(value) : "วัน/เดือน/ปีเกิด (คลิกเพื่อเลือก)"}
+        </span>
+        
+        {value ? (
+          <div onClick={(e) => { e.stopPropagation(); onChange(""); }} className="p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors z-20">
+            <X size={18} />
+          </div>
+        ) : (
+          <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
+        )}
+      </div>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="absolute top-full left-0 right-0 sm:right-auto sm:min-w-[340px] mt-2 bg-white/95 backdrop-blur-2xl border border-slate-100 rounded-[24px] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.2)] z-[9999] p-5 origin-top-left"
+          >
+            {/* HEADER */}
+            <div className="flex items-center justify-between mb-5">
+              <button 
+                type="button" 
+                onClick={(e) => { 
+                    e.stopPropagation();
+                    if (viewMode === 'year') setYearPage(p => p - 20);
+                    else if (viewMode === 'date') setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
+                    else setViewDate(new Date(viewDate.getFullYear() - 1, viewDate.getMonth(), 1));
+                }} 
+                className="p-2 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors shadow-sm border border-slate-100"
+              >
+                <ChevronLeft size={18} />
+              </button>
+
+              <div className="flex items-center gap-1">
+                {viewMode === 'date' && (
+                  <>
+                    <button type="button" onClick={() => setViewMode('month')} className={`px-2 py-1 font-bold text-[15px] rounded-lg transition-colors ${theme.dateHover} text-slate-800`}>
+                      {MONTH_NAMES[viewDate.getMonth()]}
+                    </button>
+                    <button type="button" onClick={() => { setViewMode('year'); setYearPage(viewDate.getFullYear()); }} className={`px-2 py-1 font-bold text-[15px] rounded-lg transition-colors ${theme.dateHover} text-slate-800`}>
+                      {viewDate.getFullYear() + 543}
+                    </button>
+                  </>
+                )}
+                {viewMode === 'month' && (
+                  <button type="button" onClick={() => { setViewMode('year'); setYearPage(viewDate.getFullYear()); }} className={`px-3 py-1 font-bold text-[15px] rounded-lg transition-colors ${theme.dateHover} text-slate-800`}>
+                    เลือกเดือน (ปี {viewDate.getFullYear() + 543})
+                  </button>
+                )}
+                {viewMode === 'year' && (
+                  <span className="font-bold text-[15px] text-slate-800 px-2 py-1">
+                    พ.ศ. {startYear + 543} - {startYear + 19 + 543}
+                  </span>
+                )}
+              </div>
+
+              <button 
+                type="button" 
+                onClick={(e) => { 
+                    e.stopPropagation();
+                    if (viewMode === 'year') setYearPage(p => p + 20);
+                    else if (viewMode === 'date') setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
+                    else setViewDate(new Date(viewDate.getFullYear() + 1, viewDate.getMonth(), 1));
+                }} 
+                className="p-2 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors shadow-sm border border-slate-100"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+
+            {/* BODY - DATE MODE */}
+            {viewMode === 'date' && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {DAY_NAMES.map((day, i) => (
+                    <div key={day} className={`text-center text-[11px] font-black py-1 ${i === 0 ? 'text-rose-400' : i === 6 ? 'text-blue-400' : 'text-slate-400'}`}>
+                      {day}
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-y-1.5 gap-x-1">
+                  {calendarDays.map((d, i) => {
+                    const isSel = isSelected(d.day, d.month, d.year);
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => handleSelectDate(d.day, d.month, d.year)}
+                        className={`
+                          w-9 h-9 sm:w-10 sm:h-10 mx-auto flex items-center justify-center rounded-full text-[14px] transition-all
+                          ${!d.isCurrentMonth ? 'text-slate-300 hover:text-slate-500 font-medium' : 'text-slate-700 font-semibold'}
+                          ${isSel ? `${theme.dateSel} scale-105 z-10 relative` : `${theme.dateHover}`}
+                        `}
+                      >
+                        {d.day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+
+            {/* BODY - MONTH MODE */}
+            {viewMode === 'month' && (
+              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="grid grid-cols-3 gap-3">
+                {MONTH_NAMES.map((m, i) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                        setViewDate(new Date(viewDate.getFullYear(), i, 1));
+                        setViewMode('date');
+                    }}
+                    className={`py-4 rounded-2xl text-sm font-bold transition-all
+                        ${viewDate.getMonth() === i ? `${theme.dateSel} shadow-md` : `bg-slate-50 text-slate-700 border border-slate-100 ${theme.dateHover}`}
+                    `}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+
+            {/* BODY - YEAR MODE */}
+            {viewMode === 'year' && (
+              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="grid grid-cols-4 gap-2">
+                {yearsArray.map((y) => (
+                  <button
+                    key={y}
+                    type="button"
+                    onClick={() => {
+                        setViewDate(new Date(y, viewDate.getMonth(), 1));
+                        setViewMode('month');
+                    }}
+                    className={`py-3 rounded-xl text-sm font-bold transition-all
+                        ${viewDate.getFullYear() === y ? `${theme.dateSel} shadow-md` : `bg-slate-50 text-slate-700 border border-slate-100 ${theme.dateHover}`}
+                    `}
+                  >
+                    {y + 543}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 
 // ==========================================
 // 2. Main Component
@@ -297,10 +549,10 @@ export default function StudentNominationForm() {
     if (!token) return;
 
     let awardName = "";
-    if (awardType === "activity") awardName = "นอกหลักสูตรกิจกรรม";
-    else if (awardType === "innovation") awardName = "ความคิดสร้างสรรค์เเละนวัตกรรม";
+    if (awardType === "activity") awardName = "กิจกรรมเสริมหลักสูตร";
+    else if (awardType === "innovation") awardName = "ความคิดสร้างสรรค์และนวัตกรรม";
     else if (awardType === "behavior") awardName = "ความประพฤติดี";
-    else if (awardType === "other") awardName = otherTitle.trim(); // ยัด otherTitle เข้าไปเป็นชื่อรางวัลเลย
+    else if (awardType === "other") awardName = otherTitle.trim(); 
 
     const res = await Swal.fire({
       title: "ยืนยันการเสนอชื่อ?",
@@ -364,7 +616,7 @@ export default function StudentNominationForm() {
   if (alreadySubmitted) return <StatusScreen icon={AlertCircle} color="amber" title="ดำเนินการแล้ว" msg={`ท่านได้ทำการเสนอชื่อในปีการศึกษา ${displaycurrentTermInfo}/${currentTermInfo?.semester} เรียบร้อยแล้ว ไม่สามารถส่งซ้ำได้`} />;
 
   return (
-    <div className="min-h-screen bg-transparent text-slate-800 font-sans py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+    <div className="min-h-screen bg-transparent text-slate-800 font-sans py-12 px-4 sm:px-6 lg:px-8 relative overflow-x-hidden">
 
       <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: "easeOut" }} className="max-w-6xl mx-auto">
         <div className="bg-white/70 backdrop-blur-xl shadow-2xl shadow-slate-200/50 rounded-[2.5rem] p-8 md:p-14 border border-white">
@@ -383,9 +635,9 @@ export default function StudentNominationForm() {
           <form onSubmit={handleSubmit} className="space-y-16">
             
             {/* Step 1: Award Type */}
-            <Section num={1} title="เลือกประเภทรางวัลที่ต้องการเสนอชื่อ" theme={theme}>
+            <Section num={1} zIndex={40} title="เลือกประเภทรางวัลที่ต้องการเสนอชื่อ" theme={theme}>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <TypeCard type="activity" active={awardType} set={setAwardType} title="นอกหลักสูตรกิจกรรม" sub="ผู้นำ/แข่งขัน" icon={Trophy} />
+                <TypeCard type="activity" active={awardType} set={setAwardType} title="กิจกรรมเสริมหลักสูตร" sub="ผู้นำ/แข่งขัน" icon={Trophy} />
                 <TypeCard type="innovation" active={awardType} set={setAwardType} title="ความคิดสร้างสรรค์เเละนวัตกรรม" sub="สิ่งประดิษฐ์/วิจัย" icon={Lightbulb} />
                 <TypeCard type="behavior" active={awardType} set={setAwardType} title="ความประพฤติดี" sub="จิตอาสา/คุณธรรม" icon={Heart} />
                 <TypeCard type="other" active={awardType} set={setAwardType} title="อื่นๆ" sub="ระบุชื่อรางวัลเอง" icon={Star} />
@@ -404,7 +656,7 @@ export default function StudentNominationForm() {
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ staggerChildren: 0.1 }} className="space-y-16">
                   
                   {/* Step 2: Student Profile */}
-                  <Section num={2} title="ข้อมูลส่วนตัวนิสิต" theme={theme}>
+                  <Section num={2} zIndex={30} title="ข้อมูลส่วนตัวนิสิต" theme={theme}>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
                         <ReadOnly label="ชื่อ-นามสกุล" val={`${userProfile.student_firstname} ${userProfile.student_lastname}`} />
                         <ReadOnly label="รหัสนิสิต" val={userProfile.student_number} />
@@ -415,17 +667,26 @@ export default function StudentNominationForm() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-200/60">
+                      {/* 🚨 แก้ไขปัญหาชั้นปีโดนบัง: ใช้ Select Component ที่มีการอัพเดท z-index เรียบร้อยแล้ว */}
                       <Select label="ชั้นปี" val={userProfile.student_year} set={(v: string) => handleProfileChange("student_year", v)} options={[1,2,3,4,5,6].map(y => ({v:y, l:`ปี ${y}`}))} icon={GraduationCap} theme={theme} req />
                       <Input label="เกรดเฉลี่ยสะสม (GPA)" val={userProfile.gpa} set={(v: string) => handleProfileChange("gpa", v)} icon={Percent} theme={theme} req />
                       <Input label="ชื่ออาจารย์ที่ปรึกษา" val={userProfile.advisor_name} set={(v: string) => handleProfileChange("advisor_name", v)} icon={GraduationCap} theme={theme} req />
                       <Input label="เบอร์โทรศัพท์ติดต่อ" val={userProfile.phone_number} set={(v: string) => handleProfileChange("phone_number", v)} icon={Phone} theme={theme} req max={10} />
-                      <Input label="วันเกิด" val={userProfile.date_of_birth} set={(v: string) => handleProfileChange("date_of_birth", v)} icon={Calendar} theme={theme} type="date" req />
+                      
+                      {/* ใช้ Premium Date Picker สำหรับวันเกิด */}
+                      <PremiumBirthDatePicker 
+                          label="วันเกิด" 
+                          value={userProfile.date_of_birth} 
+                          onChange={(v: string) => handleProfileChange("date_of_birth", v)} 
+                          theme={theme} 
+                          req 
+                      />
                       
                       <div>
                         <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">อายุ (ปี)</label>
                         <div className="relative group">
                           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User className="w-5 h-5 text-slate-400" /></div>
-                          <input type="text" value={userProfile.age} readOnly className="w-full bg-slate-100 border border-slate-200 rounded-2xl pl-12 pr-4 py-4 outline-none text-slate-500 font-medium cursor-not-allowed" />
+                          <input type="text" value={userProfile.age} readOnly className="w-full bg-slate-100 border border-slate-200 rounded-2xl pl-12 pr-4 py-[14px] outline-none text-slate-500 font-medium cursor-not-allowed" />
                         </div>
                       </div>
 
@@ -437,7 +698,7 @@ export default function StudentNominationForm() {
                   </Section>
 
                   {/* Step 3: Specific Details */}
-                  <Section num={3} title="เหตุผลในการเสนอชื่อและความโดดเด่น" theme={theme}>
+                  <Section num={3} zIndex={20} title="เหตุผลในการเสนอชื่อและความโดดเด่น" theme={theme}>
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
                           รายละเอียด ความดี ผลงาน หรือบทบาทหน้าที่ <span className="text-rose-500">*</span>
@@ -447,7 +708,7 @@ export default function StudentNominationForm() {
                   </Section>
 
                   {/* Step 4: File Uploads */}
-                  <Section num={4} title="แนบเอกสารหลักฐาน" theme={theme}>
+                  <Section num={4} zIndex={10} title="แนบเอกสารหลักฐาน" theme={theme}>
                     <div onClick={() => fileInputRef.current?.click()} className={`group relative overflow-hidden border-2 border-dashed border-slate-300 hover:border-${theme.accent}-400 rounded-[2rem] p-12 text-center cursor-pointer transition-all duration-300 bg-white/40 hover:bg-white/80`}>
                       <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
                       <motion.div whileHover={{ scale: 1.05 }} className={`w-20 h-20 mx-auto bg-${theme.accent}-100 rounded-full flex items-center justify-center mb-6 shadow-sm`}>
@@ -510,9 +771,9 @@ export default function StudentNominationForm() {
 // 3. Beautiful Sub-components
 // ==========================================
 
-const Section = ({ num, title, children, theme }: any) => (
-  <motion.div className={`bg-white/40 backdrop-blur-md rounded-[2.5rem] p-8 md:p-10 border ${theme.border} relative overflow-hidden shadow-lg shadow-slate-200/20`}>
-    <div className={`absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r ${theme.gradient} opacity-80`} />
+const Section = ({ num, title, children, theme, zIndex = 10 }: any) => (
+  <motion.div style={{ zIndex }} className={`bg-white/40 backdrop-blur-md rounded-[2.5rem] p-8 md:p-10 border ${theme.border} relative shadow-lg shadow-slate-200/20`}>
+    <div className={`absolute top-0 left-0 w-full h-1.5 rounded-t-[2.5rem] bg-gradient-to-r ${theme.gradient} opacity-80`} />
     <div className="flex items-center gap-4 mb-8">
       <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${theme.gradient} text-white flex items-center justify-center font-black text-xl shadow-lg ${theme.shadow}`}>
         {num}
@@ -548,11 +809,12 @@ const Input = ({ label, val, set, icon: Icon, theme, type = "text", req, max, pl
       <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
         <Icon className={`w-5 h-5 text-slate-400 group-focus-within:${theme.text} transition-colors`} />
       </div>
-      <input type={type} value={val} onChange={e => set(e.target.value)} maxLength={max} placeholder={placeholder} className={`w-full bg-white/50 backdrop-blur-sm border border-slate-200 rounded-2xl pl-12 pr-4 py-4 outline-none transition-all ${theme.ring} hover:border-slate-300 focus:bg-white text-slate-800 font-medium`} />
+      <input type={type} value={val} onChange={e => set(e.target.value)} maxLength={max} placeholder={placeholder} className={`w-full bg-white/50 backdrop-blur-sm border border-slate-200 rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all ${theme.ring} hover:border-slate-300 focus:bg-white text-slate-800 font-medium`} />
     </div>
   </div>
 );
 
+// 🚨 แก้ไขปัญหาชั้นปีโดนบัง: ปรับ z-index แบบ Dynamic
 const Select = ({ label, val, set, options, icon: Icon, theme, req, disabled }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -570,62 +832,61 @@ const Select = ({ label, val, set, options, icon: Icon, theme, req, disabled }: 
   const selectedLabel = options.find((o: any) => o.v === val)?.l || "-- เลือก --";
 
   return (
-    <div className={disabled ? "opacity-50 pointer-events-none" : ""} ref={dropdownRef}>
+    // สลับ z-[100] ลอยขึ้นมาเวลาถูกเปิด
+    <div className={`relative ${disabled ? "opacity-50 pointer-events-none" : ""} ${isOpen ? 'z-[100]' : 'z-10'}`} ref={dropdownRef}>
       <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
         {label} {req && <span className="text-rose-500">*</span>}
       </label>
-      <div className="relative group">
+      <div 
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full cursor-pointer bg-white/50 backdrop-blur-sm border rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all duration-300 flex items-center justify-between
+          ${isOpen ? `border-slate-300 shadow-md ${theme.ring} bg-white` : 'border-slate-200 hover:border-slate-300'}
+        `}
+      >
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
           <Icon className={`w-5 h-5 transition-colors duration-300 ${isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500'}`} />
         </div>
-        
-        <div 
-          onClick={() => !disabled && setIsOpen(!isOpen)}
-          className={`w-full cursor-pointer bg-white/50 backdrop-blur-sm border rounded-2xl pl-12 pr-4 py-4 outline-none transition-all duration-300 flex items-center justify-between
-            ${isOpen ? `border-slate-300 shadow-md ${theme.ring} bg-white` : 'border-slate-200 hover:border-slate-300'}
-          `}
-        >
-          <span className={`font-medium truncate pr-4 transition-colors ${val ? 'text-slate-800' : 'text-slate-400'}`}>
-            {selectedLabel}
-          </span>
-          <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 flex-shrink-0 ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
-        </div>
-
-        <AnimatePresence>
-          {isOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="absolute z-50 w-full mt-2 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full"
-            >
-              <div
-                onClick={() => { set(""); setIsOpen(false); }}
-                className={`px-5 py-3 cursor-pointer transition-all duration-200 hover:bg-slate-50 text-slate-500 font-medium ${val === "" ? "bg-slate-50 text-slate-800" : ""}`}
-              >
-                -- เลือก --
-              </div>
-              {options.map((o: any, i: number) => (
-                <div
-                  key={i}
-                  onClick={() => { set(o.v); setIsOpen(false); }}
-                  className={`px-5 py-3 cursor-pointer transition-all duration-200 font-medium truncate flex items-center justify-between
-                    ${val === o.v ? `bg-slate-50 ${theme.text}` : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'}
-                  `}
-                >
-                  {o.l}
-                  {val === o.v && (
-                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-                      <CheckCircle2 className={`w-4 h-4 ${theme.text}`} />
-                    </motion.div>
-                  )}
-                </div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <span className={`font-medium truncate pr-4 transition-colors ${val ? 'text-slate-800' : 'text-slate-400'}`}>
+          {selectedLabel}
+        </span>
+        <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 flex-shrink-0 ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
       </div>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            // ให้กล่อง Dropdown ลอยบนสุดจริงๆ (z-[9999])
+            className="absolute z-[9999] w-full mt-2 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full"
+          >
+            <div
+              onClick={() => { set(""); setIsOpen(false); }}
+              className={`px-5 py-3 cursor-pointer transition-all duration-200 hover:bg-slate-50 text-slate-500 font-medium ${val === "" ? "bg-slate-50 text-slate-800" : ""}`}
+            >
+              -- เลือก --
+            </div>
+            {options.map((o: any, i: number) => (
+              <div
+                key={i}
+                onClick={() => { set(o.v); setIsOpen(false); }}
+                className={`px-5 py-3 cursor-pointer transition-all duration-200 font-medium truncate flex items-center justify-between
+                  ${val === o.v ? `bg-slate-50 ${theme.text}` : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'}
+                `}
+              >
+                {o.l}
+                {val === o.v && (
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                    <CheckCircle2 className={`w-4 h-4 ${theme.text}`} />
+                  </motion.div>
+                )}
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

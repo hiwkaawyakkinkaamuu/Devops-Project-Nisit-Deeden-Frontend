@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/axios"; 
 import { 
     Search, ChevronDown, CheckCircle2, History, User, 
-    ChevronLeft, ChevronRight, XCircle, Filter, ArrowUpDown, Building2
+    ChevronLeft, ChevronRight, XCircle, ArrowUpDown, Building2, FileText
 } from "lucide-react";
 
 // ==========================================
@@ -52,7 +52,7 @@ const formatTimeTh = (isoDate: string) => {
 
 const ActionBadge = ({ action }: { action: string }) => {
     const config: Record<string, { bg: string, text: string, border: string, label: string, icon: any }> = {
-        approve: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", label: "เห็นชอบ", icon: <CheckCircle2 size={14} className="mr-1.5" /> },
+        approve: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", label: "ตรวจสอบผ่าน", icon: <CheckCircle2 size={14} className="mr-1.5" /> },
         reject: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200", label: "ตีกลับ/ปฏิเสธ", icon: <XCircle size={14} className="mr-1.5" /> },
         other: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200", label: "อัปเดตข้อมูล", icon: <History size={14} className="mr-1.5" /> }
     };
@@ -67,7 +67,7 @@ const ActionBadge = ({ action }: { action: string }) => {
     );
 };
 
-// 🌟 Custom Dropdown Component
+// Custom Dropdown Component
 const CustomSelect = ({ value, onChange, options, icon: Icon, placeholder }: any) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -132,21 +132,20 @@ const CustomSelect = ({ value, onChange, options, icon: Icon, placeholder }: any
 // ==========================================
 
 export default function SDDHistoryPage() {
-    const [logs, setLogs] = useState<LogEntry[]>([]);
+    const [allLogs, setAllLogs] = useState<LogEntry[]>([]);
     const [loading, setLoading] = useState(true);
     
     // สำหรับโชว์ชื่อตัวเอง
     const [currentUserInfo, setCurrentUserInfo] = useState<any>(null);
 
-    // Filters (Server-Side)
+    // Filters
     const [searchTerm, setSearchTerm] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const [filterAction, setFilterAction] = useState("all");
     const [sortBy, setSortBy] = useState("date_desc");
 
-    // Pagination (Server-Side)
+    // Pagination (Client-Side)
     const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
 
     // Debounce ค้นหา ป้องกันการยิง API รัวๆ เวลาพิมพ์
     useEffect(() => {
@@ -178,78 +177,64 @@ export default function SDDHistoryPage() {
                     }
                 }
 
-                // เตรียมพารามิเตอร์สำหรับส่งไปให้ Backend
+                // เตรียมพารามิเตอร์สำหรับส่งไปให้ Backend (API ใหม่ใช้ sort_order / arrange)
                 const params: Record<string, any> = {
-                    page: currentPage,
-                    limit: ITEMS_PER_PAGE,
-                    sortBy: "date",
-                    sortOrder: sortBy === "date_desc" ? "desc" : "asc"
+                    sort_order: sortBy === "date_desc" ? "desc" : "asc"
                 };
 
                 if (debouncedSearch) params.keyword = debouncedSearch;
-                if (filterAction !== "all") params.operation = filterAction; 
 
-                // เรียกใช้ API History
-                const res = await api.get(`/awards/my/approval-logs`, { params });
+                // 🚨 เรียกใช้ API ใหม่สำหรับกองพัฒนานิสิต 🚨
+                const res = await api.get(`/awards/my/award-type-logs`, { params });
                 
                 const rawData = res.data?.data;
                 const rawLogs = Array.isArray(rawData) ? rawData : []; 
-                const pagination = res.data?.pagination;
 
                 // Map ข้อมูลให้เข้ากับรูปแบบของ UI
                 const mappedLogs = rawLogs.map((log: any) => {
                     
-                    let operatorDisplayName = "คุณ"; // Default เป็นคุณ เพราะหน้านี้คือ "My Approval Logs"
-                    
-                    if (myInfo && String(myInfo.user_id) === String(log.reviewer_user_id)) {
+                    let operatorDisplayName = "คุณ"; // Default เป็นคุณ
+                    if (myInfo && String(myInfo.user_id) === String(log.user_id)) {
                         operatorDisplayName = `${myInfo.prefix || ""}${myInfo.firstname || ""} ${myInfo.lastname || ""}`.trim();
-                    } else if (log.reviewer_name) { // เผื่อ backend แนบชื่อมาให้แล้ว
-                        operatorDisplayName = log.reviewer_name;
+                    } else {
+                        operatorDisplayName = `รหัสผู้ดำเนินการ: ${log.user_id || "?"}`;
                     }
 
-                    if(!operatorDisplayName || operatorDisplayName === "") {
-                         operatorDisplayName = `รหัสผู้ดำเนินการ: ${log.reviewer_user_id || "?"}`;
+                    // 💡 คำนวณ Action จาก Data ที่ Backend ส่งมาให้
+                    let actionType = "other";
+                    let detailText = "อัปเดตข้อมูล";
+
+                    if (log.reject_reason) {
+                        actionType = "reject";
+                        detailText = `ตีกลับ/ปฏิเสธ: ${log.reject_reason}`;
+                    } else if (log.old_type && log.new_type && log.old_type !== log.new_type) {
+                        actionType = "other";
+                        detailText = `ปรับประเภทรางวัลจาก "${log.old_type}" เป็น "${log.new_type}"`;
+                    } else {
+                        actionType = "approve";
+                        detailText = "ตรวจสอบและส่งต่อเอกสารให้คณะกรรมการ";
                     }
-
-                    // เช็คว่าฟอร์มนี้เป็นของนิสิตหรือองค์กร
-                    const isOrg = log.student_lastname === "-" || !log.student_lastname;
-                    const targetName = isOrg 
-                        ? (log.student_firstname || "องค์กรภายนอก")
-                        : `${log.student_firstname || ""} ${log.student_lastname || ""}`.trim();
-
-                    // เตรียมข้อความรายละเอียด
-                    const actionType = log.operation === "approve" || log.operation === "reject" ? log.operation : "other";
-                    let detailText = log.operation === "approve" ? "ตรวจสอบและเห็นชอบข้อมูลแบบฟอร์ม" : 
-                                     log.operation === "reject"  ? "ตีกลับ/ไม่เห็นชอบแบบฟอร์ม" : "อัปเดตข้อมูล";
 
                     return {
-                        log_id: log.approval_log_id || Math.random(),
+                        log_id: log.type_log_id || Math.random(),
                         form_id: log.form_id,
-                        changed_by: log.reviewer_user_id,
-                        created_at: log.operation_date || log.approved_at,
+                        changed_by: log.user_id,
+                        created_at: log.changed_at,
                         operator_name: operatorDisplayName,
-                        target_student_name: targetName || `Form #${log.form_id}`,
-                        target_student_id: isOrg ? "ORG" : (log.student_number || "-"),
+                        target_student_name: `เอกสารฟอร์มใบสมัครรางวัล`, // DTO นี้ไม่มีชื่อนิสิตแนบมาด้วย จึงใช้ชื่อกลาง
+                        target_student_id: log.form_id ? `Form #${log.form_id}` : "-",
                         action_type: actionType,
                         detail_text: detailText
                     };
                 });
 
                 if (isMounted) {
-                    setLogs(mappedLogs);
-                    if (pagination) {
-                        setTotalPages(pagination.total_pages || 1);
-                    } else {
-                        setTotalPages(1); 
-                    }
+                    setAllLogs(mappedLogs);
                 }
 
             } catch (error) {
                 console.error("Failed to fetch logs:", error);
-                if (isMounted) {
-                    setLogs([]); 
-                    setTotalPages(1);
-                }
+                if (isMounted) setAllLogs([]); 
             } finally {
                 if (isMounted) setLoading(false);
             }
@@ -257,14 +242,19 @@ export default function SDDHistoryPage() {
 
         fetchData();
         return () => { isMounted = false; };
-    }, [currentPage, debouncedSearch, filterAction, sortBy]);
+    }, [debouncedSearch, sortBy]);
 
-    // Options สำหรับ Dropdowns
-    const actionOptions = [
-        { v: "all", l: "ทุกการดำเนินการ" },
-        { v: "approve", l: "การเห็นชอบ (Approve)" },
-        { v: "reject", l: "การตีกลับ (Reject)" }
-    ];
+    // Client-side Filtering & Pagination
+    const processedLogs = useMemo(() => {
+        let result = allLogs;
+        if (filterAction !== "all") {
+            result = result.filter(log => log.action_type === filterAction);
+        }
+        return result;
+    }, [allLogs, filterAction]);
+
+    const totalPages = Math.max(Math.ceil(processedLogs.length / ITEMS_PER_PAGE), 1);
+    const paginatedLogs = processedLogs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
     const sortOptions = [
         { v: "date_desc", l: "ทำรายการล่าสุดก่อน" },
@@ -278,8 +268,8 @@ export default function SDDHistoryPage() {
         <div className="min-h-screen bg-[#F8FAFC] p-6 pt-24 lg:p-10 lg:pt-28 font-sans pb-32 relative overflow-hidden">
             
             {/* Abstract Background */}
-            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-400/10 blur-[120px] rounded-full pointer-events-none z-0" />
-            <div className="absolute bottom-[-10%] right-[-5%] w-[30%] h-[50%] bg-indigo-400/10 blur-[120px] rounded-full pointer-events-none z-0" />
+            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-transparent/10 blur-[120px] rounded-full pointer-events-none z-0" />
+            <div className="absolute bottom-[-10%] right-[-5%] w-[30%] h-[50%] bg-transparent/10 blur-[120px] rounded-full pointer-events-none z-0" />
 
             <style jsx global>{`
                 @keyframes fadeInUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
@@ -292,13 +282,13 @@ export default function SDDHistoryPage() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 bg-white/70 backdrop-blur-xl p-8 rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/80 animate-fade-in-up">
                     <div>
                         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-600 text-xs font-bold mb-3 border border-indigo-200 shadow-sm">
-                            <History className="w-3.5 h-3.5" />ระบบประวัติการดำเนินการ
+                            <History className="w-3.5 h-3.5" />ระบบประวัติการดำเนินการ (กองพัฒนานิสิต)
                         </div>
                         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-                           ประวัติการดำเนินการ
+                            ประวัติการดำเนินการ
                         </h1>
                         <p className="text-slate-500 mt-1 text-sm font-medium">
-                            ติดตามสถานะการพิจารณา ตรวจสอบ และการส่งต่อข้อมูลในระบบทั้งหมดของคุณ
+                            ติดตามสถานะการพิจารณา ตรวจสอบ และการอัปเดตข้อมูลแบบฟอร์มทั้งหมดของคุณ
                         </p>
                     </div>
                 </div>
@@ -314,21 +304,10 @@ export default function SDDHistoryPage() {
                                 <Search className="w-4 h-4 absolute left-4 top-3.5 text-slate-400 group-focus-within:text-indigo-500 transition-colors z-10" />
                                 <input 
                                     type="text" 
-                                    placeholder="ค้นหาชื่อ หรือ รหัสเป้าหมาย..." 
+                                    placeholder="ค้นหาจากเลข Form ID..." 
                                     className="w-full bg-white/80 backdrop-blur-sm border border-slate-200/80 rounded-2xl pl-11 pr-4 py-3 text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm placeholder:text-slate-400 text-slate-800"
                                     value={searchTerm}
                                     onChange={e => setSearchTerm(e.target.value)}
-                                />
-                            </div>
-
-                            {/* Action Filter (Custom Dropdown) */}
-                            <div className="w-full md:w-64">
-                                <CustomSelect 
-                                    value={filterAction} 
-                                    onChange={setFilterAction} 
-                                    options={actionOptions} 
-                                    icon={Filter}
-                                    placeholder="ทุกการดำเนินการ"
                                 />
                             </div>
                         </div>
@@ -351,7 +330,7 @@ export default function SDDHistoryPage() {
                             <thead>
                                 <tr className="bg-slate-50/50 border-b border-slate-100 text-[11px] uppercase text-slate-500 font-extrabold tracking-widest">
                                     <th className="p-6 w-[18%]">วัน-เวลา</th>
-                                    <th className="p-6 w-[22%]">ผู้ทำรายการ (คุณ)</th>
+                                    <th className="p-6 w-[22%]">ผู้ทำรายการ</th>
                                     <th className="p-6 w-[15%] text-center">กิจกรรม</th>
                                     <th className="p-6 w-[20%]">เอกสารเป้าหมาย</th>
                                     <th className="p-6 w-[25%]">รายละเอียด</th>
@@ -368,7 +347,7 @@ export default function SDDHistoryPage() {
                                             <td className="p-6"><div className="h-4 bg-slate-200 rounded-md w-48"></div></td>
                                         </tr>
                                     ))
-                                ) : logs.length === 0 ? (
+                                ) : paginatedLogs.length === 0 ? (
                                     <tr>
                                         <td colSpan={5} className="p-0 h-full">
                                             <div className="flex flex-col items-center justify-center text-slate-400 min-h-[400px] w-full">
@@ -376,13 +355,13 @@ export default function SDDHistoryPage() {
                                                     <History className="w-10 h-10 text-slate-300" strokeWidth={1.5} />
                                                 </span>
                                                 <p className="text-xl font-bold text-slate-700">ไม่พบประวัติการดำเนินการ</p>
-                                                <p className="text-sm mt-2 text-slate-500">ยังไม่มีการอนุมัติหรือตีกลับเอกสารในระบบ</p>
+                                                <p className="text-sm mt-2 text-slate-500">ยังไม่มีการบันทึกประวัติ หรืออัปเดตเอกสารในระบบ</p>
                                             </div>
                                         </td>
                                     </tr>
                                 ) : (
                                     <AnimatePresence>
-                                        {logs.map((log, index) => (
+                                        {paginatedLogs.map((log, index) => (
                                             <motion.tr 
                                                 key={`${log.log_id}-${index}`}
                                                 initial={{ opacity: 0, y: 10 }}
@@ -410,14 +389,10 @@ export default function SDDHistoryPage() {
                                                 </td>
                                                 <td className="p-6 align-middle">
                                                     <div className="flex items-center gap-2 mb-1.5">
-                                                        {log.target_student_id === "ORG" ? (
-                                                            <Building2 size={14} className="text-blue-500" />
-                                                        ) : (
-                                                            <User size={14} className="text-emerald-500" />
-                                                        )}
+                                                        <FileText size={14} className="text-emerald-500" />
                                                         <div className="font-bold text-slate-800 text-[13px]">{log.target_student_name}</div>
                                                     </div>
-                                                    <div className="text-[11px] text-slate-500 font-mono tracking-wide">ID: {log.target_student_id !== "ORG" && log.target_student_id !== "-" ? log.target_student_id : `Form #${log.form_id}`}</div>
+                                                    <div className="text-[11px] text-slate-500 font-mono tracking-wide bg-slate-100 px-2 py-0.5 rounded w-fit">{log.target_student_id}</div>
                                                 </td>
                                                 <td className="p-6 text-[13px] font-medium text-slate-500 leading-relaxed align-middle">
                                                     {log.detail_text}

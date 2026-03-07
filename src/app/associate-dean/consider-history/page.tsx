@@ -1,18 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import NominationDetailModal from "@/components/Nomination-detail-modal";
-import { Variants } from "framer-motion";
+import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
   Search, Calendar, CheckCircle2, XCircle,
-  Eye, Award, Building2,
-  ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown
+  Eye, Building2,
+  ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, X
 } from "lucide-react";
 import { api } from "@/lib/axios";
 
 // ==========================================
-// 0. Types
+// 0. Types & Constants
 // ==========================================
+const USE_MOCK_DATA = false;
+
 export interface Nomination {
   approval_log_id: number;
   form_id: number;
@@ -25,6 +27,7 @@ export interface Nomination {
   academic_year: number;
   award_type: string;
   campus_id: number;
+  student_year?: number;
   
   // Custom mapped สำหรับ UI
   award_type_name?: string; 
@@ -32,14 +35,220 @@ export interface Nomination {
   organization_name?: string;
 }
 
-// ==========================================
-// 1. Framer Motion Variants
-// ==========================================
+const ITEMS_PER_PAGE = 6;
+
 const modalVariants: Variants = {
   hidden: { opacity: 0, scale: 0.95 },
   show: { opacity: 1, scale: 1, transition: { type: "spring", duration: 0.3 } },
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
 };
+
+// ==========================================
+// 1. Custom Animated DatePicker
+// ==========================================
+
+const MONTH_NAMES = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+const DAY_NAMES = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+
+function CustomDatePicker({ value, onChange, label, disabled }: any) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  const [viewDate, setViewDate] = useState(() => value ? new Date(value) : new Date());
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (value) setViewDate(new Date(value));
+  }, [value]);
+
+  const formatDisplayDate = (dateStr: string) => {
+    if (!dateStr) return "เลือกวันที่...";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  const handlePrevMonth = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
+  };
+
+  const handleSelectDate = (day: number) => {
+    const selected = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
+    const y = selected.getFullYear();
+    const m = String(selected.getMonth() + 1).padStart(2, '0');
+    const d = String(selected.getDate()).padStart(2, '0');
+    onChange(`${y}-${m}-${d}`);
+    setIsOpen(false);
+  };
+
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+
+  const daysInMonth = getDaysInMonth(viewDate.getFullYear(), viewDate.getMonth());
+  const firstDay = getFirstDayOfMonth(viewDate.getFullYear(), viewDate.getMonth());
+  
+  const blanks = Array.from({ length: firstDay }, (_, i) => i);
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  const isToday = (day: number) => {
+    const today = new Date();
+    return day === today.getDate() && viewDate.getMonth() === today.getMonth() && viewDate.getFullYear() === today.getFullYear();
+  };
+
+  const isSelected = (day: number) => {
+    if (!value) return false;
+    const selected = new Date(value);
+    return day === selected.getDate() && viewDate.getMonth() === selected.getMonth() && viewDate.getFullYear() === selected.getFullYear();
+  };
+
+  // ตรวจสอบว่าใช่วันในอนาคตหรือไม่
+  const isFutureDate = (day: number) => {
+    const date = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // ตั้งเวลาให้เป็นเริ่มวัน เพื่อเทียบแค่วันที่
+    return date > today;
+  };
+
+  // เช็คว่าปัจจุบันปฏิทินกำลังดูเดือนปัจจุบันอยู่หรือเปล่า (ถ้าใช่ จะกดปุ่มไปเดือนหน้าไม่ได้)
+  const isCurrentMonth = viewDate.getFullYear() === new Date().getFullYear() && viewDate.getMonth() === new Date().getMonth();
+
+  return (
+    <div className={`relative w-full lg:w-72 shrink-0 group ${isOpen ? 'z-[100]' : 'z-10'}`} ref={containerRef}>
+      <button 
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex w-full items-center justify-between bg-white hover:bg-slate-50 transition-all border border-slate-200/80 rounded-2xl px-4 py-3 shadow-sm ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400'}`}
+      >
+        <div className="flex items-center gap-3 overflow-hidden">
+          <div className="flex items-center justify-center w-10 h-10 bg-emerald-50 rounded-xl text-emerald-600 shadow-sm border border-emerald-100/50 shrink-0">
+              <Calendar size={18} />
+          </div>
+          <div className="flex flex-col text-left justify-center">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">{label}</span>
+            <span className={`text-sm font-bold leading-normal truncate max-w-[120px] sm:max-w-[150px] ${value ? 'text-slate-800' : 'text-slate-400'}`}>
+              {formatDisplayDate(value)}
+            </span>
+          </div>
+        </div>
+        
+        {value ? (
+          <div 
+            onClick={(e) => { e.stopPropagation(); onChange(""); }} 
+            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors z-20 relative"
+          >
+            <X size={16} />
+          </div>
+        ) : (
+          <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 ml-2 transition-transform duration-300 ${isOpen ? 'rotate-180 text-emerald-500' : ''}`} />
+        )}
+      </button>
+
+      <AnimatePresence>
+        {isOpen && !disabled && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            className="absolute top-full right-0 sm:right-auto sm:min-w-[320px] mt-2 bg-white border border-slate-100 rounded-[24px] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.2)] z-[9999] p-5 origin-top-right sm:origin-top-left"
+          >
+            {/* Calendar Header */}
+            <div className="flex items-center justify-between mb-4">
+              <button type="button" onClick={handlePrevMonth} className="p-1.5 rounded-lg bg-slate-50 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors shadow-sm border border-slate-100">
+                <ChevronLeft size={18} />
+              </button>
+              <div className="font-bold text-slate-800 text-sm">
+                {MONTH_NAMES[viewDate.getMonth()]} {viewDate.getFullYear() + 543}
+              </div>
+              <button 
+                type="button" 
+                onClick={handleNextMonth} 
+                disabled={isCurrentMonth}
+                className={`p-1.5 rounded-lg transition-colors shadow-sm border border-slate-100 ${isCurrentMonth ? 'text-slate-300 bg-slate-50 cursor-not-allowed opacity-50' : 'bg-slate-50 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+
+            {/* Days of Week */}
+            <div className="grid grid-cols-7 gap-1 mb-2">
+              {DAY_NAMES.map((day, i) => (
+                <div key={day} className={`text-center text-[11px] font-black py-1 ${i === 0 ? 'text-rose-400' : i === 6 ? 'text-blue-400' : 'text-slate-400'}`}>
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            {/* Dates Grid */}
+            <div className="grid grid-cols-7 gap-y-1.5 gap-x-1">
+              {blanks.map(blank => (
+                <div key={`blank-${blank}`} className="w-full h-10"></div>
+              ))}
+              {days.map(day => {
+                const selected = isSelected(day);
+                const today = isToday(day);
+                const future = isFutureDate(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    disabled={future}
+                    onClick={() => handleSelectDate(day)}
+                    className={`w-9 h-9 sm:w-10 sm:h-10 mx-auto flex items-center justify-center rounded-full text-[14px] transition-all
+                      ${future ? 'text-slate-300 cursor-not-allowed opacity-50' :
+                        selected ? 'bg-emerald-500 text-white font-bold shadow-md shadow-emerald-500/40 scale-105 relative z-10' : 
+                        today ? 'text-emerald-600 bg-emerald-50 border border-emerald-200 font-bold' : 
+                        'text-slate-700 hover:bg-slate-100 font-semibold'}
+                    `}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+            
+            {/* ปุ่ม ล้างวันที่ และ เลือกวันนี้ */}
+            <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
+                <button 
+                    type="button"
+                    onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onChange(""); 
+                        setIsOpen(false); 
+                    }}
+                    className="flex-1 text-center text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 py-2.5 rounded-xl border border-slate-200 hover:border-rose-200 transition-colors"
+                >
+                    ล้างวันที่
+                </button>
+                <button 
+                    type="button"
+                    onClick={() => { setViewDate(new Date()); handleSelectDate(new Date().getDate()); }}
+                    className="flex-1 text-center text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 py-2.5 rounded-xl border border-slate-200 hover:border-emerald-200 transition-colors"
+                >
+                    เลือกวันนี้
+                </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 // ==========================================
 // 2. Main Component
@@ -48,33 +257,21 @@ export default function AssociateDeanHistoryPage() {
   
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Nomination[]>([]);
-  const [awardTypes, setAwardTypes] = useState<string[]>([]);
   
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [modalData, setModalData] = useState<any | null>(null);
   
-  // State สำหรับ Server-Side Filtering (เอา filterYear ออก)
+  // State สำหรับ Filter & Sort
   const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [filterCategory, setFilterCategory] = useState("");
   const [filterDate, setFilterDate] = useState("");
   
-  // State สำหรับ Server-Side Pagination & Sorting
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
-  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
-
-  // Debounce ค้นหา ป้องกันการยิง API รัวๆ
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
+  const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc' | 'desc' | null }>({ key: 'operation_date', direction: 'desc' });
 
   // รีเซ็ตไปหน้า 1 เสมอเวลาเปลี่ยนตัวกรอง
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, filterCategory, filterDate]);
+  }, [searchTerm, filterDate]);
 
   const formatDateTh = (isoDate: string) => {
     if (!isoDate) return "-";
@@ -82,7 +279,6 @@ export default function AssociateDeanHistoryPage() {
     return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute:'2-digit' });
   };
 
-  //  ใช้ operation จาก Backend โดยตรง (approve / reject)
   const getStatusBadge = (operation: string) => {
       if (operation === "reject") { 
           return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-600 text-xs font-bold border border-rose-200"><XCircle className="w-3.5 h-3.5"/> ไม่เห็นชอบ</span>;
@@ -97,44 +293,23 @@ export default function AssociateDeanHistoryPage() {
     return `${item.student_firstname || ""} ${item.student_lastname || ""}`.trim();
   };
 
-  // ดึงประเภทรางวัล
-  useEffect(() => {
-    let isMounted = true;
-    const fetchAwardTypes = async () => {
-      try {
-        const response = await api.get(`/awards/types`);
-        if (isMounted) setAwardTypes(response.data?.data || []);
-      } catch (error) {
-        console.error("Error fetching award types:", error);
-      }
-    };
-    fetchAwardTypes();
-    return () => { isMounted = false; };
-  }, []);
-
-  //  ยิง API ขอข้อมูลประวัติ (Server-Side)
+  // ==========================================
+  // 3. Data Fetching
+  // ==========================================
   useEffect(() => {
     let isMounted = true;
 
     const fetchData = async () => {
       setLoading(true);
       try {
-        // เตรียม Params
-        const params: Record<string, any> = {
-            page: currentPage,
-            sort_by: sortConfig.key,       // name, studentNumber, awardType, date
-            sort_order: sortConfig.direction
-        };
+        if (USE_MOCK_DATA) {
+          setTimeout(() => { if(isMounted) { setItems([]); setLoading(false); } }, 800);
+          return;
+        }
         
-        if (debouncedSearch) params.keyword = debouncedSearch;
-        if (filterCategory) params.award_type = filterCategory;
-        if (filterDate) params.date = filterDate;
-
-        const response = await api.get(`/awards/my/approval-logs`, { params });
+        const response = await api.get(`/awards/my/approval-logs`, { params: { limit: 3000 } });
         const rawData = response.data?.data || [];
-        const pagination = response.data?.pagination;
 
-        // แปลงข้อมูลให้อยู่ในฟอร์มที่ตาราง UI เข้าใจ
         const mappedData = rawData.map((item: any) => {
             const isOrg = item.student_lastname === "-";
             return {
@@ -145,13 +320,7 @@ export default function AssociateDeanHistoryPage() {
             };
         });
 
-        if (isMounted) {
-            setItems(mappedData);
-            if (pagination) {
-                setTotalPages(pagination.total_pages || 1);
-                setTotalItems(pagination.total_items || 0);
-            }
-        }
+        if (isMounted) setItems(mappedData);
       } catch (error) {
         console.warn("API Error:", error);
       } finally {
@@ -161,23 +330,76 @@ export default function AssociateDeanHistoryPage() {
 
     fetchData();
     return () => { isMounted = false; };
-  }, [currentPage, debouncedSearch, filterCategory, filterDate, sortConfig]);
+  }, []);
+
+  // ==========================================
+  // 4. Filtering & Sorting Logic
+  // ==========================================
+  const processedData = useMemo(() => {
+    let filtered = items;
+    
+    // ค้นหาตามชื่อ, รหัสนิสิต หรือ ชื่อหน่วยงาน หรือ ชื่อรางวัล
+    if (searchTerm) {
+      const lowerTerm = searchTerm.toLowerCase();
+      filtered = filtered.filter(item => 
+        item.student_firstname?.toLowerCase().includes(lowerTerm) || 
+        item.student_lastname?.toLowerCase().includes(lowerTerm) ||
+        item.student_number?.includes(lowerTerm) ||
+        item.organization_name?.toLowerCase().includes(lowerTerm) ||
+        item.award_type_name?.toLowerCase().includes(lowerTerm)
+      );
+    }
+
+    // กรองวันที่ (แสดงฟอร์มที่พิจารณาตั้งแต่อดีต จนถึง 23:59:59 ของวันที่เลือก)
+    if (filterDate) {
+      const filterTime = new Date(filterDate).setHours(23, 59, 59, 999);
+      filtered = filtered.filter(item => {
+          const itemTime = new Date(item.operation_date).getTime();
+          return itemTime <= filterTime;
+      });
+    }
+    
+    // เรียงข้อมูล
+    if (sortConfig.key) {
+      filtered.sort((a: any, b: any) => {
+        let valA = sortConfig.key ? a[sortConfig.key as keyof Nomination] : '';
+        let valB = sortConfig.key ? b[sortConfig.key as keyof Nomination] : '';
+        
+        if (sortConfig.key === 'student_firstname') {
+          valA = `${a.student_firstname} ${a.student_lastname}`;
+          valB = `${b.student_firstname} ${b.student_lastname}`;
+        } else if (sortConfig.key === 'operation_date') {
+          valA = new Date(a.operation_date).getTime();
+          valB = new Date(b.operation_date).getTime();
+        }
+
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return filtered;
+  }, [items, searchTerm, filterDate, sortConfig]);
+
+  const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE) || 1;
+  const currentItems = processedData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const totalItems = processedData.length;
 
   const handleSort = (key: string) => {
     setSortConfig(prev => {
       if (prev.key === key) return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
-      return { key, direction: 'desc' };
+      return { key, direction: 'asc' };
     });
   };
 
   const openDetailModal = async (formId: number) => {
     try {
-        const response = await api.get(`/awards/details/${formId}`); //  เติม /details
+        const response = await api.get(`/awards/details/${formId}`); 
         setModalData(response.data?.data);
         setIsDetailModalOpen(true);
     } catch (err) {
-          console.error("Failed to load form details", err);
-      }
+        console.error("Failed to load form details", err);
+    }
   };
 
   return (
@@ -194,9 +416,9 @@ export default function AssociateDeanHistoryPage() {
 
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Header Section */}
-        <div className="bg-white/70 backdrop-blur-xl border border-white shadow-sm rounded-3xl p-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        {/* Header Section (z-50 เพื่อไม่ให้ Dropdown โดนตารางบัง) */}
+        <div className="bg-white/70 backdrop-blur-xl border border-white shadow-sm rounded-3xl p-8 relative z-50">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
             <div>
               <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-slate-700 to-slate-900 flex items-center gap-3">
                 <CheckCircle2 className="w-8 h-8 text-emerald-500" />
@@ -204,60 +426,57 @@ export default function AssociateDeanHistoryPage() {
               </h1>
               <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
-                สำหรับหัวหน้าภาควิชา
+                สำหรับรองคณบดี
               </p>
             </div>
           </div>
 
-          {/* Filters Grid (เอาชั้นปีออก) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-            <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+          {/* Search & Filter - เรียงบรรทัดเดียว */}
+          <div className="flex flex-col lg:flex-row items-center gap-4 w-full">
+            
+            {/* Search Box - ขยายให้เต็มพื้นที่ที่เหลือ */}
+            <div className="relative w-full flex-1">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-slate-400 transition-colors" />
               </div>
-              <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm" />
+              <input 
+                type="text" 
+                placeholder="ค้นหาชื่อ, รหัสนิสิต หรือ รางวัล..." 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+                className="w-full bg-white hover:bg-slate-50 transition-all border border-slate-200/80 rounded-2xl px-4 py-[14px] pl-12 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 shadow-sm" 
+              />
             </div>
             
-            <div className="relative group">
-               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                <Calendar className="h-4 w-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
-              </div>
-              <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 text-sm text-slate-600 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm cursor-pointer" />
-            </div>
+            {/* DatePicker - ดันไปชิดขวา */}
+            <CustomDatePicker 
+                label="วันที่พิจารณา (ถึงวันที่)" 
+                value={filterDate} 
+                onChange={setFilterDate} 
+                disabled={loading} 
+            />
             
-            <div className="relative group">
-               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                <Award className="h-4 w-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
-              </div>
-              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 pl-10 pr-10 text-sm text-slate-600 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all shadow-sm cursor-pointer appearance-none">
-                <option value="">ทุกประเภทรางวัล</option>
-                {awardTypes.map((type) => (
-                    <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              <ChevronDown className="w-4 h-4 absolute right-4 top-3.5 text-slate-400 pointer-events-none" />
-            </div>
           </div>
         </div>
 
-        {/* Data Table */}
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+        {/* Data Table (z-10 เพื่อให้อยู่ใต้ Dropdown) */}
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative z-10">
           <div className="overflow-x-auto min-h-[400px]">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/80 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
-                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('name')}>
-                    <div className="flex items-center gap-1">ชื่อ-นามสกุล {sortConfig.key === 'name' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
+                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('student_firstname')}>
+                    <div className="flex items-center gap-1">ชื่อ-นามสกุล {sortConfig.key === 'student_firstname' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
                   </th>
-                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors text-center" onClick={() => handleSort('studentNumber')}>
-                    <div className="flex items-center justify-center gap-1">รหัสนิสิต {sortConfig.key === 'studentNumber' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
+                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors text-center" onClick={() => handleSort('student_number')}>
+                    <div className="flex items-center justify-center gap-1">รหัสนิสิต {sortConfig.key === 'student_number' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
                   </th>
-                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors text-center" onClick={() => handleSort('awardType')}>
-                     <div className="flex items-center justify-center gap-1">รางวัลที่เสนอ {sortConfig.key === 'awardType' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
+                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors text-center" onClick={() => handleSort('award_type_name')}>
+                     <div className="flex items-center justify-center gap-1">รางวัลที่เสนอ {sortConfig.key === 'award_type_name' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
                   </th>
                   <th className="p-5 text-center">ผู้เสนอชื่อ</th>
-                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors text-center" onClick={() => handleSort('date')}>
-                     <div className="flex items-center justify-center gap-1">วันที่พิจารณา {sortConfig.key === 'date' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
+                  <th className="p-5 cursor-pointer hover:bg-slate-100 transition-colors text-center" onClick={() => handleSort('operation_date')}>
+                     <div className="flex items-center justify-center gap-1">วันที่พิจารณา {sortConfig.key === 'operation_date' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-500"/> : <ArrowDown className="w-3 h-3 text-emerald-500"/>) : <ArrowUpDown className="w-3 h-3 text-slate-300"/>}</div>
                   </th>
                   <th className="p-5 text-center">สถานะการตัดสิน</th>
                   <th className="p-5 text-center">จัดการ</th>
@@ -276,20 +495,20 @@ export default function AssociateDeanHistoryPage() {
                       <td className="p-5"><div className="h-8 w-8 bg-slate-200 rounded-full mx-auto"></div></td>
                     </tr>
                   ))
-                ) : items.length === 0 ? (
+                ) : currentItems.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-16 text-center">
                       <div className="flex flex-col items-center justify-center text-slate-400">
                         <div className="bg-slate-50 p-4 rounded-full mb-3">
                           <CheckCircle2 className="w-10 h-10 text-slate-300" />
                         </div>
-                        <p className="text-lg font-medium text-slate-600">ไม่มีประวัติการพิจารณา</p>
+                        <p className="text-lg font-medium text-slate-600">ไม่มีประวัติการพิจารณาตามเงื่อนไข</p>
                         <p className="text-sm mt-1">รายการที่พิจารณาแล้วจะแสดงที่นี่</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
-                  items.map((item, index) => (
+                  currentItems.map((item, index) => (
                     <tr 
                       key={`${item.approval_log_id}-${index}`} 
                       className="transition-colors hover:bg-slate-50 group cursor-pointer animate-fade-in-up"
@@ -302,7 +521,6 @@ export default function AssociateDeanHistoryPage() {
                              <p className="text-sm font-bold text-slate-800">
                                 {getDisplayName(item)}
                              </p>
-                             {/*  เอาปีการศึกษาออก แสดงแค่ นิสิต หรือ องค์กร */}
                              <p className="text-xs text-slate-500">
                                 {(!item.student_lastname || item.student_lastname === "-") ? 'องค์กร/หน่วยงาน' : `นิสิต`}
                              </p>
@@ -330,12 +548,10 @@ export default function AssociateDeanHistoryPage() {
                       <td className="p-5 text-sm text-center text-slate-500">
                         <div className="flex items-center justify-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5" />
-                          {/*  ใช้วันที่อนุมัติจาก Operation Date */}
                           {formatDateTh(item.operation_date)}
                         </div>
                       </td>
                       <td className="p-5 text-center">
-                         {/*  ใช้สถานะจาก Operation (Approve/Reject) */}
                          {getStatusBadge(item.operation)}
                       </td>
                       <td className="p-5 text-center" onClick={(e) => e.stopPropagation()}>
@@ -368,15 +584,17 @@ export default function AssociateDeanHistoryPage() {
         </div>
 
         {/* Modal: Nomination Detail */}
-        {modalData && (
-            <NominationDetailModal 
-              isOpen={isDetailModalOpen} 
-              onClose={() => setIsDetailModalOpen(false)} 
-              data={modalData} 
-              faculties={[]} 
-              departments={[]}
-            />
-        )}
+        <AnimatePresence>
+          {isDetailModalOpen && modalData && (
+              <NominationDetailModal 
+                isOpen={isDetailModalOpen} 
+                onClose={() => setIsDetailModalOpen(false)} 
+                data={modalData} 
+                faculties={[]} 
+                departments={[]}
+              />
+          )}
+        </AnimatePresence>
 
       </div>
     </div>

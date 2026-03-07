@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy, Lightbulb, Heart, Star, UploadCloud, FileText, XCircle, CheckCircle2,
   AlertCircle, Calendar, User, Mail, Phone, GraduationCap,
-  ChevronRight, ChevronDown, Building2, Hash, Percent, BookOpen, Clock
+  ChevronRight, ChevronDown, Building2, Hash, Percent, BookOpen, Clock, X, ChevronLeft
 } from "lucide-react";
 
 // ==========================================
@@ -18,27 +18,31 @@ import {
 
 const MAX_TOTAL_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
-// คลาสสีแบบเต็ม เพื่อป้องกันบัค Tailwind ไม่ยอม Render สีตามประเภท
 const THEME_STYLES: Record<string, any> = {
   activity: {
     accent: "orange", border: "border-orange-200/50", gradient: "from-orange-400 to-rose-500", shadow: "shadow-orange-500/20", text: "text-orange-600", ring: "focus:ring-orange-500/30",
-    cardBorder: "border-orange-500", cardBg: "bg-orange-50", cardIconBg: "bg-orange-500", cardIconText: "text-white", cardShadow: "shadow-orange-500/30", titleText: "text-orange-700", subText: "text-orange-500"
+    cardBorder: "border-orange-500", cardBg: "bg-orange-50", cardIconBg: "bg-orange-500", cardIconText: "text-white", cardShadow: "shadow-orange-500/30", titleText: "text-orange-700", subText: "text-orange-500",
+    dateSel: "bg-orange-500 text-white shadow-orange-500/40", dateToday: "text-orange-600 bg-orange-50 border-orange-200", dateHover: "hover:bg-orange-50 hover:text-orange-600"
   },
   innovation: {
     accent: "purple", border: "border-purple-200/50", gradient: "from-purple-500 to-indigo-500", shadow: "shadow-purple-500/20", text: "text-purple-600", ring: "focus:ring-purple-500/30",
-    cardBorder: "border-purple-500", cardBg: "bg-purple-50", cardIconBg: "bg-purple-500", cardIconText: "text-white", cardShadow: "shadow-purple-500/30", titleText: "text-purple-700", subText: "text-purple-500"
+    cardBorder: "border-purple-500", cardBg: "bg-purple-50", cardIconBg: "bg-purple-500", cardIconText: "text-white", cardShadow: "shadow-purple-500/30", titleText: "text-purple-700", subText: "text-purple-500",
+    dateSel: "bg-purple-500 text-white shadow-purple-500/40", dateToday: "text-purple-600 bg-purple-50 border-purple-200", dateHover: "hover:bg-purple-50 hover:text-purple-600"
   },
   behavior: {
     accent: "blue", border: "border-blue-200/50", gradient: "from-blue-400 to-cyan-500", shadow: "shadow-blue-500/20", text: "text-blue-600", ring: "focus:ring-blue-500/30",
-    cardBorder: "border-blue-500", cardBg: "bg-blue-50", cardIconBg: "bg-blue-500", cardIconText: "text-white", cardShadow: "shadow-blue-500/30", titleText: "text-blue-700", subText: "text-blue-500"
+    cardBorder: "border-blue-500", cardBg: "bg-blue-50", cardIconBg: "bg-blue-500", cardIconText: "text-white", cardShadow: "shadow-blue-500/30", titleText: "text-blue-700", subText: "text-blue-500",
+    dateSel: "bg-blue-500 text-white shadow-blue-500/40", dateToday: "text-blue-600 bg-blue-50 border-blue-200", dateHover: "hover:bg-blue-50 hover:text-blue-600"
   },
   other: {
     accent: "emerald", border: "border-emerald-200/50", gradient: "from-emerald-400 to-teal-500", shadow: "shadow-emerald-500/20", text: "text-emerald-600", ring: "focus:ring-emerald-500/30",
-    cardBorder: "border-emerald-500", cardBg: "bg-emerald-50", cardIconBg: "bg-emerald-500", cardIconText: "text-white", cardShadow: "shadow-emerald-500/30", titleText: "text-emerald-700", subText: "text-emerald-500"
+    cardBorder: "border-emerald-500", cardBg: "bg-emerald-50", cardIconBg: "bg-emerald-500", cardIconText: "text-white", cardShadow: "shadow-emerald-500/30", titleText: "text-emerald-700", subText: "text-emerald-500",
+    dateSel: "bg-emerald-500 text-white shadow-emerald-500/40", dateToday: "text-emerald-600 bg-emerald-50 border-emerald-200", dateHover: "hover:bg-emerald-50 hover:text-emerald-600"
   },
   default: {
     accent: "gray", border: "border-gray-200/50", gradient: "from-gray-600 to-slate-800", shadow: "shadow-gray-500/20", text: "text-gray-800", ring: "focus:ring-gray-500/30",
-    cardBorder: "border-slate-300", cardBg: "bg-white/60", cardIconBg: "bg-slate-100", cardIconText: "text-slate-400", cardShadow: "", titleText: "text-slate-600", subText: "text-slate-400"
+    cardBorder: "border-slate-300", cardBg: "bg-white/60", cardIconBg: "bg-slate-100", cardIconText: "text-slate-400", cardShadow: "", titleText: "text-slate-600", subText: "text-slate-400",
+    dateSel: "bg-slate-700 text-white shadow-slate-500/40", dateToday: "text-slate-700 bg-slate-100 border-slate-300", dateHover: "hover:bg-slate-100 hover:text-slate-800"
   }
 };
 
@@ -83,6 +87,257 @@ const nominationService = {
 };
 
 // ==========================================
+// 🌟 Premium Birth Date Picker Component
+// ==========================================
+const MONTH_NAMES = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+const DAY_NAMES = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+
+function PremiumBirthDatePicker({ value, onChange, label, theme, req, disabled }: any) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'date' | 'month' | 'year'>('date');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Default ให้เป็น 20 ปีที่แล้ว ถ้านิสิตยังไม่เคยเลือกวันเกิด
+  const defaultDate = new Date();
+  defaultDate.setFullYear(defaultDate.getFullYear() - 20);
+  
+  const [viewDate, setViewDate] = useState(() => value ? new Date(value) : defaultDate);
+  const [yearPage, setYearPage] = useState(() => viewDate.getFullYear());
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setViewMode('date');
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const formatDisplayDate = (dateStr: string) => {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  const handleSelectDate = (day: number, month: number, year: number) => {
+    const selected = new Date(year, month, day);
+    // Format C.E. (ค.ศ.) YYYY-MM-DD สำหรับส่งไปหลังบ้าน
+    const y = selected.getFullYear();
+    const m = String(selected.getMonth() + 1).padStart(2, '0');
+    const d = String(selected.getDate()).padStart(2, '0');
+    onChange(`${y}-${m}-${d}`);
+    setIsOpen(false);
+    setViewMode('date');
+  };
+
+  // 42-grid system for days
+  const getCalendarDays = () => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+    
+    const daysArray = [];
+    for (let i = firstDayOfMonth - 1; i >= 0; i--) {
+      daysArray.push({ day: daysInPrevMonth - i, month: month - 1, year: year, isCurrentMonth: false });
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      daysArray.push({ day: i, month: month, year: year, isCurrentMonth: true });
+    }
+    const remainingSlots = 42 - daysArray.length;
+    for (let i = 1; i <= remainingSlots; i++) {
+      daysArray.push({ day: i, month: month + 1, year: year, isCurrentMonth: false });
+    }
+    return daysArray;
+  };
+
+  const calendarDays = getCalendarDays();
+  const isSelected = (d: number, m: number, y: number) => {
+    if (!value) return false;
+    const date = new Date(value);
+    return d === date.getDate() && m === date.getMonth() && y === date.getFullYear();
+  };
+
+  const startYear = Math.floor(yearPage / 20) * 20;
+  const yearsArray = Array.from({length: 20}, (_, i) => startYear + i);
+
+  return (
+    <div className={disabled ? "opacity-50 pointer-events-none" : ""} ref={containerRef}>
+      <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
+        {label} {req && <span className="text-rose-500">*</span>}
+      </label>
+      
+      <div className={`relative group ${isOpen ? 'z-[100]' : 'z-10'}`}>
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
+          <Calendar className={`w-5 h-5 transition-colors ${isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500'}`} />
+        </div>
+        
+        <div 
+          onClick={() => setIsOpen(!isOpen)}
+          className={`w-full cursor-pointer bg-white/50 backdrop-blur-sm border rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all duration-300 flex items-center justify-between
+            ${isOpen ? `border-slate-300 shadow-md ${theme.ring} bg-white` : 'border-slate-200 hover:border-slate-300'}
+          `}
+        >
+          <span className={`font-medium truncate pr-4 transition-colors ${value ? 'text-slate-800' : 'text-slate-400'}`}>
+            {value ? formatDisplayDate(value) : "วัน/เดือน/ปีเกิด (คลิกเพื่อเลือก)"}
+          </span>
+          
+          {value ? (
+            <div onClick={(e) => { e.stopPropagation(); onChange(""); }} className="p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors z-20 shrink-0">
+              <X size={18} />
+            </div>
+          ) : (
+            <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 flex-shrink-0 ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
+          )}
+        </div>
+
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="absolute top-full left-0 right-0 sm:right-auto sm:min-w-[340px] mt-2 bg-white/95 backdrop-blur-2xl border border-slate-100 rounded-[24px] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.2)] z-[9999] p-5 origin-top-left"
+            >
+              {/* HEADER */}
+              <div className="flex items-center justify-between mb-5">
+                <button 
+                  type="button" 
+                  onClick={(e) => { 
+                      e.stopPropagation();
+                      if (viewMode === 'year') setYearPage(p => p - 20);
+                      else if (viewMode === 'date') setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
+                      else setViewDate(new Date(viewDate.getFullYear() - 1, viewDate.getMonth(), 1));
+                  }} 
+                  className="p-2 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors shadow-sm border border-slate-100"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+
+                <div className="flex items-center gap-1">
+                  {viewMode === 'date' && (
+                    <>
+                      <button type="button" onClick={() => setViewMode('month')} className={`px-2 py-1 font-bold text-[15px] rounded-lg transition-colors ${theme.dateHover} text-slate-800`}>
+                        {MONTH_NAMES[viewDate.getMonth()]}
+                      </button>
+                      <button type="button" onClick={() => { setViewMode('year'); setYearPage(viewDate.getFullYear()); }} className={`px-2 py-1 font-bold text-[15px] rounded-lg transition-colors ${theme.dateHover} text-slate-800`}>
+                        {viewDate.getFullYear() + 543}
+                      </button>
+                    </>
+                  )}
+                  {viewMode === 'month' && (
+                    <button type="button" onClick={() => { setViewMode('year'); setYearPage(viewDate.getFullYear()); }} className={`px-3 py-1 font-bold text-[15px] rounded-lg transition-colors ${theme.dateHover} text-slate-800`}>
+                      เลือกเดือน (ปี {viewDate.getFullYear() + 543})
+                    </button>
+                  )}
+                  {viewMode === 'year' && (
+                    <span className="font-bold text-[15px] text-slate-800 px-2 py-1">
+                      พ.ศ. {startYear + 543} - {startYear + 19 + 543}
+                    </span>
+                  )}
+                </div>
+
+                <button 
+                  type="button" 
+                  onClick={(e) => { 
+                      e.stopPropagation();
+                      if (viewMode === 'year') setYearPage(p => p + 20);
+                      else if (viewMode === 'date') setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
+                      else setViewDate(new Date(viewDate.getFullYear() + 1, viewDate.getMonth(), 1));
+                  }} 
+                  className="p-2 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors shadow-sm border border-slate-100"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+
+              {/* BODY - DATE MODE */}
+              {viewMode === 'date' && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <div className="grid grid-cols-7 gap-1 mb-2">
+                    {DAY_NAMES.map((day, i) => (
+                      <div key={day} className={`text-center text-[11px] font-black py-1 ${i === 0 ? 'text-rose-400' : i === 6 ? 'text-blue-400' : 'text-slate-400'}`}>
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-y-1.5 gap-x-1">
+                    {calendarDays.map((d, i) => {
+                      const isSel = isSelected(d.day, d.month, d.year);
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => handleSelectDate(d.day, d.month, d.year)}
+                          className={`
+                            w-9 h-9 sm:w-10 sm:h-10 mx-auto flex items-center justify-center rounded-full text-[14px] transition-all
+                            ${!d.isCurrentMonth ? 'text-slate-300 hover:text-slate-500 font-medium' : 'text-slate-700 font-semibold'}
+                            ${isSel ? `${theme.dateSel} scale-105 z-10 relative` : `${theme.dateHover}`}
+                          `}
+                        >
+                          {d.day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* BODY - MONTH MODE */}
+              {viewMode === 'month' && (
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="grid grid-cols-3 gap-3">
+                  {MONTH_NAMES.map((m, i) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => {
+                          setViewDate(new Date(viewDate.getFullYear(), i, 1));
+                          setViewMode('date');
+                      }}
+                      className={`py-4 rounded-2xl text-sm font-bold transition-all
+                          ${viewDate.getMonth() === i ? `${theme.dateSel} shadow-md` : `bg-slate-50 text-slate-700 border border-slate-100 ${theme.dateHover}`}
+                      `}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+
+              {/* BODY - YEAR MODE */}
+              {viewMode === 'year' && (
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="grid grid-cols-4 gap-2">
+                  {yearsArray.map((y) => (
+                    <button
+                      key={y}
+                      type="button"
+                      onClick={() => {
+                          setViewDate(new Date(y, viewDate.getMonth(), 1));
+                          setViewMode('month');
+                      }}
+                      className={`py-3 rounded-xl text-sm font-bold transition-all
+                          ${viewDate.getFullYear() === y ? `${theme.dateSel} shadow-md` : `bg-slate-50 text-slate-700 border border-slate-100 ${theme.dateHover}`}
+                      `}
+                    >
+                      {y + 543}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+
+// ==========================================
 // 2. Main Component
 // ==========================================
 
@@ -91,7 +346,7 @@ export default function OrganizationNominationForm() {
   const [loading, setLoading] = useState(true);
   const [hasNominated, setHasNominated] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
-  const [isOutOfPeriod, setIsOutOfPeriod] = useState(false); // เพิ่ม State สำหรับเช็คช่วงเวลา
+  const [isOutOfPeriod, setIsOutOfPeriod] = useState(false); 
   const [currentTermInfo, setCurrentTermInfo] = useState<{ year: number, semester: number } | null>(null);
 
   const [faculties, setFaculties] = useState<any[]>([]);
@@ -131,7 +386,6 @@ export default function OrganizationNominationForm() {
           setCurrentTermInfo(term);
           if (await nominationService.checkSubmissionHistory(token, term.year, term.semester)) return setAlreadySubmitted(true);
         } else {
-          // หากไม่มีข้อมูลเทอมที่เปิดอยู่ ถือว่าอยู่นอกช่วงเวลา
           return setIsOutOfPeriod(true);
         }
         
@@ -216,10 +470,8 @@ export default function OrganizationNominationForm() {
     try {
       const fd = new FormData();
       
-      // ข้อมูลหลักของฟอร์ม
       fd.append("award_type", awardName);
       
-      // 1. ข้อมูลนิสิต
       fd.append("student_prefix", manualProfile.prefix);
       fd.append("student_firstname", manualProfile.firstname);
       fd.append("student_lastname", manualProfile.lastname);
@@ -229,9 +481,11 @@ export default function OrganizationNominationForm() {
       const selectedFac = faculties.find(f => f.faculty_name === manualProfile.faculty);
       const selectedDept = departments.find(d => d.department_name === manualProfile.major);
       
-      if (selectedFac) fd.append("faculty_id", selectedFac.faculty_id);
-      if (selectedDept) fd.append("department_id", selectedDept.department_id);
-
+      if (selectedFac) fd.append("faculty_id", String(selectedFac.faculty_id || selectedFac.id || selectedFac.facultyID));
+      console.log("Selected Department:", selectedDept);
+      if (selectedDept) fd.append("department_id", String(selectedDept.department_id || selectedDept.id || selectedDept.departmentID));
+      console.log("FormData after appending faculty and department:", Array.from(fd.entries()));
+      
       fd.append("student_year", manualProfile.student_year);
       fd.append("advisor_name", manualProfile.advisor_name);
       fd.append("gpa", manualProfile.gpa);
@@ -239,16 +493,13 @@ export default function OrganizationNominationForm() {
       fd.append("student_phone_number", manualProfile.phone_number);
       fd.append("student_address", manualProfile.address);
 
-      // 2. ข้อมูลองค์กร 
       fd.append("org_name", orgInfo.name);
       fd.append("org_type", orgInfo.type);
       fd.append("org_location", orgInfo.location);
       fd.append("org_phone_number", orgInfo.phone);
 
-      // 3. ข้อมูลรายละเอียด ส่งเป็นข้อความธรรมดาตามที่ร้องขอ
       fd.append("form_detail", otherDetails);
       
-      // แนบไฟล์
       selectedFiles.forEach(f => fd.append("files", f));
 
       await nominationService.submitNomination(token, fd);
@@ -265,18 +516,16 @@ export default function OrganizationNominationForm() {
     } finally { setLoading(false); }
   };
 
-  // --- Views ---
   if (loading) return <LoadingScreen />;
   if (isOutOfPeriod) return <StatusScreen icon={Clock} color="rose" title="ไม่อยู่ในช่วงเวลา" msg="เลยเวลารับสมัคร หรือ ไม่อยู่ในช่วงเวลาที่สามารถส่งข้อมูลการเสนอชื่อได้" />;
   if (hasNominated) return <StatusScreen icon={CheckCircle2} color="emerald" title="สำเร็จ!" msg="ระบบได้รับข้อมูลการเสนอชื่อของหน่วยงานท่านเรียบร้อยแล้ว" />;
   if (alreadySubmitted) return <StatusScreen icon={AlertCircle} color="amber" title="ดำเนินการแล้ว" msg={`หน่วยงานของท่านได้เสนอชื่อในปีการศึกษา ${currentTermInfo ? currentTermInfo.year + 543 : ""}/${currentTermInfo?.semester} แล้ว`} />;
 
   return (
-    <div className="min-h-screen bg-transparent text-slate-800 font-sans selection:bg-blue-200 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+    <div className="min-h-screen bg-transparent text-slate-800 font-sans selection:bg-blue-200 py-12 px-4 sm:px-6 lg:px-8 relative overflow-x-hidden">
       <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: "easeOut" }} className="max-w-6xl mx-auto">
-        <div className="bg-transparent/70 backdrop-blur-xl shadow-2xl shadow-slate-200/50 rounded-[2.5rem] p-8 md:p-14 border border-slate-100">
+        <div className="bg-white/70 backdrop-blur-xl shadow-2xl shadow-slate-200/50 rounded-[2.5rem] p-8 md:p-14 border border-slate-100">
           
-          {/* Header */}
           <header className="mb-14 text-center md:text-left flex flex-col md:flex-row justify-between items-center gap-6">
             <div>
               <motion.h1 className="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-slate-900 to-slate-600 tracking-tight mb-4">
@@ -290,8 +539,7 @@ export default function OrganizationNominationForm() {
 
           <form onSubmit={handleSubmit} className="space-y-16">
             
-            {/* Step 1: Award Type */}
-            <Section num={1} title="ประเภทรางวัลที่เสนอชื่อ" theme={theme}>
+            <Section num={1} zIndex={40} title="ประเภทรางวัลที่เสนอชื่อ" theme={theme}>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <TypeCard type="activity" active={awardType} set={setAwardType} title="กิจกรรมนอกหลักสูตร" sub="ผู้นำ/แข่งขัน" icon={Trophy} />
                 <TypeCard type="innovation" active={awardType} set={setAwardType} title="ความคิดสร้างสรรค์เเละนวัตกรรม" sub="สิ่งประดิษฐ์/วิจัย" icon={Lightbulb} />
@@ -311,13 +559,10 @@ export default function OrganizationNominationForm() {
               {awardType && (
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ staggerChildren: 0.1 }} className="space-y-16">
                   
-                  {/* Step 2: Student Profile */}
-                  <Section num={2} title="ข้อมูลส่วนตัวนิสิต" theme={theme}>
+                  <Section num={2} zIndex={30} title="ข้อมูลส่วนตัวนิสิต" theme={theme}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* เพิ่ม Dropdown คำนำหน้าชื่อ */}
                       <Select label="คำนำหน้า" val={manualProfile.prefix} set={(v: string) => handleProfileChange("prefix", v)} options={[{v:"นาย", l:"นาย"}, {v:"นางสาว", l:"นางสาว"}, {v:"ไม่ระบุ", l:"ไม่ระบุ"}]} icon={User} theme={theme} req />
                       
-                      {/* ดันชื่อจริง กับ นามสกุลไปเพื่อให้เข้ากับ Grid */}
                       <Input label="ชื่อจริง" val={manualProfile.firstname} set={(v: string) => handleProfileChange("firstname", v)} icon={User} theme={theme} req />
                       <Input label="นามสกุล" val={manualProfile.lastname} set={(v: string) => handleProfileChange("lastname", v)} icon={User} theme={theme} req />
                       
@@ -328,18 +573,33 @@ export default function OrganizationNominationForm() {
                       <Input label="เกรดเฉลี่ยสะสม (GPA)" val={manualProfile.gpa} set={(v: string) => handleProfileChange("gpa", v)} icon={Percent} theme={theme} req />
                       <Input label="อีเมลติดต่อนิสิต" val={manualProfile.email} set={(v: string) => handleProfileChange("email", v)} icon={Mail} theme={theme} type="email" req />
                       <Input label="เบอร์โทรศัพท์นิสิต" val={manualProfile.phone_number} set={(v: string) => handleProfileChange("phone_number", v)} icon={Phone} theme={theme} req max={10} />
-                      <Input label="วันเกิด" val={manualProfile.date_of_birth} set={(v: string) => handleProfileChange("date_of_birth", v)} icon={Calendar} theme={theme} type="date" req />
+                      
+                      <PremiumBirthDatePicker 
+                          label="วันเกิด" 
+                          value={manualProfile.date_of_birth} 
+                          onChange={(v: string) => handleProfileChange("date_of_birth", v)} 
+                          theme={theme} 
+                          req 
+                      />
+                      
                       <Input label="ชื่ออาจารย์ที่ปรึกษา" val={manualProfile.advisor_name} set={(v: string) => handleProfileChange("advisor_name", v)} icon={GraduationCap} theme={theme} req />
                       
+                      <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">อายุ (ปี)</label>
+                        <div className="relative group">
+                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User className="w-5 h-5 text-slate-400" /></div>
+                          <input type="text" value={manualProfile.age} readOnly className="w-full bg-slate-100 border border-slate-200 rounded-2xl pl-12 pr-4 py-[14px] outline-none text-slate-500 font-medium cursor-not-allowed" />
+                        </div>
+                      </div>
+
                       <div className="md:col-span-2">
                         <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">ที่อยู่ปัจจุบัน <span className="text-rose-500">*</span></label>
-                        <textarea value={manualProfile.address} onChange={(e) => handleProfileChange("address", e.target.value)} rows={3} className={`w-full bg-transparent/50 backdrop-blur-sm border border-slate-200 rounded-2xl px-5 py-4 outline-none transition-all ${theme.ring} hover:border-slate-300 resize-none`} placeholder="ระบุรายละเอียดที่อยู่ปัจจุบันที่สามารถติดต่อได้..." />
+                        <textarea value={manualProfile.address} onChange={(e) => handleProfileChange("address", e.target.value)} rows={3} className={`w-full bg-white/50 backdrop-blur-sm border border-slate-200 rounded-2xl px-5 py-4 outline-none transition-all ${theme.ring} hover:border-slate-300 resize-none`} placeholder="ระบุรายละเอียดที่อยู่ปัจจุบันที่สามารถติดต่อได้..." />
                       </div>
                     </div>
                   </Section>
 
-                  {/* Step 3: Organization Details */}
-                  <Section num={3} title="ข้อมูลองค์กรผู้เสนอชื่อ" theme={theme}>
+                  <Section num={3} zIndex={20} title="ข้อมูลองค์กรผู้เสนอชื่อ" theme={theme}>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <ReadOnly label="ชื่อหน่วยงาน" val={orgInfo.name} />
                       <ReadOnly label="ประเภทหน่วยงาน" val={orgInfo.type} />
@@ -348,16 +608,14 @@ export default function OrganizationNominationForm() {
                     </div>
                   </Section>
 
-                  {/* Step 4: Specific Details */}
-                  <Section num={4} title="รายละเอียดผลงานและเหตุผลประกอบ" theme={theme}>
+                  <Section num={4} zIndex={15} title="รายละเอียดผลงานและเหตุผลประกอบ" theme={theme}>
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">เหตุผลในการเสนอชื่อและความโดดเด่นของผลงาน <span className="text-rose-500">*</span></label>
                         <textarea value={otherDetails} onChange={(e) => setOtherDetails(e.target.value)} rows={5} className={`w-full bg-white/50 backdrop-blur-sm border border-slate-200 rounded-2xl px-5 py-4 outline-none transition-all ${theme.ring} hover:border-slate-300 resize-none`} placeholder="บรรยายเหตุผล ผลงาน กิจกรรม บทบาทหน้าที่ หรือคุณงามความดีของนิสิต..." />
                     </div>
                   </Section>
 
-                  {/* Step 5: File Uploads */}
-                  <Section num={5} title="แนบเอกสารหลักฐาน" theme={theme}>
+                  <Section num={5} zIndex={10} title="แนบเอกสารหลักฐาน" theme={theme}>
                     <div onClick={() => fileInputRef.current?.click()} className={`group relative overflow-hidden border-2 border-dashed border-slate-300 hover:border-${theme.accent}-400 rounded-[2rem] p-12 text-center cursor-pointer transition-all duration-300 bg-slate-50 hover:bg-white`}>
                       <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
                       <motion.div whileHover={{ scale: 1.05 }} className={`w-20 h-20 mx-auto bg-${theme.accent}-100 rounded-full flex items-center justify-center mb-6 shadow-sm`}>
@@ -366,7 +624,6 @@ export default function OrganizationNominationForm() {
                       <h4 className="text-xl font-bold text-slate-800 mb-2">ลากไฟล์มาวาง หรือ คลิกเพื่อเลือกไฟล์</h4>
                       <p className="text-slate-500 text-sm">รองรับเฉพาะไฟล์ .PDF (ขนาดรวมไม่เกิน 10MB)</p>
                       
-                      {/* Progress bar */}
                       <div className="max-w-xs mx-auto mt-6" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between text-xs font-medium text-slate-400 mb-2">
                           <span>พื้นที่ที่ใช้ไป</span>
@@ -383,7 +640,7 @@ export default function OrganizationNominationForm() {
                       {selectedFiles.length > 0 && (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {selectedFiles.map((file, i) => (
-                            <motion.div key={i} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                            <motion.div key={i} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
                               <div className="flex items-center gap-4 overflow-hidden">
                                 <div className="p-3 bg-rose-50 text-rose-500 rounded-xl shrink-0"><FileText className="w-6 h-6" /></div>
                                 <div className="truncate">
@@ -421,9 +678,9 @@ export default function OrganizationNominationForm() {
 // 3. Beautiful Sub-components
 // ==========================================
 
-const Section = ({ num, title, children, theme }: any) => (
-  <motion.div className={`bg-white rounded-[2.5rem] p-8 md:p-10 border ${theme.border} relative shadow-lg shadow-slate-100`}>
-    <div className={`absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r ${theme.gradient} opacity-80 rounded-t-[2.5rem]`} />
+const Section = ({ num, title, children, theme, zIndex = 10 }: any) => (
+  <motion.div style={{ zIndex }} className={`bg-white/40 backdrop-blur-md rounded-[2.5rem] p-8 md:p-10 border ${theme.border} relative shadow-lg shadow-slate-200/20`}>
+    <div className={`absolute top-0 left-0 w-full h-1.5 rounded-t-[2.5rem] bg-gradient-to-r ${theme.gradient} opacity-80`} />
     <div className="flex items-center gap-4 mb-8">
       <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${theme.gradient} text-white flex items-center justify-center font-black text-xl shadow-lg ${theme.shadow}`}>
         {num}
@@ -459,7 +716,7 @@ const Input = ({ label, val, set, icon: Icon, theme, type = "text", req, max, pl
       <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
         <Icon className={`w-5 h-5 text-slate-400 group-focus-within:${theme.text} transition-colors`} />
       </div>
-      <input type={type} value={val} onChange={e => set(e.target.value)} maxLength={max} placeholder={placeholder} className={`w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-4 outline-none transition-all ${theme.ring} hover:border-slate-300 focus:bg-white text-slate-800 font-medium`} />
+      <input type={type} value={val} onChange={e => set(e.target.value)} maxLength={max} placeholder={placeholder} className={`w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all ${theme.ring} hover:border-slate-300 focus:bg-white text-slate-800 font-medium`} />
     </div>
   </div>
 );
@@ -468,7 +725,6 @@ const Select = ({ label, val, set, options, icon: Icon, theme, req, disabled }: 
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // ปิด Dropdown เมื่อคลิกนอกกรอบ
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -479,7 +735,6 @@ const Select = ({ label, val, set, options, icon: Icon, theme, req, disabled }: 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // หาข้อความของตัวที่ถูกเลือก
   const selectedLabel = options.find((o: any) => o.v === val)?.l || "-- เลือก --";
 
   return (
@@ -487,16 +742,14 @@ const Select = ({ label, val, set, options, icon: Icon, theme, req, disabled }: 
       <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
         {label} {req && <span className="text-rose-500">*</span>}
       </label>
-      <div className="relative group">
-        {/* ไอคอนด้านซ้าย */}
+      {/* แก้ไขปัญหาไอคอนเยื้องขึ้นด้านบน: ครอบกล่อง relative ใหม่ และแก้ z-index เมื่อเปิด */}
+      <div className={`relative group ${isOpen ? 'z-[100]' : 'z-10'}`}>
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
           <Icon className={`w-5 h-5 transition-colors duration-300 ${isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500'}`} />
         </div>
-        
-        {/* กล่องกด (Trigger) */}
         <div 
           onClick={() => !disabled && setIsOpen(!isOpen)}
-          className={`w-full cursor-pointer bg-white border rounded-2xl pl-12 pr-4 py-4 outline-none transition-all duration-300 flex items-center justify-between
+          className={`w-full cursor-pointer bg-white border rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all duration-300 flex items-center justify-between
             ${isOpen ? `border-slate-300 shadow-md ${theme.ring} bg-slate-50/50` : 'border-slate-200 hover:border-slate-300'}
           `}
         >
@@ -506,7 +759,6 @@ const Select = ({ label, val, set, options, icon: Icon, theme, req, disabled }: 
           <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 flex-shrink-0 ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
         </div>
 
-        {/* เมนูตัวเลือก (Dropdown Menu) */}
         <AnimatePresence>
           {isOpen && (
             <motion.div
@@ -514,8 +766,7 @@ const Select = ({ label, val, set, options, icon: Icon, theme, req, disabled }: 
               animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
               exit={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="absolute z-50 w-full mt-2 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto 
-                [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300"
+              className="absolute z-[9999] w-full mt-2 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full"
             >
               <div
                 onClick={() => { set(""); setIsOpen(false); }}

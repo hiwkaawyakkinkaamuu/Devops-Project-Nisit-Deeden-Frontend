@@ -7,8 +7,8 @@ import { motion, AnimatePresence, Variants } from "framer-motion";
 import {
   Search, GraduationCap, CheckCircle2,
   Eye, Award, Building2, ChevronLeft, ChevronRight, 
-  ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, PenTool, Check, X,
-  Sparkles, Users, FileSignature
+  ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, PenTool,
+  Sparkles, FileSignature, Calendar, Clock, X
 } from "lucide-react";
 import { api } from "@/lib/axios";
 
@@ -16,13 +16,6 @@ import { api } from "@/lib/axios";
 // 0. Configuration & Types
 // ==========================================
 const USE_MOCK_DATA = false;
-
-interface VoteSummary {
-  approve: number;
-  reject: number;
-  abstain: number;
-  total_voters: number;
-}
 
 export interface FileResponse {
   file_dir_id: number;
@@ -44,7 +37,8 @@ export interface Nomination {
   campus_id: number;
   academic_year: number;
   semester: number;
-  form_status: number;
+  form_status_id: number; 
+  form_status: number; 
   award_type: string;
   award_type_name?: string;
   created_at: string;
@@ -64,7 +58,6 @@ export interface Nomination {
   files?: FileResponse[];
   is_organization_nominated?: boolean; 
   organization_name?: string;
-  vote_summary?: VoteSummary; 
 }
 
 const ITEMS_PER_PAGE = 8; 
@@ -132,144 +125,266 @@ const CustomSelect = ({ value, onChange, options, icon: Icon, placeholder, class
     );
 };
 
+const AWARD_CATEGORIES = [
+  { v: "all", l: "ทุกประเภทรางวัล" },
+  { v: "กิจกรรม", l: "กิจกรรมเสริมหลักสูตร" },
+  { v: "นวัตกรรม", l: "ความคิดสร้างสรรค์และนวัตกรรม" },
+  { v: "ประพฤติดี", l: "ความประพฤติดี" },
+  { v: "อื่นๆ", l: "อื่นๆ" }
+];
+
+const YEAR_LEVELS = [
+  { v: "all", l: "ทุกระดับชั้นปี" },
+  { v: "1", l: "ชั้นปีที่ 1" },
+  { v: "2", l: "ชั้นปีที่ 2" },
+  { v: "3", l: "ชั้นปีที่ 3" },
+  { v: "4", l: "ชั้นปีที่ 4" },
+  { v: "5", l: "ชั้นปีที่ 5+" }
+];
+
 // ==========================================
-// 1. Main Component
+// 1. Custom Animated DatePicker
+// ==========================================
+const MONTH_NAMES = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+const DAY_NAMES = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+
+function CustomDatePicker({ value, onChange, label, disabled }: any) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  const [viewDate, setViewDate] = useState(() => value ? new Date(value) : new Date());
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (value) setViewDate(new Date(value));
+  }, [value]);
+
+  const formatDisplayDate = (dateStr: string) => {
+    if (!dateStr) return "เลือกวันที่...";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  const handleSelectDate = (day: number) => {
+    const selected = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
+    const y = selected.getFullYear();
+    const m = String(selected.getMonth() + 1).padStart(2, '0');
+    const d = String(selected.getDate()).padStart(2, '0');
+    onChange(`${y}-${m}-${d}`);
+    setIsOpen(false);
+  };
+
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+
+  const daysInMonth = getDaysInMonth(viewDate.getFullYear(), viewDate.getMonth());
+  const firstDay = getFirstDayOfMonth(viewDate.getFullYear(), viewDate.getMonth());
+  
+  const blanks = Array.from({ length: firstDay }, (_, i) => i);
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  const isFutureDate = (day: number) => {
+    const date = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); 
+    return date > today;
+  };
+
+  return (
+    <div className={`relative w-full group ${isOpen ? 'z-[50]' : 'z-10'}`} ref={containerRef}>
+      <button 
+        type="button" disabled={disabled} onClick={() => setIsOpen(!isOpen)}
+        className={`flex w-full items-center justify-between bg-white/80 backdrop-blur-sm transition-all border border-slate-200/80 rounded-2xl px-4 py-3.5 shadow-sm ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400'}`}
+      >
+        <div className="flex items-center gap-3">
+          <Calendar className="w-4 h-4 text-slate-400" />
+          <div className="flex flex-col text-left justify-center">
+            <span className={`text-sm font-medium leading-normal truncate max-w-[120px] sm:max-w-[150px] ${value ? 'text-slate-800' : 'text-slate-500'}`}>{value ? formatDisplayDate(value) : label}</span>
+          </div>
+        </div>
+        {value ? (
+          <div onClick={(e) => { e.stopPropagation(); onChange(""); }} className="p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors z-20 relative"><X size={14} /></div>
+        ) : (
+          <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 ml-2 transition-transform ${isOpen ? 'rotate-180 text-indigo-500' : ''}`} />
+        )}
+      </button>
+
+      <AnimatePresence>
+        {isOpen && !disabled && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.15 }} className="absolute top-full left-0 sm:min-w-[320px] mt-2 bg-white border border-slate-100 rounded-[24px] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.2)] z-[9999] p-5">
+            <div className="flex items-center justify-between mb-4">
+              <button type="button" onClick={(e) => { e.stopPropagation(); setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1)); }} className="p-1.5 rounded-lg bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"><ChevronLeft size={18} /></button>
+              <div className="font-bold text-slate-800 text-sm">{MONTH_NAMES[viewDate.getMonth()]} {viewDate.getFullYear() + 543}</div>
+              <button type="button" disabled={viewDate.getFullYear() === new Date().getFullYear() && viewDate.getMonth() === new Date().getMonth()} onClick={(e) => { e.stopPropagation(); setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1)); }} className="p-1.5 rounded-lg bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-50"><ChevronRight size={18} /></button>
+            </div>
+            <div className="grid grid-cols-7 gap-1 mb-2">
+              {DAY_NAMES.map(day => (<div key={day} className="text-center text-[11px] font-black py-1 text-slate-400">{day}</div>))}
+            </div>
+            <div className="grid grid-cols-7 gap-y-1.5 gap-x-1">
+              {blanks.map(blank => (<div key={`blank-${blank}`} className="w-full h-10"></div>))}
+              {days.map(day => {
+                const selected = value && day === new Date(value).getDate() && viewDate.getMonth() === new Date(value).getMonth() && viewDate.getFullYear() === new Date(value).getFullYear();
+                const today = day === new Date().getDate() && viewDate.getMonth() === new Date().getMonth() && viewDate.getFullYear() === new Date().getFullYear();
+                const future = isFutureDate(day);
+                return (
+                  <button key={day} type="button" disabled={future} onClick={() => handleSelectDate(day)} className={`w-9 h-9 sm:w-10 sm:h-10 mx-auto flex items-center justify-center rounded-full text-[14px] transition-all ${future ? 'text-slate-300 cursor-not-allowed opacity-50' : selected ? 'bg-indigo-500 text-white font-bold shadow-md' : today ? 'text-indigo-600 bg-indigo-50 border border-indigo-200 font-bold' : 'text-slate-700 hover:bg-slate-100 font-semibold'}`}>{day}</button>
+                );
+              })}
+            </div>
+            <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
+                <button type="button" onClick={(e) => { e.stopPropagation(); onChange(""); setIsOpen(false); }} className="flex-1 text-center text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 py-2.5 rounded-xl border border-slate-200 transition-colors">ล้างวันที่</button>
+                <button type="button" onClick={() => { setViewDate(new Date()); handleSelectDate(new Date().getDate()); }} className="flex-1 text-center text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 py-2.5 rounded-xl border border-slate-200 transition-colors">เลือกวันนี้</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ==========================================
+// 2. Main Component
 // ==========================================
 export default function ChairmanApprovalPage() {
   
-  // --- States ---
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Nomination[]>([]);
-  const [awardTypes, setAwardTypes] = useState<string[]>([]);
-  const [signingId, setSigningId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
-  // Modals
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [modalData, setModalData] = useState<Nomination | null>(null);
 
-  // Filters & Sort
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterYear, setFilterYear] = useState("all");
+  const [filterDate, setFilterDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortConfig, setSortConfig] = useState<{ key: keyof Nomination | 'award_type_name' | null, direction: 'asc' | 'desc' | null }>({ key: 'latest_update', direction: 'desc' });
+  
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Nomination | 'award_type_name' | null, direction: 'asc' | 'desc' | null }>({ key: 'created_at', direction: 'desc' });
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterCategory, filterYear]);
+    setSelectedId(null);
+  }, [searchTerm, filterCategory, filterYear, filterDate]);
 
-  // ==========================================
-  // 2. Data Fetching
-  // ==========================================
+  const formatPrettyDate = (isoDate: string) => {
+      if (!isoDate) return { date: "-", time: "-" };
+      const d = new Date(isoDate);
+      const dateStr = d.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+      const timeStr = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+      return { date: dateStr, time: timeStr };
+  };
+
   useEffect(() => {
     let isMounted = true;
     
-    const fetchAwardTypes = async () => {
-      try {
-        const response = await api.get(`/awards/types`);
-        const types = response.data?.data || response.data || [];
-        if (isMounted) setAwardTypes(types);
-      } catch (error) {
-        console.error("Error fetching award types:", error);
-      }
-    };
-
     const fetchData = async () => {
       setLoading(true);
       try {
         if (USE_MOCK_DATA) return;
 
-        // ดึงเผื่อมาเยอะๆ เพื่อให้เจอกรณีที่สถานะ 10 ไปอยู่หน้าหลังๆ (ถ้าหลังบ้านยังไม่เพิ่ม Filter ให้)
-        const params: Record<string, string> = { limit: "500" };
+        // ดึงฟอร์มที่คณะกรรมการอนุมัติแล้ว (สถานะ 9)
+        const response = await api.get(`/awards/search`, { params: { limit: 1000, form_status: 9 } });
+        const rawData = response.data?.data || response.data;
+        const fetchedData = Array.isArray(rawData) ? rawData : [];
 
-        const response = await api.get(`/awards/search`, { params });
-        
-        const fetchedData = response.data?.data || response.data;
-        const rawData = Array.isArray(fetchedData) ? fetchedData : [];
-
-        const mappedData = rawData.map((item: any) => {
-            const isOrgNominated = item.org_name && item.org_name.trim() !== "";
-            
-            // Mock Vote Summary
-            const mockApprove = (item.form_id % 3) + 3; // สุ่ม 3-5
-            const mockReject = 5 - mockApprove;
-
+        const mappedData = fetchedData.map((item: any) => {
+            const isOrgNominated = item.student_lastname === "-" || (item.org_name && item.org_name.trim() !== "");
             return {
                 ...item,
-                form_status: item.form_status_id || item.form_status, 
+                form_status_id: item.form_status_id || item.form_status, 
                 award_type_name: item.award_type,
                 is_organization_nominated: isOrgNominated, 
-                organization_name: item.org_name,
-                vote_summary: { approve: mockApprove, reject: mockReject, abstain: 0, total_voters: 5 }
+                organization_name: item.org_name
             };
         });
 
-        // ประธานกรรมการ ดึงเฉพาะ "สถานะ 10: อนุมัติโดยคณะกรรมการ" เพื่อมาลงนาม
-        const TARGET_STATUS_ID = 10; 
-        const filteredData = mappedData.filter((item: any) => item.form_status === TARGET_STATUS_ID);
+        const TARGET_STATUS_ID = 9; 
+        const pendingChairmanForms = mappedData.filter((item: any) => Number(item.form_status_id) === TARGET_STATUS_ID);
 
-        if (isMounted) setItems(filteredData);
+        if (isMounted) setItems(pendingChairmanForms);
       } catch (error) {
         console.error("API Error:", error);
-        if (isMounted) {
-          Swal.fire({ icon: 'error', title: 'ไม่สามารถดึงข้อมูลได้', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
-        }
       } finally {
         if (isMounted) setLoading(false);
       }
     };
 
-    fetchAwardTypes();
     fetchData();
     return () => { isMounted = false; };
   }, []);
 
-  // ==========================================
-  // 3. Logic & Handlers
-  // ==========================================
   const processedData = useMemo(() => {
-    let filtered = items;
+    let filtered = [...items];
 
     if (searchTerm) {
         const lowerTerm = searchTerm.toLowerCase();
         filtered = filtered.filter(item => 
-          item.student_firstname?.toLowerCase().includes(lowerTerm) || 
-          item.student_lastname?.toLowerCase().includes(lowerTerm) ||
-          item.student_number?.includes(lowerTerm)
+          (item.student_firstname || "").toLowerCase().includes(lowerTerm) || 
+          (item.student_lastname || "").toLowerCase().includes(lowerTerm) ||
+          (item.student_number || "").includes(lowerTerm)
         );
     }
 
     if (filterCategory && filterCategory !== "all") {
-        filtered = filtered.filter(item => item.award_type_name === filterCategory);
+        filtered = filtered.filter(item => {
+            const awardStr = (item.award_type_name || "").toLowerCase();
+            if (filterCategory === "อื่นๆ") {
+                return !awardStr.includes("กิจกรรม") && !awardStr.includes("นวัตกรรม") && !awardStr.includes("ประพฤติดี");
+            }
+            return awardStr.includes(filterCategory);
+        });
     }
 
     if (filterYear && filterYear !== "all") {
         filtered = filtered.filter(item => String(item.student_year) === filterYear);
     }
+
+    if (filterDate) {
+        const filterTime = new Date(filterDate).setHours(23, 59, 59, 999);
+        filtered = filtered.filter(item => {
+            const itemTime = new Date(item.created_at).getTime();
+            return itemTime <= filterTime;
+        });
+    }
     
     if (sortConfig.key) {
       filtered.sort((a: any, b: any) => {
-        let valA = sortConfig.key ? a[sortConfig.key] : '';
-        let valB = sortConfig.key ? b[sortConfig.key] : '';
+        let valA: any = sortConfig.key ? a[sortConfig.key as keyof Nomination] : '';
+        let valB: any = sortConfig.key ? b[sortConfig.key as keyof Nomination] : '';
+
         if (sortConfig.key === 'student_firstname') {
           valA = `${a.student_firstname} ${a.student_lastname}`;
           valB = `${b.student_firstname} ${b.student_lastname}`;
-        } else if (sortConfig.key === 'latest_update' || sortConfig.key === 'created_at') {
-          valA = new Date(a.latest_update || a.created_at).getTime();
-          valB = new Date(b.latest_update || b.created_at).getTime();
+        } else if (sortConfig.key === 'student_year') {
+          valA = Number(a.student_year) || 0;
+          valB = Number(b.student_year) || 0;
+        } else if (sortConfig.key === 'created_at' || sortConfig.key === 'latest_update') {
+          valA = new Date(a[sortConfig.key as 'created_at' | 'latest_update']).getTime();
+          valB = new Date(b[sortConfig.key as 'created_at' | 'latest_update']).getTime();
         }
+
         if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
         if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       });
     }
     return filtered;
-  }, [items, searchTerm, filterCategory, filterYear, sortConfig]);
+  }, [items, searchTerm, filterCategory, filterYear, filterDate, sortConfig]);
 
-  const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(processedData.length / ITEMS_PER_PAGE) || 1;
   const currentItems = processedData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-  const handleSort = (key: keyof Nomination | 'award_type_name' | 'latest_update') => {
+  const handleSort = (key: keyof Nomination | 'award_type_name') => {
     setSortConfig(prev => {
       if (prev.key === key) return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
       return { key, direction: 'asc' };
@@ -281,104 +396,52 @@ export default function ChairmanApprovalPage() {
     return `${item.student_firstname || ""} ${item.student_lastname || ""}`.trim();
   };
 
-  const getResolution = (votes?: VoteSummary) => {
-      if (!votes) return { isPassed: true, label: "เห็นชอบ", colorClass: "bg-emerald-100 text-emerald-700 border-emerald-200" };
-      const total = votes.total_voters || 1; 
-      const threshold = total / 2;
-      const isPassed = votes.approve > threshold;
-      return {
-        isPassed,
-        label: isPassed ? "มติเห็นชอบ" : "มติไม่เห็นชอบ",
-        colorClass: isPassed 
-          ? "bg-emerald-50 text-emerald-600 border border-emerald-200" 
-          : "bg-rose-50 text-rose-600 border border-rose-200"
-      };
-  };
+  const handleApprove = async () => {
+    if (selectedId === null) return;
+    const selectedItem = items.find(c => c.form_id === selectedId);
+    if (!selectedItem) return;
 
-  const handleSign = async (id: number, name: string) => {
-    if (!id) return;
-
-    const result = await Swal.fire({
-        title: 'ยืนยันการลงนาม?',
-        html: `คุณต้องการรับรองผลการพิจารณาของ<br/><b class="text-indigo-600 text-lg">${name}</b> ใช่หรือไม่?`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#4f46e5',
-        cancelButtonColor: '#94a3b8',
-        confirmButtonText: 'ยืนยันลงนาม',
-        cancelButtonText: 'ยกเลิก',
-        customClass: { 
-            popup: 'rounded-[24px]',
-            confirmButton: 'rounded-xl px-6 py-2.5 font-bold',
-            cancelButton: 'rounded-xl px-6 py-2.5 font-bold'
-        }
+    const displayName = getDisplayName(selectedItem);
+    const result = await Swal.fire({ 
+        title: `ยืนยันการ "ลงนามรับรอง"?`, 
+        html: `คุณต้องการลงนามรับรองผลให้กับ <br/><b class="text-indigo-600 text-lg">${displayName}</b> ใช่หรือไม่?<br/><span class="text-sm text-slate-500">(เมื่อลงนามแล้ว เอกสารจะถูกส่งต่อให้อธิการบดีพิจารณา)</span>`, 
+        icon: 'question', 
+        showCancelButton: true, 
+        confirmButtonText: 'ยืนยันลงนาม', 
+        cancelButtonText: 'ยกเลิก', 
+        confirmButtonColor: '#4f46e5' 
     });
-
-    if (!result.isConfirmed) return;
-
-    setSigningId(id);
-
-    try {
+    
+    if (result.isConfirmed) {
+      try {
         if (!USE_MOCK_DATA) {
-            // สถานะ 12 = ลงนามโดยประธานคณะกรรมการ
-            const NEXT_STATUS_ID = 12; 
-            await api.put(`/awards/form-status/change/${id}`, { 
-                form_status_id: NEXT_STATUS_ID, // ส่งไปเผื่อ backend ใช้ field นี้
-                form_status: NEXT_STATUS_ID,    // ส่งไปเผื่อ backend ใช้ field นี้
-                reject_reason: "" 
-            });
+          // 🚨 ประธานคณะกรรมการลงนาม = อัปเดตสถานะเป็น 11
+          await api.put(`/awards/form-status/change/${selectedId}`, { 
+            form_status_id: 11, 
+            form_status: 11, 
+            reject_reason: "" 
+          });
         }
-
-        setItems(prev => prev.filter(item => item.form_id !== id));
-
-        Swal.fire({
-            icon: 'success',
-            title: 'ลงนามสำเร็จ',
-            text: `รับรองผลการพิจารณาเรียบร้อยแล้ว ส่งต่อให้อธิการบดี`,
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 3000,
-            timerProgressBar: true
+    
+        setItems(prev => prev.filter(c => c.form_id !== selectedId));
+        setSelectedId(null);
+        
+        Swal.fire({ 
+          toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, 
+          icon: 'success', 
+          title: 'ลงนามสำเร็จ', 
+          text: `ส่งต่อข้อมูลของ: ${displayName} ให้อธิการบดีเรียบร้อยแล้ว` 
         });
-
-    } catch (error: any) {
-        console.error(error);
-        if (error.response?.status === 403) {
-            Swal.fire({ 
-              icon: 'error', 
-              title: 'ติดสิทธิ์การเข้าถึง (403)', 
-              text: 'ระบบยังบล็อกไม่ให้ประธาน (Role 6) เปลี่ยนสถานะ กรุณาแจ้ง Backend ให้ปลดล็อกเงื่อนไขนี้' 
-            });
-        } else {
-            Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ไม่สามารถบันทึกการลงนามได้' });
-        }
-    } finally {
-        setSigningId(null);
+      } catch (error: any) {
+        const errorMsg = error.response?.data?.message || error.message;
+        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: errorMsg });
+      }
     }
   };
 
-  // --- Options สำหรับ Dropdowns ---
-  const awardTypeOptions = [
-    { v: "all", l: "ทุกประเภทรางวัล" },
-    ...awardTypes.map(type => ({ v: type, l: type }))
-  ];
-
-  const yearOptions = [
-    { v: "all", l: "ทุกระดับชั้นปี" },
-    { v: "1", l: "ชั้นปีที่ 1" },
-    { v: "2", l: "ชั้นปีที่ 2" },
-    { v: "3", l: "ชั้นปีที่ 3" },
-    { v: "4", l: "ชั้นปีที่ 4" },
-  ];
-
-  // ==========================================
-  // 4. Render UI
-  // ==========================================
   return (
     <div className="min-h-screen bg-transparent p-6 pt-24 lg:p-10 lg:pt-28 font-sans pb-24 relative overflow-hidden">
       
-      {/* --- CSS Animations --- */}
       <style jsx global>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in-up { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -394,63 +457,84 @@ export default function ChairmanApprovalPage() {
                 <span className="text-[11px] font-black uppercase tracking-[0.15em]">การลงนามประธานคณะกรรมการ</span>
             </div>
             <h1 className="text-3xl lg:text-4xl font-black text-slate-800 flex items-center gap-3 tracking-tight">
-              รับรองผลการคัดเลือก
+              ลงนามอนุมัตินิสิตดีเด่น
             </h1>
             <p className="text-slate-500 mt-2 font-medium flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-indigo-400" /> สำหรับประธานคณะกรรมการ
+              <Building2 className="w-4 h-4 text-indigo-400" /> สำหรับประธานคณะกรรมการพิจารณานิสิตดีเด่น
             </p>
           </div>
         </div>
 
         {/* --- Filters Grid --- */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-up relative z-30" style={{ animationDelay: '100ms' }}>
-            <div className="relative group">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" /></div>
+        <div className="flex flex-col gap-4 animate-fade-in-up relative z-30" style={{ animationDelay: '100ms' }}>
+            
+            <div className="relative group w-full z-10">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+              </div>
               <input 
                 type="text" 
                 placeholder="ค้นหาชื่อ หรือ รหัสนิสิต" 
                 value={searchTerm} 
                 onChange={(e) => setSearchTerm(e.target.value)} 
-                className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 pl-11 text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm placeholder:text-slate-400 text-slate-800" 
+                className="w-full bg-white/80 backdrop-blur-sm border border-slate-200/80 rounded-2xl px-4 py-4 pl-12 text-[15px] font-medium focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all shadow-sm placeholder:text-slate-400 text-slate-800" 
               />
             </div>
             
-            <div className="relative">
-               <CustomSelect 
-                  value={filterCategory} 
-                  onChange={setFilterCategory} 
-                  options={awardTypeOptions} 
-                  icon={Award}
-                  placeholder="ทุกประเภทรางวัล"
-               />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+                <div className="relative z-[33]">
+                   <CustomDatePicker 
+                      label="วันที่ยื่นฟอร์ม (ถึงวันที่)" 
+                      value={filterDate} 
+                      onChange={setFilterDate} 
+                      disabled={loading} 
+                   />
+                </div>
+                
+                <div className="relative z-[32]">
+                   <CustomSelect 
+                      value={filterCategory} 
+                      onChange={setFilterCategory} 
+                      options={AWARD_CATEGORIES} 
+                      icon={Award}
+                      placeholder="ทุกประเภทรางวัล"
+                   />
+                </div>
+                
+                <div className="relative z-[31]">
+                   <CustomSelect 
+                      value={filterYear} 
+                      onChange={setFilterYear} 
+                      options={YEAR_LEVELS} 
+                      icon={GraduationCap}
+                      placeholder="ทุกระดับชั้นปี"
+                   />
+                </div>
             </div>
-            
-            <div className="relative">
-               <CustomSelect 
-                  value={filterYear} 
-                  onChange={setFilterYear} 
-                  options={yearOptions} 
-                  icon={GraduationCap}
-                  placeholder="ทุกระดับชั้นปี"
-               />
-            </div>
+
         </div>
 
         {/* --- Data Table --- */}
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-200 overflow-visible animate-fade-in-up relative z-10" style={{ animationDelay: '150ms' }}>
           <div className="overflow-x-auto min-h-[400px]">
-            <table className="w-full text-left border-collapse min-w-[900px]">
+            <table className="w-full text-left border-collapse min-w-[1000px]">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-[11px] font-extrabold uppercase tracking-widest border-b border-slate-200">
                   <th className="p-6 cursor-pointer hover:bg-slate-100 transition-colors w-[25%]" onClick={() => handleSort('student_firstname')}>
                     <div className="flex items-center gap-1.5">ผู้ได้รับการเสนอชื่อ {sortConfig.key === 'student_firstname' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-500"/> : <ArrowDown className="w-3.5 h-3.5 text-indigo-500"/>) : <ArrowUpDown className="w-3.5 h-3.5 text-slate-300"/>}</div>
                   </th>
-                  <th className="p-6 text-center w-[15%]">
-                    <div className="flex items-center justify-center gap-1.5"><Users className="w-3.5 h-3.5"/> คะแนนโหวต</div>
+                  <th className="p-6 cursor-pointer hover:bg-slate-100 transition-colors text-center w-[15%]" onClick={() => handleSort('student_number')}>
+                    <div className="flex items-center justify-center gap-1.5">รหัสนิสิต {sortConfig.key === 'student_number' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-500"/> : <ArrowDown className="w-3.5 h-3.5 text-indigo-500"/>) : <ArrowUpDown className="w-3.5 h-3.5 text-slate-300"/>}</div>
                   </th>
-                  <th className="p-6 text-center w-[20%]">สรุปผลคะแนน</th>
-                  <th className="p-6 text-center w-[15%]">มติที่ประชุม</th>
-                  <th className="p-6 text-center w-[15%]">การดำเนินการ</th>
+                  <th className="p-6 cursor-pointer hover:bg-slate-100 transition-colors text-center w-[20%]" onClick={() => handleSort('created_at')}>
+                     <div className="flex items-center justify-center gap-1.5">วันที่ยื่นฟอร์ม {sortConfig.key === 'created_at' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-500"/> : <ArrowDown className="w-3.5 h-3.5 text-indigo-500"/>) : <ArrowUpDown className="w-3.5 h-3.5 text-slate-300"/>}</div>
+                  </th>
+                  <th className="p-6 cursor-pointer hover:bg-slate-100 transition-colors text-center w-[20%]" onClick={() => handleSort('latest_update')}>
+                     <div className="flex items-center justify-center gap-1.5">วันที่คณะกรรมการอนุมัติ {sortConfig.key === 'latest_update' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-500"/> : <ArrowDown className="w-3.5 h-3.5 text-indigo-500"/>) : <ArrowUpDown className="w-3.5 h-3.5 text-slate-300"/>}</div>
+                  </th>
+                  <th className="p-6 text-center w-[10%]">
+                    <div className="flex items-center justify-center gap-1.5">สถานะ</div>
+                  </th>
                   <th className="p-6 text-center w-[10%]">รายละเอียด</th>
                 </tr>
               </thead>
@@ -459,10 +543,10 @@ export default function ChairmanApprovalPage() {
                   [1, 2, 3, 4, 5].map((i) => (
                     <tr key={i} className="animate-pulse">
                       <td className="p-6"><div className="h-4 bg-slate-200 rounded-md w-48 mb-2"></div><div className="h-3 bg-slate-100 rounded-md w-32"></div></td>
-                      <td className="p-6"><div className="h-8 w-16 bg-slate-200 rounded-lg mx-auto"></div></td>
-                      <td className="p-6"><div className="h-3 bg-slate-200 rounded-full w-full mb-2"></div><div className="h-2 bg-slate-100 rounded-md w-1/2 mx-auto"></div></td>
+                      <td className="p-6"><div className="h-4 bg-slate-200 rounded w-24 mx-auto"></div></td>
                       <td className="p-6"><div className="h-6 w-24 bg-slate-200 rounded-full mx-auto"></div></td>
-                      <td className="p-6"><div className="h-10 w-28 bg-slate-200 rounded-xl mx-auto"></div></td>
+                      <td className="p-6"><div className="h-6 w-24 bg-slate-200 rounded-full mx-auto"></div></td>
+                      <td className="p-6"><div className="h-6 w-20 bg-slate-200 rounded-full mx-auto"></div></td>
                       <td className="p-6"><div className="h-10 w-10 bg-slate-200 rounded-xl mx-auto"></div></td>
                     </tr>
                   ))
@@ -474,98 +558,79 @@ export default function ChairmanApprovalPage() {
                           <FileSignature className="w-12 h-12 text-indigo-300" strokeWidth={1.5} />
                         </div>
                         <p className="text-xl font-bold text-slate-700">ไม่มีรายการรอลงนาม</p>
-                        <p className="text-sm mt-2 font-medium text-slate-500">คุณได้ดำเนินการลงนามรับรองเอกสารทั้งหมดเรียบร้อยแล้ว</p>
+                        <p className="text-sm mt-2 font-medium text-slate-500">ยังไม่มีข้อมูลที่ผ่านการพิจารณาจากคณะกรรมการมาถึงคุณ</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   currentItems.map((item, index) => {
                     const fullName = getDisplayName(item);
-                    const resolution = getResolution(item.vote_summary);
                     const isOrg = item.student_lastname === "-";
-                    
-                    let approvePercent = 0;
-                    if (item.vote_summary && item.vote_summary.total_voters > 0) {
-                        approvePercent = (item.vote_summary.approve / item.vote_summary.total_voters) * 100;
-                    }
+
+                    const createdDate = formatPrettyDate(item.created_at);
+                    const signedDate = formatPrettyDate(item.latest_update);
 
                     return (
                         <tr 
                           key={item.form_id} 
-                          className="group hover:bg-slate-50 transition-all duration-300 animate-fade-in-up"
+                          onClick={() => setSelectedId(item.form_id)}
+                          className={`group cursor-pointer transition-all duration-300 animate-fade-in-up ${selectedId === item.form_id ? 'bg-indigo-50/50' : 'hover:bg-slate-50'}`}
                           style={{ opacity: 0, animationDelay: `${index * 50}ms`, animationFillMode: 'forwards' }}
                         >
-                          {/* Column 1: Info */}
                           <td className="p-6 align-middle">
-                            <div className="font-extrabold text-slate-800 text-[15px] group-hover:text-indigo-700 transition-colors">{fullName}</div>
-                            <div className="text-[12px] text-slate-500 mt-1 font-medium tracking-wide">
-                                {isOrg ? <span className="text-indigo-500 font-bold bg-indigo-50 px-2 py-0.5 rounded">องค์กรภายนอก</span> : <span className="font-mono bg-slate-100 px-2 py-0.5 rounded-md text-slate-600">{item.student_number}</span>} 
-                            </div>
-                            <div className="text-[10.5px] font-bold text-indigo-600 mt-2.5 bg-indigo-50 inline-block px-3 py-1 rounded-lg border border-indigo-100 shadow-sm">
-                                {item.award_type_name || item.award_type}
+                            <div className="flex items-center gap-3">
+                               <div className={`w-2 h-2 rounded-full shrink-0 transition-colors ${selectedId === item.form_id ? 'bg-indigo-500' : 'bg-transparent'}`}></div>
+                               <div>
+                                   <div className={`font-extrabold text-[15px] transition-colors ${selectedId === item.form_id ? 'text-indigo-700' : 'text-slate-800'}`}>{fullName}</div>
+                                   <div className="text-[12px] text-slate-500 mt-1 font-medium tracking-wide">
+                                       {isOrg ? <span className="text-indigo-500 font-bold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">เสนอโดยหน่วยงาน</span> : `ชั้นปีที่ ${item.student_year || "-"}`}
+                                   </div>
+                                   <div className="text-[10.5px] font-bold text-indigo-600 mt-2.5 bg-indigo-50 inline-block px-3 py-1 rounded-lg border border-indigo-100 shadow-sm">
+                                       {item.award_type_name || item.award_type}
+                                   </div>
+                               </div>
                             </div>
                           </td>
 
-                          {/* Column 2: Vote Numbers */}
                           <td className="p-6 text-center align-middle">
-                            <div className="flex flex-col items-center justify-center bg-white py-2 px-4 rounded-2xl border border-slate-200 group-hover:border-indigo-200 transition-colors w-fit mx-auto shadow-sm">
-                                <div className="text-[24px] font-black text-slate-700 tracking-tight leading-none">
-                                    {item.vote_summary?.approve || 0} <span className="text-slate-400 text-sm font-medium">/ {item.vote_summary?.total_voters || 0}</span>
-                                </div>
-                            </div>
-                          </td>
-
-                          {/* Column 3: Progress Bar */}
-                          <td className="p-6 align-middle">
-                              <div className="w-full h-3 rounded-full overflow-hidden bg-slate-100 flex shadow-inner">
-                                  <div 
-                                      className="h-full bg-emerald-500 transition-all duration-1000 ease-out" 
-                                      style={{ width: `${approvePercent}%` }}
-                                  ></div>
-                                  <div className="flex-1 bg-rose-300 transition-all duration-1000 ease-out opacity-80"></div>
-                              </div>
-                              <div className="flex justify-between text-[11px] font-bold text-slate-500 mt-2.5 px-1">
-                                  <span className="flex items-center gap-1.5 text-emerald-600"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>{item.vote_summary?.approve || 0} เสียง</span>
-                                  <span className="flex items-center gap-1.5 text-rose-500"><span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>{(item.vote_summary?.reject || 0) + (item.vote_summary?.abstain || 0)} เสียง</span>
-                              </div>
-                          </td>
-
-                          {/* Column 4: Resolution */}
-                          <td className="p-6 text-center align-middle">
-                              <span className={`inline-flex items-center px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm ${resolution.colorClass}`}>
-                                  {resolution.isPassed ? <Check className="w-3.5 h-3.5 mr-1" strokeWidth={3} /> : <X className="w-3.5 h-3.5 mr-1" strokeWidth={3} />}
-                                  {resolution.label}
+                              <span className="font-mono bg-slate-100 px-3 py-1.5 rounded-lg text-slate-600 border border-slate-200 font-medium">
+                                {item.student_number || "-"}
                               </span>
                           </td>
 
-                          {/* Column 5: Action (Sign) */}
                           <td className="p-6 text-center align-middle">
-                              <button 
-                                  onClick={() => handleSign(item.form_id, fullName)}
-                                  disabled={signingId === item.form_id}
-                                  className={`
-                                      relative overflow-hidden bg-indigo-600 hover:bg-indigo-700 
-                                      text-white text-[13px] font-bold px-6 py-3 rounded-xl shadow-md
-                                      transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2 mx-auto w-full max-w-[140px]
-                                      ${signingId === item.form_id ? 'opacity-80 cursor-not-allowed' : ''}
-                                  `}
-                              >
-                                  {signingId === item.form_id ? (
-                                      <>
-                                          <div className="w-4 h-4 border-[2.5px] border-white/30 border-t-white rounded-full animate-spin"></div>
-                                          <span>กำลังบันทึก</span>
-                                      </>
-                                  ) : (
-                                      <>
-                                          <PenTool className="w-4 h-4 relative z-10" />
-                                          <span className="relative z-10">ลงนาม</span>
-                                      </>
-                                  )}
-                              </button>
+                              <div className="flex flex-col items-center justify-center gap-1.5">
+                                <div className="flex items-center gap-1.5 text-slate-700 font-semibold bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                    <span>{createdDate.date}</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-[11.5px] font-medium text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200 shadow-sm">
+                                    <Clock className="w-3 h-3 text-slate-400" />
+                                    <span>{createdDate.time} น.</span>
+                                </div>
+                              </div>
                           </td>
 
-                          {/* Column 6: Details */}
                           <td className="p-6 text-center align-middle">
+                              <div className="flex flex-col items-center justify-center gap-1.5">
+                                <div className="flex items-center gap-1.5 text-indigo-700 font-bold bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500" />
+                                    <span>{signedDate.date}</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-[11.5px] font-medium text-indigo-500 bg-white px-2 py-0.5 rounded-md border border-indigo-100 shadow-sm">
+                                    <Clock className="w-3 h-3 text-indigo-400" />
+                                    <span>{signedDate.time} น.</span>
+                                </div>
+                              </div>
+                          </td>
+
+                          <td className="p-6 text-center align-middle">
+                              <span className="inline-flex items-center px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm bg-amber-50 text-amber-600 border border-amber-200">
+                                  <Clock className="w-3.5 h-3.5 mr-1.5" /> รอประธานลงนาม
+                              </span>
+                          </td>
+
+                          <td className="p-6 text-center align-middle" onClick={(e) => e.stopPropagation()}>
                             <button 
                               onClick={() => { setModalData(item); setIsDetailModalOpen(true); }} 
                               className="inline-flex items-center justify-center p-3 rounded-xl text-slate-500 bg-slate-50 hover:text-indigo-600 hover:bg-indigo-50 transition-all transform hover:scale-110 border border-slate-200 hover:border-indigo-200 shadow-sm"
@@ -582,20 +647,26 @@ export default function ChairmanApprovalPage() {
             </table>
           </div>
 
-          {/* --- Table Footer / Pagination --- */}
-          <div className="bg-slate-50 border-t border-slate-200 p-5 flex flex-col md:flex-row justify-between items-center gap-4 rounded-b-[32px]">
+          <div className="bg-slate-50 border-t border-slate-200 p-6 flex flex-col md:flex-row justify-between items-center gap-4 rounded-b-[32px]">
             <div className="flex items-center gap-2">
               <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronLeft className="w-4 h-4" /></button>
               <span className="text-sm font-bold text-slate-700 bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm">หน้า {currentPage} จาก {totalPages || 1}</span>
               <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0} className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-all shadow-sm"><ChevronRight className="w-4 h-4" /></button>
             </div>
-            <div className="text-[13px] text-slate-600 font-bold bg-white px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm">
-                พบข้อมูลรอลงนามทั้งหมด <span className="text-indigo-600 text-[14px] ml-1">{processedData.length}</span> รายการ
+            
+            <div className="flex items-center gap-3">
+              <button 
+                  onClick={handleApprove} 
+                  disabled={selectedId === null} 
+                  className={`flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-bold text-white transition-all shadow-lg 
+                  ${selectedId === null ? "bg-slate-300 shadow-none cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20 transform hover:-translate-y-0.5 active:scale-95"}`}
+              >
+                  <PenTool className="w-4 h-4" /> ลงนามรับรองผล
+              </button>
             </div>
           </div>
         </div>
 
-        {/* --- Modal: Nomination Detail --- */}
         <NominationDetailModal 
           isOpen={isDetailModalOpen} 
           onClose={() => setIsDetailModalOpen(false)} 

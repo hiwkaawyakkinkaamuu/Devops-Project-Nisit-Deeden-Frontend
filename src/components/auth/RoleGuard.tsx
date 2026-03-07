@@ -14,7 +14,6 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
 
-  // แก้ไข: เพิ่ม Parameter isChairman เพื่อใช้แยกสิทธิ์
   const getRoleString = (id: number, isChairman: boolean) => {
      switch(id) {
         case 1: return "student";
@@ -36,36 +35,30 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
         return;
       }
 
-      // DEBUG: ขอดูไส้ในของ User หน่อยซิ ว่าหน้าตาเป็นยังไงแน่?
-      console.log("[RoleGuard] User Data Loaded:", user);
-
-      // เช็คว่าถ้าข้อมูลโดนห่อด้วยคำว่า user อีกชั้น ให้ดึงตัวข้างในออกมา
       const actualUser = user.user ? user.user : user;
+      const userRoleId = actualUser?.role_id ?? actualUser?.roleId ?? actualUser?.RoleId ?? actualUser?.RoleID;
 
-      // รองรับชื่อตัวแปรหลายรูปแบบ (กันพลาดเรื่องตัวพิมพ์เล็ก/ใหญ่)
-      const userRoleId = actualUser.role_id ?? actualUser.roleId ?? actualUser.RoleId ?? actualUser.RoleID;
-
-      // ถ้าหา Role ID ไม่เจอจริงๆ ค่อยดีดออก
       if (userRoleId === undefined || userRoleId === null) {
-         console.warn("[RoleGuard] Role ID missing! Raw user:", user);
-         // อย่าเพิ่งดีดออกทันที ให้ User เห็น Log ก่อน (หรือดีดออกถ้ามั่นใจ)
          router.replace("/");
          return;
       }
 
-      // แก้ไข: เช็คสถานะประธานกรรมการ จากโครงสร้างของ Backend (committee_data.is_chairman)
-      // เผื่อโครงสร้าง JSON เป็น is_chairman ที่ชั้นนอกสุดด้วย
-      const isChairman = actualUser?.committee_data?.is_chairman || actualUser?.is_chairman || false;
+      // 🚨 เช็คสถานะประธานแบบครอบคลุมสุดๆ
+      let isChairman = false;
+      const committeeData = actualUser?.committee_data || actualUser?.CommitteeData || {};
+      const chairmanFlag = committeeData?.is_chairman ?? committeeData?.IsChairman ?? actualUser?.is_chairman ?? actualUser?.IsChairman;
+      
+      if (chairmanFlag === true || chairmanFlag === "true" || chairmanFlag === 1) {
+          isChairman = true;
+      }
 
-      // ส่งสถานะ isChairman เข้าไปเช็คใน getRoleString
       const userRoleStr = getRoleString(Number(userRoleId), isChairman);
-      console.log(`[RoleGuard] Checking Role: ${userRoleStr} (ID: ${userRoleId}, isChairman: ${isChairman})`);
 
       if (!allowedRoles.includes(userRoleStr)) {
         Swal.fire({
             icon: 'error',
             title: 'ไม่มีสิทธิ์เข้าถึง',
-            text: `สิทธิ์ของคุณคือ ${userRoleStr} ไม่สามารถเข้าหน้านี้ได้`,
+            text: `ระบบกำลังพาคุณไปยังหน้าหลักของคุณ`,
             timer: 2000,
             showConfirmButton: false
         });
@@ -79,10 +72,9 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
             student_development_committee: "/student-development-committee/hall-of-fame",
             chairman_of_student_development_committee: "/chairman-of-student-development-committee/hall-of-fame",
             chancellor: "/chancellor/hall-of-fame",
-            organization: "/organization/main/hall-of-fame" // Role 9
+            organization: "/organization/main/hall-of-fame"
         };
         
-        // ส่งกลับไปยังหน้าแรกของสิทธิ์นั้นๆ
         router.replace(dashboardMap[userRoleStr] || "/");
       }
     }

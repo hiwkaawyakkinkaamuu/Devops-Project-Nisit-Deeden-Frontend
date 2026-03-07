@@ -4,11 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { api } from "@/lib/axios";
 import { 
-  CheckCircle2, XCircle, Clock, Award, FileText, 
-  History, UserCheck, ShieldCheck, Landmark, GraduationCap,
-  ChevronDown, ChevronUp, ArrowRight, ArrowLeft,
-  User, Building2, CalendarDays, Phone, Mail, MapPin, Map, AlertCircle, Filter,
-  UserCircle2
+  CheckCircle2, Clock, Award, FileText, 
+  UserCheck, ShieldCheck, Landmark, GraduationCap,
+  ChevronDown, ArrowRight, ArrowLeft,
+  User, Building2, CalendarDays, Phone, Mail, MapPin, Map, Filter
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -27,19 +26,6 @@ const STEP_LOGIC = [
   { id: 8, label: "อธิการบดี", ids: [12, 14, 15], role: "อธิการบดี", icon: CheckCircle2 }
 ];
 
-// ฟังก์ชันหาชื่อ Role จาก Status ของฟอร์ม
-const getRoleFromStatus = (statusId: number) => {
-  switch (statusId) {
-      case 3: return "หัวหน้าภาควิชา";
-      case 5: return "รองคณบดีฝ่ายกิจการนิสิต";
-      case 7: return "คณบดี";
-      case 9: return "กองพัฒนานิสิต";
-      case 11: return "คณะกรรมการพิจารณา";
-      case 15: return "อธิการบดี";
-      default: return "ผู้พิจารณาคำร้อง";
-  }
-};
-
 // ==========================================
 // 2. Main Page Component
 // ==========================================
@@ -48,7 +34,7 @@ export default function OrganizationTraceAndDetails() {
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   
-  // 🌟 State สำหรับจัดการ Filter ปีการศึกษา
+  // State สำหรับจัดการ Filter ปีการศึกษา
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [selectedYear, setSelectedYear] = useState<string>("all");
   
@@ -78,7 +64,14 @@ export default function OrganizationTraceAndDetails() {
         const statuses = statusRes.data?.data || [];
         const rawSubmissions = subRes.data?.data || [];
         
-        setAcademicYears(yearsRes.data?.data || []);
+        // จัดเรียงปีการศึกษาจากมากไปน้อย (ล่าสุดขึ้นก่อน)
+        const yearsData = yearsRes.data?.data || [];
+        const sortedYears = [...yearsData].sort((a: any, b: any) => {
+            const yearA = typeof a === 'object' ? (a.year || a.academic_year) : a;
+            const yearB = typeof b === 'object' ? (b.year || b.academic_year) : b;
+            return yearB - yearA;
+        });
+        setAcademicYears(sortedYears);
         
         setMetaData({
             faculties: facRes.data?.data || [],
@@ -87,24 +80,21 @@ export default function OrganizationTraceAndDetails() {
             statuses: statuses
         });
 
-        // ดึง Details พร้อม Logs
+        // ดึง Details
         const detailed = await Promise.all(rawSubmissions.map(async (item: any) => {
             try {
                 const detailRes = await api.get(`/awards/details/${item.form_id}`, { 
                     headers: { Authorization: `Bearer ${token}` } 
                 });
-                
-                const itemLogs = detailRes.data?.data?.logs || detailRes.data?.logs || [];
 
                 return {
                     ...item,
                     ...detailRes.data?.data,
-                    logs: itemLogs,
                     status_detail: statuses.find((s: any) => s.form_status_id === item.form_status)
                 };
             } catch (e) { 
                 console.error("Error fetching details for form", item.form_id, e);
-                return { ...item, logs: [] }; 
+                return { ...item }; 
             }
         }));
 
@@ -122,12 +112,13 @@ export default function OrganizationTraceAndDetails() {
     ? submissions 
     : submissions.filter(item => String(item.academic_year) === selectedYear);
 
-  // สร้างตัวเลือกสำหรับ Custom Dropdown
+  // สร้างตัวเลือกสำหรับ Custom Dropdown พร้อมแปลงเป็น พ.ศ. (+543)
   const yearOptions = [
     { v: "all", l: "ทั้งหมด" },
     ...academicYears.map((yearObj: any) => {
         const y = typeof yearObj === 'object' ? (yearObj.year || yearObj.academic_year) : yearObj;
-        return { v: String(y), l: String(y) };
+        const thaiYear = Number(y) + 543;
+        return { v: String(y), l: String(thaiYear) };
     })
   ];
 
@@ -178,7 +169,7 @@ export default function OrganizationTraceAndDetails() {
             ) : (
                 <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
                     
-                    {/* 🌟 ส่วนหัวที่มี Custom Filter Dropdown */}
+                    {/* ส่วนหัวที่มี Custom Filter Dropdown */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-1.5 h-6 bg-indigo-600 rounded-full"></div>
@@ -217,52 +208,6 @@ export default function OrganizationTraceAndDetails() {
 // ==========================================
 // 3. Components สำหรับแสดงผล
 // ==========================================
-
-const formatDateDisplay = (isoDate: string) => {
-    if (!isoDate) return "-";
-    const date = new Date(isoDate);
-    if (isNaN(date.getTime())) return isoDate;
-    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-};
-
-const formatDateTimeDisplay = (isoDate: string) => {
-    if (!isoDate) return "-";
-    const date = new Date(isoDate);
-    if (isNaN(date.getTime())) return isoDate;
-    return date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
-
-const calculateAge = (isoDate: string) => {
-    if (!isoDate) return "-";
-    const dob = new Date(isoDate);
-    if (isNaN(dob.getTime())) return "-";
-    const diff = Date.now() - dob.getTime();
-    const ageDate = new Date(diff);
-    return Math.abs(ageDate.getUTCFullYear() - 1970);
-};
-
-const THEME_STYLES: Record<string, any> = {
-    "activity": {
-        border: "border-orange-100", gradient: "from-orange-400 to-orange-600", 
-        numberBg: "bg-orange-600", text: "text-orange-600", bgSoft: "bg-orange-50"
-    },
-    "innovation": {
-        border: "border-purple-100", gradient: "from-purple-400 to-purple-600", 
-        numberBg: "bg-purple-600", text: "text-purple-600", bgSoft: "bg-purple-50"
-    },
-    "behavior": {
-        border: "border-blue-100", gradient: "from-blue-400 to-blue-600", 
-        numberBg: "bg-blue-600", text: "text-blue-600", bgSoft: "bg-blue-50"
-    },
-    "other": {
-        border: "border-emerald-100", gradient: "from-emerald-400 to-teal-500", 
-        numberBg: "bg-emerald-600", text: "text-emerald-600", bgSoft: "bg-emerald-50"
-    },
-    "default": {
-        border: "border-slate-100", gradient: "from-slate-400 to-slate-600", 
-        numberBg: "bg-slate-600", text: "text-slate-600", bgSoft: "bg-slate-50"
-    }
-};
 
 // 🌟 Custom Dropdown Component
 function YearFilterDropdown({ value, onChange, options }: any) {
@@ -342,6 +287,9 @@ function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
   const showLastName = detailObj.student_lastname || item.student_lastname;
   const showStudentNumber = detailObj.student_number || item.student_number;
   const showFaculty = detailObj.faculty || facultyName;
+  
+  // แปลงปีการศึกษาเป็น พ.ศ.
+  const displayYear = Number(item.academic_year) + 543;
 
   return (
     <motion.div 
@@ -360,7 +308,7 @@ function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
                     <CalendarDays size={14} className="text-indigo-500" /> {new Date(item.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric'})}
                 </span>
                 <span className="text-slate-500 text-xs font-bold bg-slate-50 px-3 py-1 rounded-lg border border-slate-100">
-                    ปีการศึกษา {item.academic_year} เทอม {item.semester}
+                    ปีการศึกษา {displayYear} เทอม {item.semester}
                 </span>
             </div>
             
@@ -398,8 +346,6 @@ function DetailedTraceCard({ item, index, metaData, onSelect }: any) {
 }
 
 function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) {
-  const [showLogs, setShowLogs] = useState(false);
-  
   const getStepProgress = (statusId: number) => {
     const step = STEP_LOGIC.find((s) => s.ids.includes(statusId));
     return step ? step.id : 1;
@@ -430,115 +376,18 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
   const showDept = detailObj.department || metaData.departments.find((d: any) => d.department_id === item.department_id)?.department_name || "ไม่ระบุ";
   const showCampus = detailObj.campus || metaData.campuses.find((c: any) => c.campusId === item.campusId)?.campusName || "ไม่ระบุ";
 
-  //  รวม Log ทั้งจาก API และสร้าง Log จำลอง (Fallback) ในกรณีที่เกิดการปฏิเสธ
-  const safeLogs = Array.isArray(item.logs) ? item.logs : [];
-  let displayLogs = [...safeLogs];
-  
-  const hasRejectLogInApi = displayLogs.some(log => 
-      (log.approval_status && String(log.approval_status).toLowerCase().includes("reject")) ||
-      (log.operation && String(log.operation).toLowerCase().includes("reject"))
-  );
-
-  // ถ้าไม่มี log การ Reject แต่ฟอร์มเป็นสถานะ Reject ให้สร้างจำลองขึ้นมา
-  if (!hasRejectLogInApi && isRejected) {
-      displayLogs.push({
-          approval_log_id: 999999,
-          form_id: item.form_id,
-          role_name: getRoleFromStatus(item.form_status), 
-          approval_status: "reject",
-          operation: "reject",
-          approved_at: item.latest_update || item.created_at,
-          reject_reason: item.reject_reason || "ไม่ได้ระบุเหตุผล (กรุณาติดต่อผู้พิจารณา)"
-      });
-  }
-
-  // เรียงลำดับ Log ใหม่สุดขึ้นก่อน
-  displayLogs.sort((a: any, b: any) => new Date(b.operation_date || b.approved_at || b.created_at || 0).getTime() - new Date(a.operation_date || a.approved_at || a.created_at || 0).getTime());
-
-  // เลือกเฉพาะ Log ที่ถูกตีกลับ เพื่อนำไปแสดงในกล่องสีแดงด้านบน
-  const rejectedLogs = displayLogs.filter(log => 
-      (log.approval_status && String(log.approval_status).toLowerCase().includes("reject")) ||
-      (log.operation && String(log.operation).toLowerCase().includes("reject")) ||
-      (log.reject_reason && String(log.reject_reason).trim() !== "")
-  );
-
-  const translateField = (field: string) => {
-    const dictionary: Record<string, string> = {
-        form_status: "สถานะ",
-        form_status_id: "สถานะ",
-        award_type: "ประเภทรางวัล",
-        award_type_id: "ประเภทรางวัล",
-        faculty_id: "คณะ",
-        department_id: "ภาควิชา"
-    };
-    return dictionary[field] || field;
-  };
-
-  const formatValue = (field: string, value: any) => {
-    if (!value) return "-";
-    if (field === "form_status" || field === "form_status_id") {
-        const id = parseInt(value, 10);
-        if (id === 1) return "รอหัวหน้าภาควิชาพิจารณา";
-        const status = metaData.statuses.find((s: any) => s.form_status_id === id);
-        return status ? status.form_status_name.replace(/_/g, ' ') : value;
-    }
-    if (field === "faculty_id") {
-        const fac = metaData.faculties.find((f: any) => f.faculty_id === parseInt(value, 10));
-        return fac ? fac.faculty_name : value;
-    }
-    if (field === "department_id") {
-        const dept = metaData.departments.find((d: any) => d.department_id === parseInt(value, 10));
-        return dept ? dept.department_name : value;
-    }
-    return value;
-  };
-
-  const awardStr = item.award_type || item.award_type_name || "";
-  const isActivity = awardStr.includes("กิจกรรม");
-  const isInnovation = awardStr.includes("นวัตกรรม");
-  const isBehavior = awardStr.includes("ประพฤติดี");
-  const isOther = !isActivity && !isInnovation && !isBehavior;
-
-  let themeKey = "default";
-  if (isActivity) themeKey = "activity";
-  if (isInnovation) themeKey = "innovation";
-  if (isBehavior) themeKey = "behavior";
-  if (isOther && awardStr) themeKey = "other";
-  const theme = THEME_STYLES[themeKey];
+  // แปลงปีการศึกษาเป็น พ.ศ.
+  const displayYear = Number(item.academic_year) + 543;
 
   return (
     <div className="space-y-8 animate-fade-in-up">
-        {/*  กล่องแสดงเหตุผลการปฏิเสธ (ถ้ามี) */}
-        {rejectedLogs.length > 0 && (
-            <div className="space-y-4">
-                {rejectedLogs.map((log: any, index: number) => (
-                    <div key={log.approval_log_id || index} className="bg-rose-50 border border-rose-200 p-6 md:p-8 rounded-[32px] shadow-sm relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-rose-400 to-red-600"></div>
-                        <h3 className="text-xl md:text-2xl font-black text-rose-800 mb-2 flex items-center gap-3">
-                            <AlertCircle className="w-7 h-7 text-rose-600" />
-                            ฟอร์มถูกตีกลับให้แก้ไขโดย: {log.role_name || getRoleFromStatus(item.form_status)}
-                        </h3>
-                        <p className="text-sm font-bold text-rose-500 mb-5 flex items-center gap-2">
-                            <Clock className="w-4 h-4" />
-                            เมื่อวันที่: {formatDateTimeDisplay(log.operation_date || log.approved_at || log.created_at || item.latest_update)}
-                        </p>
-                        <div className="space-y-3">
-                            <label className="text-sm font-bold text-rose-700 bg-rose-200/50 px-3 py-1 rounded-md inline-block">ข้อเสนอแนะ / เหตุผลที่ปฏิเสธ:</label>
-                            <div className="w-full bg-white border border-rose-200 rounded-2xl px-5 py-4 text-[15px] font-medium text-gray-800 whitespace-pre-wrap shadow-inner leading-relaxed">
-                                {log.reject_reason || item.reject_reason || "ไม่มีการระบุเหตุผลประกอบ"}
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        )}
 
         {/* SECTION 1: TIMELINE & STATUS */}
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-200/60 p-8 md:p-10">
             <div className="flex flex-col lg:flex-row justify-between items-start gap-8 mb-12 border-b border-slate-100 pb-8">
                 <div className="space-y-6 flex-1">
                     <span className="px-4 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-black tracking-widest uppercase border border-indigo-100">
-                        ปีการศึกษา {item.academic_year} / {item.semester}
+                        ปีการศึกษา {displayYear} / {item.semester}
                     </span>
                     <h3 className="text-3xl font-black text-slate-800 tracking-tight leading-tight">รางวัล: {item.award_type}</h3>
                     <div className="flex flex-wrap items-center gap-3">
@@ -567,7 +416,7 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
             </div>
 
             {/* Progress Bar Timeline */}
-            <div className="relative mb-16 mt-8 hidden md:block px-2">
+            <div className="relative mb-8 mt-8 hidden md:block px-2">
                 <div className="absolute top-[26px] left-[28px] right-[28px] h-[6px] flex items-center z-0">
                     {Array.from({ length: 7 }).map((_, i) => {
                         const stepTarget = i + 2; 
@@ -632,76 +481,6 @@ function SubmissionDetailView({ item, metaData }: { item: any, metaData: any }) 
                         );
                     })}
                 </div>
-            </div>
-
-            {/*  Decision Log Toggle & Display */}
-            <div className="mt-14 border-t border-slate-100 pt-6 flex flex-col items-center">
-                <button onClick={() => setShowLogs(!showLogs)} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-all bg-slate-50 hover:bg-indigo-50 px-6 py-2.5 rounded-full border border-slate-200">
-                    <History size={16} /> 
-                    {showLogs ? "ซ่อนประวัติการดำเนินการ" : "ดูประวัติการดำเนินการ (Logs)"}
-                    {showLogs ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </button>
-                <AnimatePresence>
-                    {showLogs && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden w-full mt-6">
-                            <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-6 space-y-4">
-                                {displayLogs.length > 0 ? displayLogs.map((log: any, i: number) => {
-                                    
-                                    const isApproveLog = log.approval_status === "approve" || log.operation === "approve";
-                                    const isRejectLog = log.approval_status === "reject" || log.operation === "reject";
-                                    
-                                    const actionText = isApproveLog ? "เห็นชอบ (Approve)" : isRejectLog ? "ไม่เห็นชอบ (ตีกลับ)" : "ดำเนินการพิจารณา";
-                                    const colorClass = isApproveLog ? "text-emerald-600" : isRejectLog ? "text-rose-600" : "text-indigo-600";
-                                    const bgClass = isApproveLog ? "bg-emerald-50 border-emerald-200" : isRejectLog ? "bg-rose-50 border-rose-200" : "bg-indigo-50 border-indigo-200";
-                                    
-                                    // หากไม่มี role name ส่งมา ให้คำนวณจากสถานะ
-                                    const roleName = log.role_name || (isRejectLog ? getRoleFromStatus(item.form_status) : "ผู้พิจารณาคำร้อง");
-
-                                    return (
-                                        <div key={i} className={`flex gap-5 items-start text-sm bg-white p-5 rounded-2xl shadow-sm border ${isRejectLog ? 'border-rose-100 hover:border-rose-300' : 'border-slate-100 hover:border-indigo-300'} transition-colors`}>
-                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 border ${bgClass} ${colorClass}`}>
-                                                {isApproveLog ? <CheckCircle2 size={20} /> : isRejectLog ? <XCircle size={20} /> : <UserCheck size={20} />}
-                                            </div>
-                                            <div className="flex-1 w-full">
-                                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
-                                                    <p className="font-bold text-slate-800 text-base">
-                                                        ผลการพิจารณา: <span className={colorClass}>{actionText}</span>
-                                                    </p>
-                                                    <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5 w-fit">
-                                                        <Clock size={12}/> {formatDateTimeDisplay(log.operation_date || log.approved_at || log.created_at)}
-                                                    </span>
-                                                </div>
-                                                
-                                                <p className="text-sm font-medium text-slate-600 mb-3 flex items-center gap-2 flex-wrap">
-                                                    <UserCircle2 size={16} className="text-slate-400" />
-                                                    ผู้ดำเนินการ: <span className="text-indigo-600">{roleName}</span> 
-                                                    <span className="text-slate-400 font-normal">(ID: {log.user_id || log.reviewer_user_id || "ระบบ"})</span>
-                                                </p>
-
-                                                {/* แสดงเหตุผลถ้ามีการตีกลับใน Log นั้นๆ */}
-                                                {isRejectLog && (log.reject_reason || item.reject_reason) && (
-                                                    <div className="mt-3 p-4 bg-rose-50/80 border border-rose-100 rounded-xl">
-                                                        <p className="text-rose-800 font-bold text-xs mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
-                                                            <FileText size={12} /> เหตุผลที่แจ้งให้แก้ไข
-                                                        </p>
-                                                        <p className="text-rose-600 text-sm font-medium whitespace-pre-wrap leading-relaxed">
-                                                            {log.reject_reason || item.reject_reason}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )
-                                }) : (
-                                    <div className="text-center py-10">
-                                        <History className="w-12 h-12 mx-auto text-slate-300 mb-3 opacity-50" />
-                                        <p className="text-slate-500 font-medium">ยังไม่มีประวัติการดำเนินการพิจารณาคำร้องนี้</p>
-                                    </div>
-                                )}
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
             </div>
         </div>
 

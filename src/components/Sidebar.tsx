@@ -70,7 +70,6 @@ interface SidebarProps { isCollapsed: boolean; toggleSidebar: () => void; }
 // 2. Constants & Helpers
 // ==========================================
 
-const API_BASE_URL = "";
 const ROLE_NAMES_TH: Record<string, string> = {
   student: "นักศึกษา",
   head_of_department: "หัวหน้าภาควิชา",

@@ -53,54 +53,38 @@ export default function LoginPage() {
     window.location.href = `/auth/google/login`;
   };
 
-  // Helper: Role-based Redirect พร้อม Logic เช็ค isChairman
-  const handleRedirect = (user: LoginResponse["user"]) => {
-    const roleId = Number(user.role_id);
-    const firstLogin = user.is_first_login;
-    const isChairman = user.committee_data?.is_chairman || user.is_chairman || false;
+  // เลื่อนหาฟังก์ชัน handleRedirect แล้วเปลี่ยนเป็นโค้ดนี้ครับ
+  const handleRedirect = (user: any) => {
+    const roleId = Number(user?.role_id ?? user?.RoleID ?? user?.roleId);
+    const firstLogin = user?.is_first_login ?? user?.IsFirstLogin;
+
+    let isChairman = false;
+    const committeeData = user?.committee_data || user?.CommitteeData || {};
+    const chairmanFlag = committeeData?.is_chairman ?? committeeData?.IsChairman ?? user?.is_chairman ?? user?.IsChairman;
+    
+    if (chairmanFlag === true || chairmanFlag === "true" || chairmanFlag === 1) {
+        isChairman = true;
+    }
 
     if (firstLogin) {
-      if (roleId === 1) {
-        router.push("/student/auth/first-login");
-        return;
-      }
-      if (roleId === 8) {
-        router.push("/organization/auth/first-login");
-        return;
-      }
+      if (roleId === 1) return router.push("/student/auth/first-login");
+      if (roleId === 8) return router.push("/organization/auth/first-login");
     }
 
     let targetPath = "/";
-
     switch (roleId) {
-      case 1:
-        targetPath = "/student/main/hall-of-fame";
-        break;
-      case 2:
-        targetPath = "/head-of-department/hall-of-fame";
-        break;
-      case 3:
-        targetPath = "/associate-dean/hall-of-fame";
-        break;
-      case 4:
-        targetPath = "/dean/hall-of-fame";
-        break;
-      case 5:
-        targetPath = "/student-development/hall-of-fame";
-        break;
-      case 6:
+      case 1: targetPath = "/student/main/hall-of-fame"; break;
+      case 2: targetPath = "/head-of-department/hall-of-fame"; break;
+      case 3: targetPath = "/associate-dean/hall-of-fame"; break;
+      case 4: targetPath = "/dean/hall-of-fame"; break;
+      case 5: targetPath = "/student-development/hall-of-fame"; break;
+      case 6: 
         targetPath = isChairman 
           ? "/chairman-of-student-development-committee/hall-of-fame"
           : "/student-development-committee/hall-of-fame";
         break;
-      case 7:
-        targetPath = "/chancellor/hall-of-fame"; 
-        break;
-      case 8:
-        targetPath = "/organization/main/hall-of-fame"; 
-        break;
-      default:
-        targetPath = "/";
+      case 7: targetPath = "/chancellor/hall-of-fame"; break;
+      case 8: targetPath = "/organization/main/hall-of-fame"; break;
     }
     
     router.push(targetPath);
@@ -113,9 +97,16 @@ export default function LoginPage() {
     try {
       const response = await api.post(`/auth/login`, { email, password });
       const backendData = response.data;
-      const roleId = backendData.user.role_id;
+      const token = backendData.token;
 
-      login(backendData.token, roleId.toString(), backendData.user);
+      const meResponse = await api.get(`/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      const fullUser = meResponse.data?.user || meResponse.data;
+      const roleId = fullUser.role_id ?? fullUser.RoleID;
+
+      login(backendData.token, roleId.toString(), fullUser);
 
       await Swal.fire({
         icon: "success",
