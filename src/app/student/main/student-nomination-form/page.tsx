@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, ChangeEvent } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import Swal from "sweetalert2";
 import { useRouter } from "next/navigation";
@@ -153,12 +154,11 @@ const nominationService = {
 const MONTH_NAMES = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 const DAY_NAMES = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 
-function PremiumBirthDatePicker({ value, onChange, label, theme, req }: any) {
+function PremiumBirthDatePicker({ id, value, onChange, label, theme, req, hasError, clearError, disabled }: any) {
   const [isOpen, setIsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'date' | 'month' | 'year'>('date');
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Default ให้เป็น 20 ปีที่แล้ว ถ้านิสิตยังไม่เคยเลือกวันเกิด
   const defaultDate = new Date();
   defaultDate.setFullYear(defaultDate.getFullYear() - 20);
   
@@ -184,16 +184,15 @@ function PremiumBirthDatePicker({ value, onChange, label, theme, req }: any) {
 
   const handleSelectDate = (day: number, month: number, year: number) => {
     const selected = new Date(year, month, day);
-    // Format C.E. (ค.ศ.) YYYY-MM-DD สำหรับส่งไปหลังบ้าน
     const y = selected.getFullYear();
     const m = String(selected.getMonth() + 1).padStart(2, '0');
     const d = String(selected.getDate()).padStart(2, '0');
     onChange(`${y}-${m}-${d}`);
+    if (clearError) clearError();
     setIsOpen(false);
     setViewMode('date');
   };
 
-  // 42-grid system for days
   const getCalendarDays = () => {
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
@@ -226,169 +225,177 @@ function PremiumBirthDatePicker({ value, onChange, label, theme, req }: any) {
   const yearsArray = Array.from({length: 20}, (_, i) => startYear + i);
 
   return (
-    // 🚨 ปรับ z-index ให้เวลาเปิด ปฏิทินลอยทับทุกอย่าง
-    <div className={`relative w-full group ${isOpen ? 'z-[100]' : 'z-10'}`} ref={containerRef}>
-      <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
+    <div id={id} className={`scroll-mt-32 ${disabled ? "opacity-50 pointer-events-none" : ""}`} ref={containerRef}>
+      <label className={`block text-sm font-bold mb-2 ml-1 transition-colors ${hasError ? 'text-rose-600' : 'text-slate-700'}`}>
         {label} {req && <span className="text-rose-500">*</span>}
       </label>
       
-      <div 
-        onClick={() => setIsOpen(!isOpen)}
-        className={`flex w-full items-center justify-between bg-white/50 backdrop-blur-sm hover:bg-white transition-all border border-slate-200 rounded-2xl px-4 py-[14px] pl-12 shadow-sm focus-within:ring-4 focus-within:bg-white cursor-pointer ${theme.ring} ${isOpen ? 'border-slate-300 bg-white ring-4 ring-emerald-500/10' : 'hover:border-slate-300'}`}
-      >
-        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-            <Calendar className={`w-5 h-5 transition-colors ${isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500'}`} />
+      {/* 🌟 ปรับโครงสร้างส่วนนี้ให้เหมือน Input เพื่อไม่ให้ไอคอนกระโดด */}
+      <div className={`relative group w-full ${isOpen ? 'z-[100]' : 'z-10'}`}>
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
+          <Calendar className={`w-5 h-5 transition-colors ${hasError ? 'text-rose-500' : (isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500')}`} />
         </div>
-        <span className={`text-base font-medium truncate ${value ? 'text-slate-800' : 'text-slate-400'}`}>
-          {value ? formatDisplayDate(value) : "วัน/เดือน/ปีเกิด (คลิกเพื่อเลือก)"}
-        </span>
         
-        {value ? (
-          <div onClick={(e) => { e.stopPropagation(); onChange(""); }} className="p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors z-20">
-            <X size={18} />
-          </div>
-        ) : (
-          <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
-        )}
-      </div>
+        <div 
+          onClick={() => !disabled && setIsOpen(!isOpen)}
+          className={`w-full cursor-pointer rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all duration-300 flex items-center justify-between
+            ${hasError 
+                ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900' 
+                : (isOpen ? `bg-white border border-slate-300 shadow-md ${theme.ring}` : 'bg-white/50 backdrop-blur-sm border border-slate-200 hover:border-slate-300')
+            }
+          `}
+        >
+          <span className={`font-medium truncate pr-4 transition-colors ${value ? (hasError ? 'text-rose-900' : 'text-slate-800') : (hasError ? 'text-rose-400' : 'text-slate-400')}`}>
+            {value ? formatDisplayDate(value) : "วัน/เดือน/ปีเกิด (คลิกเพื่อเลือก)"}
+          </span>
+          
+          {value ? (
+            <div onClick={(e) => { e.stopPropagation(); onChange(""); if(clearError) clearError(); }} className={`p-1 rounded-md transition-colors z-20 shrink-0 ${hasError ? 'text-rose-400 hover:text-rose-700' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}>
+              <X size={18} />
+            </div>
+          ) : (
+            <ChevronDown className={`w-5 h-5 transition-transform duration-300 flex-shrink-0 ${hasError ? 'text-rose-400' : 'text-slate-400'} ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
+          )}
+        </div>
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="absolute top-full left-0 right-0 sm:right-auto sm:min-w-[340px] mt-2 bg-white/95 backdrop-blur-2xl border border-slate-100 rounded-[24px] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.2)] z-[9999] p-5 origin-top-left"
-          >
-            {/* HEADER */}
-            <div className="flex items-center justify-between mb-5">
-              <button 
-                type="button" 
-                onClick={(e) => { 
-                    e.stopPropagation();
-                    if (viewMode === 'year') setYearPage(p => p - 20);
-                    else if (viewMode === 'date') setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
-                    else setViewDate(new Date(viewDate.getFullYear() - 1, viewDate.getMonth(), 1));
-                }} 
-                className="p-2 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors shadow-sm border border-slate-100"
-              >
-                <ChevronLeft size={18} />
-              </button>
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="absolute top-full left-0 right-0 sm:right-auto sm:min-w-[340px] mt-2 bg-white/95 backdrop-blur-2xl border border-slate-100 rounded-[24px] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.2)] z-[9999] p-5 origin-top-left"
+            >
+              {/* HEADER */}
+              <div className="flex items-center justify-between mb-5">
+                <button 
+                  type="button" 
+                  onClick={(e) => { 
+                      e.stopPropagation();
+                      if (viewMode === 'year') setYearPage(p => p - 20);
+                      else if (viewMode === 'date') setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
+                      else setViewDate(new Date(viewDate.getFullYear() - 1, viewDate.getMonth(), 1));
+                  }} 
+                  className="p-2 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors shadow-sm border border-slate-100"
+                >
+                  <ChevronLeft size={18} />
+                </button>
 
-              <div className="flex items-center gap-1">
-                {viewMode === 'date' && (
-                  <>
-                    <button type="button" onClick={() => setViewMode('month')} className={`px-2 py-1 font-bold text-[15px] rounded-lg transition-colors ${theme.dateHover} text-slate-800`}>
-                      {MONTH_NAMES[viewDate.getMonth()]}
+                <div className="flex items-center gap-1">
+                  {viewMode === 'date' && (
+                    <>
+                      <button type="button" onClick={() => setViewMode('month')} className={`px-2 py-1 font-bold text-[15px] rounded-lg transition-colors ${theme.dateHover} text-slate-800`}>
+                        {MONTH_NAMES[viewDate.getMonth()]}
+                      </button>
+                      <button type="button" onClick={() => { setViewMode('year'); setYearPage(viewDate.getFullYear()); }} className={`px-2 py-1 font-bold text-[15px] rounded-lg transition-colors ${theme.dateHover} text-slate-800`}>
+                        {viewDate.getFullYear() + 543}
+                      </button>
+                    </>
+                  )}
+                  {viewMode === 'month' && (
+                    <button type="button" onClick={() => { setViewMode('year'); setYearPage(viewDate.getFullYear()); }} className={`px-3 py-1 font-bold text-[15px] rounded-lg transition-colors ${theme.dateHover} text-slate-800`}>
+                      เลือกเดือน (ปี {viewDate.getFullYear() + 543})
                     </button>
-                    <button type="button" onClick={() => { setViewMode('year'); setYearPage(viewDate.getFullYear()); }} className={`px-2 py-1 font-bold text-[15px] rounded-lg transition-colors ${theme.dateHover} text-slate-800`}>
-                      {viewDate.getFullYear() + 543}
-                    </button>
-                  </>
-                )}
-                {viewMode === 'month' && (
-                  <button type="button" onClick={() => { setViewMode('year'); setYearPage(viewDate.getFullYear()); }} className={`px-3 py-1 font-bold text-[15px] rounded-lg transition-colors ${theme.dateHover} text-slate-800`}>
-                    เลือกเดือน (ปี {viewDate.getFullYear() + 543})
-                  </button>
-                )}
-                {viewMode === 'year' && (
-                  <span className="font-bold text-[15px] text-slate-800 px-2 py-1">
-                    พ.ศ. {startYear + 543} - {startYear + 19 + 543}
-                  </span>
-                )}
+                  )}
+                  {viewMode === 'year' && (
+                    <span className="font-bold text-[15px] text-slate-800 px-2 py-1">
+                      พ.ศ. {startYear + 543} - {startYear + 19 + 543}
+                    </span>
+                  )}
+                </div>
+
+                <button 
+                  type="button" 
+                  onClick={(e) => { 
+                      e.stopPropagation();
+                      if (viewMode === 'year') setYearPage(p => p + 20);
+                      else if (viewMode === 'date') setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
+                      else setViewDate(new Date(viewDate.getFullYear() + 1, viewDate.getMonth(), 1));
+                  }} 
+                  className="p-2 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors shadow-sm border border-slate-100"
+                >
+                  <ChevronRight size={18} />
+                </button>
               </div>
 
-              <button 
-                type="button" 
-                onClick={(e) => { 
-                    e.stopPropagation();
-                    if (viewMode === 'year') setYearPage(p => p + 20);
-                    else if (viewMode === 'date') setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
-                    else setViewDate(new Date(viewDate.getFullYear() + 1, viewDate.getMonth(), 1));
-                }} 
-                className="p-2 rounded-xl bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors shadow-sm border border-slate-100"
-              >
-                <ChevronRight size={18} />
-              </button>
-            </div>
+              {/* BODY - DATE MODE */}
+              {viewMode === 'date' && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <div className="grid grid-cols-7 gap-1 mb-2">
+                    {DAY_NAMES.map((day, i) => (
+                      <div key={day} className={`text-center text-[11px] font-black py-1 ${i === 0 ? 'text-rose-400' : i === 6 ? 'text-blue-400' : 'text-slate-400'}`}>
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-y-1.5 gap-x-1">
+                    {calendarDays.map((d, i) => {
+                      const isSel = isSelected(d.day, d.month, d.year);
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => handleSelectDate(d.day, d.month, d.year)}
+                          className={`
+                            w-9 h-9 sm:w-10 sm:h-10 mx-auto flex items-center justify-center rounded-full text-[14px] transition-all
+                            ${!d.isCurrentMonth ? 'text-slate-300 hover:text-slate-500 font-medium' : 'text-slate-700 font-semibold'}
+                            ${isSel ? `${theme.dateSel} scale-105 z-10 relative` : `${theme.dateHover}`}
+                          `}
+                        >
+                          {d.day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
 
-            {/* BODY - DATE MODE */}
-            {viewMode === 'date' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <div className="grid grid-cols-7 gap-1 mb-2">
-                  {DAY_NAMES.map((day, i) => (
-                    <div key={day} className={`text-center text-[11px] font-black py-1 ${i === 0 ? 'text-rose-400' : i === 6 ? 'text-blue-400' : 'text-slate-400'}`}>
-                      {day}
-                    </div>
+              {/* BODY - MONTH MODE */}
+              {viewMode === 'month' && (
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="grid grid-cols-3 gap-3">
+                  {MONTH_NAMES.map((m, i) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => {
+                          setViewDate(new Date(viewDate.getFullYear(), i, 1));
+                          setViewMode('date');
+                      }}
+                      className={`py-4 rounded-2xl text-sm font-bold transition-all
+                          ${viewDate.getMonth() === i ? `${theme.dateSel} shadow-md` : `bg-slate-50 text-slate-700 border border-slate-100 ${theme.dateHover}`}
+                      `}
+                    >
+                      {m}
+                    </button>
                   ))}
-                </div>
-                <div className="grid grid-cols-7 gap-y-1.5 gap-x-1">
-                  {calendarDays.map((d, i) => {
-                    const isSel = isSelected(d.day, d.month, d.year);
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => handleSelectDate(d.day, d.month, d.year)}
-                        className={`
-                          w-9 h-9 sm:w-10 sm:h-10 mx-auto flex items-center justify-center rounded-full text-[14px] transition-all
-                          ${!d.isCurrentMonth ? 'text-slate-300 hover:text-slate-500 font-medium' : 'text-slate-700 font-semibold'}
-                          ${isSel ? `${theme.dateSel} scale-105 z-10 relative` : `${theme.dateHover}`}
-                        `}
-                      >
-                        {d.day}
-                      </button>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
+                </motion.div>
+              )}
 
-            {/* BODY - MONTH MODE */}
-            {viewMode === 'month' && (
-              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="grid grid-cols-3 gap-3">
-                {MONTH_NAMES.map((m, i) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => {
-                        setViewDate(new Date(viewDate.getFullYear(), i, 1));
-                        setViewMode('date');
-                    }}
-                    className={`py-4 rounded-2xl text-sm font-bold transition-all
-                        ${viewDate.getMonth() === i ? `${theme.dateSel} shadow-md` : `bg-slate-50 text-slate-700 border border-slate-100 ${theme.dateHover}`}
-                    `}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </motion.div>
-            )}
-
-            {/* BODY - YEAR MODE */}
-            {viewMode === 'year' && (
-              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="grid grid-cols-4 gap-2">
-                {yearsArray.map((y) => (
-                  <button
-                    key={y}
-                    type="button"
-                    onClick={() => {
-                        setViewDate(new Date(y, viewDate.getMonth(), 1));
-                        setViewMode('month');
-                    }}
-                    className={`py-3 rounded-xl text-sm font-bold transition-all
-                        ${viewDate.getFullYear() === y ? `${theme.dateSel} shadow-md` : `bg-slate-50 text-slate-700 border border-slate-100 ${theme.dateHover}`}
-                    `}
-                  >
-                    {y + 543}
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+              {/* BODY - YEAR MODE */}
+              {viewMode === 'year' && (
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="grid grid-cols-4 gap-2">
+                  {yearsArray.map((y) => (
+                    <button
+                      key={y}
+                      type="button"
+                      onClick={() => {
+                          setViewDate(new Date(y, viewDate.getMonth(), 1));
+                          setViewMode('month');
+                      }}
+                      className={`py-3 rounded-xl text-sm font-bold transition-all
+                          ${viewDate.getFullYear() === y ? `${theme.dateSel} shadow-md` : `bg-slate-50 text-slate-700 border border-slate-100 ${theme.dateHover}`}
+                      `}
+                    >
+                      {y + 543}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -407,6 +414,9 @@ export default function StudentNominationForm() {
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [isOutOfPeriod, setIsOutOfPeriod] = useState(false);
   const [currentTermInfo, setCurrentTermInfo] = useState<{year: number, semester: number} | null>(null);
+
+  // 🌟 เพิ่ม State สำหรับเก็บ ID ช่องที่ Error (นำไปทำ Highlight)
+  const [errorFieldId, setErrorFieldId] = useState<string | null>(null);
 
   // --- Form Data ---
   const [awardType, setAwardType] = useState(""); 
@@ -427,6 +437,11 @@ export default function StudentNominationForm() {
   const fileSizePercentage = (totalFileSize / MAX_TOTAL_FILE_SIZE_BYTES) * 100;
 
   const theme = useMemo(() => THEME_STYLES[awardType] || THEME_STYLES.default, [awardType]);
+
+  // ฟังก์ชันช่วยลบ Error เมื่อมีการพิมพ์/แก้ไข
+  const clearErr = () => {
+    if (errorFieldId) setErrorFieldId(null);
+  };
 
   // ==========================================
   // 3. Initialization
@@ -489,6 +504,7 @@ export default function StudentNominationForm() {
   };
 
   const handleProfileChange = (key: keyof UserProfile, value: string) => {
+    clearErr(); // ลบ Error เสมอเมื่อมีการแก้
     if (key === 'date_of_birth') {
       setUserProfile(p => ({ ...p, date_of_birth: value, age: calculateAge(value) }));
     } else if (key === 'gpa') {
@@ -501,6 +517,7 @@ export default function StudentNominationForm() {
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    clearErr();
     if (e.target.files) {
       const files = Array.from(e.target.files);
       if (files.some(f => f.type !== "application/pdf")) return Swal.fire({ icon: "warning", title: "เฉพาะไฟล์ PDF", text: "กรุณาอัปโหลดเฉพาะไฟล์นามสกุล .pdf" });
@@ -511,27 +528,37 @@ export default function StudentNominationForm() {
   };
 
   // ==========================================
-  // 5. Validation Logic
+  // 5. Validation Logic 🌟 อัปเกรดให้ส่ง ID กลับมาทำ Highlight
   // ==========================================
 
-  const validateForm = () => {
-    if (!awardType) return "กรุณาเลือกประเภทรางวัล";
-    if (awardType === "other" && !otherTitle.trim()) return "กรุณาระบุชื่อรางวัลหรือประเภทที่ยื่น";
+  const validateForm = (): { msg: string, id: string } | null => {
+    if (!awardType) return { msg: "กรุณาเลือกประเภทรางวัล", id: "section-award-type" };
+    if (awardType === "other" && !otherTitle.trim()) return { msg: "กรุณาระบุชื่อรางวัลหรือประเภทที่ยื่น", id: "input-otherTitle" };
 
-    if (!userProfile.student_year) return "กรุณาเลือกชั้นปี";
-    if (!userProfile.advisor_name.trim()) return "กรุณากรอกชื่ออาจารย์ที่ปรึกษา";
-    if (userProfile.phone_number.length !== 10) return "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก";
-    if (!userProfile.address.trim()) return "กรุณากรอกที่อยู่ปัจจุบัน";
-    if (!userProfile.date_of_birth) return "กรุณาระบุวันเกิด";
+    if (!userProfile.student_year) return { msg: "กรุณาเลือกชั้นปี", id: "input-student_year" };
     
-    const currentAge = parseInt(userProfile.age);
-    if (isNaN(currentAge) || currentAge < 18) return "อายุต้อง 18 ปีบริบูรณ์ขึ้นไป";
-
+    if (!userProfile.gpa || userProfile.gpa.trim() === "") return { msg: "กรุณากรอกเกรดเฉลี่ยสะสม (GPA)", id: "input-gpa" };
     const gpaNum = parseFloat(userProfile.gpa);
-    if (isNaN(gpaNum) || gpaNum < 0 || gpaNum > 4.00) return "เกรดเฉลี่ยต้องอยู่ระหว่าง 0.00 - 4.00";
+    if (isNaN(gpaNum) || gpaNum < 0 || gpaNum > 4.00) return { msg: "เกรดเฉลี่ยต้องอยู่ระหว่าง 0.00 - 4.00", id: "input-gpa" };
 
-    if (!otherDetails.trim()) return "กรุณากรอกเหตุผลในการเสนอชื่อและความโดดเด่นของผลงาน";
-    if (selectedFiles.length === 0) return "กรุณาอัปโหลดเอกสารประกอบ (PDF) อย่างน้อย 1 ไฟล์";
+    if (!userProfile.advisor_name.trim()) return { msg: "กรุณากรอกชื่ออาจารย์ที่ปรึกษา", id: "input-advisor_name" };
+    if (userProfile.advisor_name.trim().length < 5) return { msg: "กรุณากรอกชื่อ-นามสกุลอาจารย์ที่ปรึกษาให้ครบถ้วน", id: "input-advisor_name" };
+
+    if (!userProfile.phone_number) return { msg: "กรุณากรอกเบอร์โทรศัพท์ติดต่อ", id: "input-phone_number" };
+    const phoneRegex = /^0\d{9}$/;
+    if (!phoneRegex.test(userProfile.phone_number)) return { msg: "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก และขึ้นต้นด้วย 0 เท่านั้น", id: "input-phone_number" };
+
+    if (!userProfile.date_of_birth) return { msg: "กรุณาระบุวันเกิด", id: "input-date_of_birth" };
+    const currentAge = parseInt(userProfile.age);
+    if (isNaN(currentAge) || currentAge < 18 || currentAge > 100) return { msg: "อายุต้อง 18 ปีบริบูรณ์ขึ้นไป (ระบบรองรับ 18 - 100 ปี)", id: "input-date_of_birth" };
+    
+    if (!userProfile.address.trim()) return { msg: "กรุณากรอกที่อยู่ปัจจุบัน", id: "input-address" };
+    if (userProfile.address.trim().length < 10) return { msg: "กรุณากรอกที่อยู่ให้ชัดเจนและครบถ้วนยิ่งขึ้น", id: "input-address" };
+
+    if (!otherDetails.trim()) return { msg: "กรุณากรอกเหตุผลในการเสนอชื่อและความโดดเด่นของผลงาน", id: "input-otherDetails" };
+    if (otherDetails.trim().length < 20) return { msg: "กรุณาอธิบายรายละเอียดให้ชัดเจนยิ่งขึ้น (พิมพ์อย่างน้อย 20 ตัวอักษร)", id: "input-otherDetails" };
+
+    if (selectedFiles.length === 0) return { msg: "กรุณาอัปโหลดเอกสารประกอบ (PDF) อย่างน้อย 1 ไฟล์", id: "input-fileUpload" };
 
     return null;
   };
@@ -543,8 +570,32 @@ export default function StudentNominationForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const err = validateForm();
-    if (err) return Swal.fire({ icon: "warning", title: "ข้อมูลไม่ครบถ้วน", text: err, confirmButtonColor: "#3b82f6", customClass: { popup: 'rounded-[24px]' } });
+    if (err) {
+      setErrorFieldId(err.id); // ตั้งค่า ID ให้ Highlight แดง
+
+      Swal.fire({ 
+        icon: "warning", 
+        title: "ข้อมูลไม่ครบถ้วน", 
+        text: err.msg, 
+        confirmButtonColor: "#3b82f6", 
+        customClass: { popup: 'rounded-[24px]' },
+        returnFocus: false // 🌟 ป้องกันหน้าจอกระตุกกลับลงมาข้างล่าง
+      }).then(() => {
+        // เลื่อนจอหลังจากกดปิด Popup แล้ว
+        const el = document.getElementById(err.id);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          setTimeout(() => {
+            const inputEl = el.querySelector('input, select, textarea') as HTMLElement;
+            if (inputEl) inputEl.focus({ preventScroll: true });
+          }, 300);
+        }
+      });
+      
+      return;
+    }
     
+    setErrorFieldId(null);
     const token = localStorage.getItem("token");
     if (!token) return;
 
@@ -636,16 +687,18 @@ export default function StudentNominationForm() {
             
             {/* Step 1: Award Type */}
             <Section num={1} zIndex={40} title="เลือกประเภทรางวัลที่ต้องการเสนอชื่อ" theme={theme}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <TypeCard type="activity" active={awardType} set={setAwardType} title="กิจกรรมเสริมหลักสูตร" sub="ผู้นำ/แข่งขัน" icon={Trophy} />
-                <TypeCard type="innovation" active={awardType} set={setAwardType} title="ความคิดสร้างสรรค์เเละนวัตกรรม" sub="สิ่งประดิษฐ์/วิจัย" icon={Lightbulb} />
-                <TypeCard type="behavior" active={awardType} set={setAwardType} title="ความประพฤติดี" sub="จิตอาสา/คุณธรรม" icon={Heart} />
-                <TypeCard type="other" active={awardType} set={setAwardType} title="อื่นๆ" sub="ระบุชื่อรางวัลเอง" icon={Star} />
+              <div id="section-award-type" className={`scroll-mt-32 rounded-3xl p-1 transition-all duration-300 ${errorFieldId === "section-award-type" ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20" : ""}`}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <TypeCard type="activity" active={awardType} set={(v:any) => { setAwardType(v); clearErr(); }} title="กิจกรรมเสริมหลักสูตร" sub="ผู้นำ/แข่งขัน" icon={Trophy} />
+                  <TypeCard type="innovation" active={awardType} set={(v:any) => { setAwardType(v); clearErr(); }} title="ความคิดสร้างสรรค์เเละนวัตกรรม" sub="สิ่งประดิษฐ์/วิจัย" icon={Lightbulb} />
+                  <TypeCard type="behavior" active={awardType} set={(v:any) => { setAwardType(v); clearErr(); }} title="ความประพฤติดี" sub="จิตอาสา/คุณธรรม" icon={Heart} />
+                  <TypeCard type="other" active={awardType} set={(v:any) => { setAwardType(v); clearErr(); }} title="อื่นๆ" sub="ระบุชื่อรางวัลเอง" icon={Star} />
+                </div>
               </div>
               <AnimatePresence>
                 {awardType === "other" && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden mt-6">
-                    <Input label="ชื่อรางวัลหรือประเภทที่ต้องการยื่นเสนอ" val={otherTitle} set={setOtherTitle} icon={Star} theme={theme} placeholder="เช่น รางวัลเยาวชนต้นแบบ, ผู้สร้างชื่อเสียงให้มหาวิทยาลัย..." req />
+                    <Input id="input-otherTitle" label="ชื่อรางวัลหรือประเภทที่ต้องการยื่นเสนอ" val={otherTitle} set={setOtherTitle} icon={Star} theme={theme} placeholder="เช่น รางวัลเยาวชนต้นแบบ, ผู้สร้างชื่อเสียงให้มหาวิทยาลัย..." req hasError={errorFieldId === "input-otherTitle"} clearError={clearErr} />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -667,19 +720,19 @@ export default function StudentNominationForm() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-200/60">
-                      {/* 🚨 แก้ไขปัญหาชั้นปีโดนบัง: ใช้ Select Component ที่มีการอัพเดท z-index เรียบร้อยแล้ว */}
-                      <Select label="ชั้นปี" val={userProfile.student_year} set={(v: string) => handleProfileChange("student_year", v)} options={[1,2,3,4,5,6].map(y => ({v:y, l:`ปี ${y}`}))} icon={GraduationCap} theme={theme} req />
-                      <Input label="เกรดเฉลี่ยสะสม (GPA)" val={userProfile.gpa} set={(v: string) => handleProfileChange("gpa", v)} icon={Percent} theme={theme} req />
-                      <Input label="ชื่ออาจารย์ที่ปรึกษา" val={userProfile.advisor_name} set={(v: string) => handleProfileChange("advisor_name", v)} icon={GraduationCap} theme={theme} req />
-                      <Input label="เบอร์โทรศัพท์ติดต่อ" val={userProfile.phone_number} set={(v: string) => handleProfileChange("phone_number", v)} icon={Phone} theme={theme} req max={10} />
+                      <Select id="input-student_year" label="ชั้นปี" val={userProfile.student_year} set={(v: string) => handleProfileChange("student_year", v)} options={[1,2,3,4,5,6].map(y => ({v:y, l:`ปี ${y}`}))} icon={GraduationCap} theme={theme} req hasError={errorFieldId === "input-student_year"} clearError={clearErr} />
+                      <Input id="input-gpa" label="เกรดเฉลี่ยสะสม (GPA)" val={userProfile.gpa} set={(v: string) => handleProfileChange("gpa", v)} icon={Percent} theme={theme} req hasError={errorFieldId === "input-gpa"} clearError={clearErr} />
+                      <Input id="input-advisor_name" label="ชื่ออาจารย์ที่ปรึกษา" val={userProfile.advisor_name} set={(v: string) => handleProfileChange("advisor_name", v)} icon={GraduationCap} theme={theme} req hasError={errorFieldId === "input-advisor_name"} clearError={clearErr} />
+                      <Input id="input-phone_number" label="เบอร์โทรศัพท์ติดต่อ" val={userProfile.phone_number} set={(v: string) => handleProfileChange("phone_number", v)} icon={Phone} theme={theme} req max={10} hasError={errorFieldId === "input-phone_number"} clearError={clearErr} />
                       
-                      {/* ใช้ Premium Date Picker สำหรับวันเกิด */}
                       <PremiumBirthDatePicker 
+                          id="input-date_of_birth"
                           label="วันเกิด" 
                           value={userProfile.date_of_birth} 
                           onChange={(v: string) => handleProfileChange("date_of_birth", v)} 
                           theme={theme} 
                           req 
+                          hasError={errorFieldId === "input-date_of_birth"} clearError={clearErr}
                       />
                       
                       <div>
@@ -690,43 +743,61 @@ export default function StudentNominationForm() {
                         </div>
                       </div>
 
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">ที่อยู่ปัจจุบัน <span className="text-rose-500">*</span></label>
-                        <textarea value={userProfile.address} onChange={(e) => handleProfileChange("address", e.target.value)} rows={3} className={`w-full bg-white/50 backdrop-blur-sm border border-slate-200 rounded-2xl px-5 py-4 outline-none transition-all ${theme.ring} hover:border-slate-300 resize-none`} placeholder="ระบุรายละเอียดที่อยู่ปัจจุบันที่สามารถติดต่อได้..." />
+                      <div id="input-address" className="md:col-span-2 scroll-mt-32">
+                        <label className={`block text-sm font-bold mb-2 ml-1 transition-colors ${errorFieldId === "input-address" ? 'text-rose-600' : 'text-slate-700'}`}>ที่อยู่ปัจจุบัน <span className="text-rose-500">*</span></label>
+                        <textarea value={userProfile.address} onChange={(e) => handleProfileChange("address", e.target.value)} rows={3} 
+                          className={`w-full rounded-2xl px-5 py-4 outline-none transition-all resize-none font-medium
+                            ${errorFieldId === "input-address" 
+                               ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder:text-rose-300' 
+                               : `bg-white/50 backdrop-blur-sm border border-slate-200 ${theme.ring} hover:border-slate-300`}`}  
+                          placeholder="ระบุรายละเอียดที่อยู่ปัจจุบันที่สามารถติดต่อได้..." 
+                        />
                       </div>
                     </div>
                   </Section>
 
                   {/* Step 3: Specific Details */}
                   <Section num={3} zIndex={20} title="เหตุผลในการเสนอชื่อและความโดดเด่น" theme={theme}>
-                    <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
+                    <div id="input-otherDetails" className="scroll-mt-32">
+                        <label className={`block text-sm font-bold mb-2 ml-1 transition-colors ${errorFieldId === "input-otherDetails" ? 'text-rose-600' : 'text-slate-700'}`}>
                           รายละเอียด ความดี ผลงาน หรือบทบาทหน้าที่ <span className="text-rose-500">*</span>
                         </label>
-                        <textarea value={otherDetails} onChange={(e) => setOtherDetails(e.target.value)} rows={6} className={`w-full bg-white/50 backdrop-blur-sm border border-slate-200 rounded-2xl px-5 py-4 outline-none transition-all ${theme.ring} hover:border-slate-300 resize-none`} placeholder="บรรยายรายละเอียด ความดี ผลงาน หรือบทบาทหน้าที่อย่างชัดเจน..." />
+                        <textarea value={otherDetails} onChange={(e) => { setOtherDetails(e.target.value); clearErr(); }} rows={6} 
+                          className={`w-full rounded-2xl px-5 py-4 outline-none transition-all resize-none font-medium
+                            ${errorFieldId === "input-otherDetails" 
+                               ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder:text-rose-300' 
+                               : `bg-white/50 backdrop-blur-sm border border-slate-200 ${theme.ring} hover:border-slate-300`}`}  
+                          placeholder="บรรยายรายละเอียด ความดี ผลงาน หรือบทบาทหน้าที่อย่างชัดเจน..." 
+                        />
                     </div>
                   </Section>
 
                   {/* Step 4: File Uploads */}
                   <Section num={4} zIndex={10} title="แนบเอกสารหลักฐาน" theme={theme}>
-                    <div onClick={() => fileInputRef.current?.click()} className={`group relative overflow-hidden border-2 border-dashed border-slate-300 hover:border-${theme.accent}-400 rounded-[2rem] p-12 text-center cursor-pointer transition-all duration-300 bg-white/40 hover:bg-white/80`}>
-                      <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
-                      <motion.div whileHover={{ scale: 1.05 }} className={`w-20 h-20 mx-auto bg-${theme.accent}-100 rounded-full flex items-center justify-center mb-6 shadow-sm`}>
-                        <UploadCloud className={`w-10 h-10 text-${theme.accent}-600`} />
-                      </motion.div>
-                      <h4 className="text-xl font-bold text-slate-800 mb-2">ลากไฟล์มาวาง หรือ คลิกเพื่อเลือกไฟล์</h4>
-                      <p className="text-slate-500 text-sm">รองรับเฉพาะไฟล์ .PDF (ขนาดรวมไม่เกิน 10MB)</p>
-                      
-                      <div className="max-w-xs mx-auto mt-6" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between text-xs font-medium text-slate-400 mb-2">
-                          <span>พื้นที่ที่ใช้ไป</span>
-                          <span className={fileSizePercentage > 100 ? "text-rose-500" : ""}>{formatBytes(totalFileSize)} / 10MB</span>
+                    <div id="input-fileUpload" className="scroll-mt-32">
+                      <div onClick={() => { fileInputRef.current?.click(); clearErr(); }} 
+                          className={`group relative overflow-hidden border-2 border-dashed rounded-[2rem] p-12 text-center cursor-pointer transition-all duration-300 
+                            ${errorFieldId === "input-fileUpload" 
+                                ? 'bg-rose-50 border-rose-500 ring-4 ring-rose-500/20' 
+                                : `border-slate-300 hover:border-${theme.accent}-400 bg-white/40 hover:bg-white/80`}`}>
+                        <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
+                        <motion.div whileHover={{ scale: 1.05 }} className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-6 shadow-sm ${errorFieldId === "input-fileUpload" ? 'bg-rose-100 text-rose-500' : `bg-${theme.accent}-100 text-${theme.accent}-600`}`}>
+                          <UploadCloud className="w-10 h-10" />
+                        </motion.div>
+                        <h4 className={`text-xl font-bold mb-2 ${errorFieldId === "input-fileUpload" ? 'text-rose-700' : 'text-slate-800'}`}>ลากไฟล์มาวาง หรือ คลิกเพื่อเลือกไฟล์</h4>
+                        <p className={`${errorFieldId === "input-fileUpload" ? 'text-rose-500' : 'text-slate-500'} text-sm`}>รองรับเฉพาะไฟล์ .PDF (ขนาดรวมไม่เกิน 10MB)</p>
+                        
+                        <div className="max-w-xs mx-auto mt-6" onClick={e => e.stopPropagation()}>
+                          <div className="flex justify-between text-xs font-medium text-slate-400 mb-2">
+                            <span>พื้นที่ที่ใช้ไป</span>
+                            <span className={fileSizePercentage > 100 ? "text-rose-500" : ""}>{formatBytes(totalFileSize)} / 10MB</span>
+                          </div>
+                          <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                            <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(fileSizePercentage, 100)}%` }} className={`h-full ${fileSizePercentage > 100 ? 'bg-rose-500' : `bg-${theme.accent}-500`}`} />
+                          </div>
                         </div>
-                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                          <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(fileSizePercentage, 100)}%` }} className={`h-full ${fileSizePercentage > 100 ? 'bg-rose-500' : `bg-${theme.accent}-500`}`} />
-                        </div>
+                        <input type="file" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf" />
                       </div>
-                      <input type="file" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf" />
                     </div>
 
                     <AnimatePresence>
@@ -802,91 +873,135 @@ const TypeCard = ({ type, active, set, title, sub, icon: Icon }: any) => {
   );
 };
 
-const Input = ({ label, val, set, icon: Icon, theme, type = "text", req, max, placeholder }: any) => (
-  <div>
-    <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">{label} {req && <span className="text-rose-500">*</span>}</label>
+const Input = ({ id, label, val, set, icon: Icon, theme, type = "text", req, max, placeholder, hasError, clearError }: any) => (
+  <div id={id} className="scroll-mt-32">
+    <label className={`block text-sm font-bold mb-2 ml-1 transition-colors ${hasError ? 'text-rose-600' : 'text-slate-700'}`}>
+      {label} {req && <span className="text-rose-500">*</span>}
+    </label>
     <div className="relative group">
       <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-        <Icon className={`w-5 h-5 text-slate-400 group-focus-within:${theme.text} transition-colors`} />
+        <Icon className={`w-5 h-5 transition-colors ${hasError ? 'text-rose-500' : `text-slate-400 group-focus-within:${theme.text}`}`} />
       </div>
-      <input type={type} value={val} onChange={e => set(e.target.value)} maxLength={max} placeholder={placeholder} className={`w-full bg-white/50 backdrop-blur-sm border border-slate-200 rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all ${theme.ring} hover:border-slate-300 focus:bg-white text-slate-800 font-medium`} />
+      <input 
+        type={type} value={val} 
+        onChange={e => { set(e.target.value); if(clearError) clearError(); }} 
+        maxLength={max} placeholder={placeholder} 
+        className={`w-full rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all font-medium
+          ${hasError 
+             ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder:text-rose-300' 
+             : `bg-white/50 backdrop-blur-sm border border-slate-200 hover:border-slate-300 focus:bg-white text-slate-800 ${theme.ring}`}`} 
+      />
     </div>
   </div>
 );
 
-// 🚨 แก้ไขปัญหาชั้นปีโดนบัง: ปรับ z-index แบบ Dynamic
-const Select = ({ label, val, set, options, icon: Icon, theme, req, disabled }: any) => {
+const Select = ({ id, label, val, set, options, icon: Icon, theme, req, disabled, hasError, clearError }: any) => {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        position: "fixed",
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+        zIndex: 99999,
+      });
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setIsOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setIsOpen(false);
+    };
+    window.addEventListener("scroll", handleScroll, true);
+    return () => window.removeEventListener("scroll", handleScroll, true);
+  }, [isOpen]);
 
   const selectedLabel = options.find((o: any) => o.v === val)?.l || "-- เลือก --";
 
+  const dropdownMenu = (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          ref={menuRef}
+          initial={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+          transition={{ duration: 0.18 }}
+          style={dropdownStyle}
+          className="bg-white/95 backdrop-blur-xl border border-slate-100 rounded-[20px] shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 hover:[&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full"
+        >
+          <div
+            onClick={() => { set(""); setIsOpen(false); if(clearError) clearError(); }}
+            className={`px-5 py-3.5 cursor-pointer transition-all duration-200 hover:bg-slate-50 text-slate-500 text-sm font-medium ${val === "" ? "bg-slate-50 text-slate-800" : ""}`}
+          >
+            -- เลือก --
+          </div>
+          {options.map((o: any, i: number) => (
+            <div
+              key={i}
+              onClick={() => { set(o.v); setIsOpen(false); if(clearError) clearError(); }}
+              className={`px-5 py-3.5 cursor-pointer transition-all duration-200 text-sm font-medium truncate flex items-center justify-between
+                ${val === o.v ? `bg-${theme.accent}-50 ${theme.text}` : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'}
+              `}
+            >
+              {o.l}
+              {val === o.v && (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                  <CheckCircle2 className={`w-4 h-4 ${theme.text}`} />
+                </motion.div>
+              )}
+            </div>
+          ))}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   return (
-    // สลับ z-[100] ลอยขึ้นมาเวลาถูกเปิด
-    <div className={`relative ${disabled ? "opacity-50 pointer-events-none" : ""} ${isOpen ? 'z-[100]' : 'z-10'}`} ref={dropdownRef}>
-      <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
+    <div id={id} className={`scroll-mt-32 ${disabled ? "opacity-50 pointer-events-none" : ""}`}>
+      <label className={`block text-sm font-bold mb-2 ml-1 transition-colors ${hasError ? 'text-rose-600' : 'text-slate-700'}`}>
         {label} {req && <span className="text-rose-500">*</span>}
       </label>
-      <div 
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full cursor-pointer bg-white/50 backdrop-blur-sm border rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all duration-300 flex items-center justify-between
-          ${isOpen ? `border-slate-300 shadow-md ${theme.ring} bg-white` : 'border-slate-200 hover:border-slate-300'}
-        `}
-      >
+      <div className="relative group" ref={triggerRef}>
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
-          <Icon className={`w-5 h-5 transition-colors duration-300 ${isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500'}`} />
+          <Icon className={`w-5 h-5 transition-colors duration-300 ${hasError ? 'text-rose-500' : (isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500')}`} />
         </div>
-        <span className={`font-medium truncate pr-4 transition-colors ${val ? 'text-slate-800' : 'text-slate-400'}`}>
-          {selectedLabel}
-        </span>
-        <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 flex-shrink-0 ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
+        <div 
+          onClick={() => !disabled && setIsOpen(!isOpen)}
+          className={`w-full cursor-pointer rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all duration-300 flex items-center justify-between
+            ${hasError 
+                ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900' 
+                : (isOpen ? `bg-white border border-slate-300 shadow-md ${theme.ring}` : 'bg-white/50 backdrop-blur-sm border border-slate-200 hover:border-slate-300')
+            }
+          `}
+        >
+          <span className={`font-medium truncate pr-4 transition-colors ${val ? (hasError ? 'text-rose-900' : 'text-slate-800') : (hasError ? 'text-rose-400' : 'text-slate-400')}`}>
+            {selectedLabel}
+          </span>
+          <ChevronDown className={`w-5 h-5 transition-transform duration-300 flex-shrink-0 ${hasError ? 'text-rose-400' : 'text-slate-400'} ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
+        </div>
       </div>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            // ให้กล่อง Dropdown ลอยบนสุดจริงๆ (z-[9999])
-            className="absolute z-[9999] w-full mt-2 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full"
-          >
-            <div
-              onClick={() => { set(""); setIsOpen(false); }}
-              className={`px-5 py-3 cursor-pointer transition-all duration-200 hover:bg-slate-50 text-slate-500 font-medium ${val === "" ? "bg-slate-50 text-slate-800" : ""}`}
-            >
-              -- เลือก --
-            </div>
-            {options.map((o: any, i: number) => (
-              <div
-                key={i}
-                onClick={() => { set(o.v); setIsOpen(false); }}
-                className={`px-5 py-3 cursor-pointer transition-all duration-200 font-medium truncate flex items-center justify-between
-                  ${val === o.v ? `bg-slate-50 ${theme.text}` : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'}
-                `}
-              >
-                {o.l}
-                {val === o.v && (
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-                    <CheckCircle2 className={`w-4 h-4 ${theme.text}`} />
-                  </motion.div>
-                )}
-              </div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {typeof document !== "undefined" && createPortal(dropdownMenu, document.body)}
     </div>
   );
 };

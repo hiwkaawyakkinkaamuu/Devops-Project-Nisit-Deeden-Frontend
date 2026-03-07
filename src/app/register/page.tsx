@@ -87,7 +87,6 @@ export default function RegisterPage() {
       await Swal.fire({
         icon: "success",
         title: "สมัครสมาชิกสำเร็จ",
-        // แจ้งเตือนสิทธิ์ตามประเภทอีเมล
         text: isKuEmail 
           ? "ระบบลงทะเบียนให้คุณในสิทธิ์ 'นิสิต' เรียบร้อยแล้ว" 
           : "ระบบลงทะเบียนให้คุณในสิทธิ์ 'บุคคลภายนอก' เรียบร้อยแล้ว",
@@ -97,10 +96,22 @@ export default function RegisterPage() {
 
       router.push("/"); 
     } catch (err: any) {
+      const errorMsg = typeof err === "string" ? err.toLowerCase() : "";
+      
+      let displayMessage = "เกิดข้อผิดพลาดจากระบบ โปรดลองใหม่อีกครั้ง";
+      
+      if (errorMsg.includes("email already registered") || errorMsg.includes("already exists")) {
+        displayMessage = "อีเมลนี้ถูกลงทะเบียนไว้ในระบบแล้ว กรุณาเข้าสู่ระบบแทน";
+      } else if (errorMsg) {
+        displayMessage = err;
+      }
+
       Swal.fire({
         icon: "error",
         title: "สมัครสมาชิกไม่สำเร็จ",
-        text: typeof err === "string" ? err : "เกิดข้อผิดพลาดจากระบบ",
+        text: displayMessage,
+        confirmButtonColor: "#ef4444",
+        customClass: { popup: 'rounded-[24px]' }
       });
     } finally {
       setLoading(false);

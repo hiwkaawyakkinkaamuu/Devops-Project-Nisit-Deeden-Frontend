@@ -200,7 +200,8 @@ export default function SDDVerifyPage() {
   // Modal State
   const [selectedItem, setSelectedItem] = useState<Nomination | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
+  const [editedAwardType, setEditedAwardType] = useState<string>("");
+  
   // ==========================================
   // Fetch Data
   // ==========================================
@@ -324,11 +325,16 @@ export default function SDDVerifyPage() {
 
   const handleApprove = async () => {
     if (!selectedItem) return;
+
+    if (!editedAwardType || editedAwardType.trim() === "") {
+        Swal.fire('ข้อผิดพลาด', 'กรุณาระบุประเภทรางวัลให้ครบถ้วน', 'warning');
+        return;
+    }
     const studentName = getDisplayName(selectedItem);
 
     const result = await Swal.fire({
       title: 'ยืนยันความถูกต้อง?',
-      html: `คุณได้ตรวจสอบความถูกต้องของ <b>${studentName}</b><br/>และพร้อมส่งให้คณะกรรมการพิจารณาใช่หรือไม่?`,
+      html: `คุณได้ตรวจสอบความถูกต้องของ <b>${studentName}</b><br/>และพร้อมส่งให้คณะกรรมการพิจารณาใช่หรือไม่?<br/><br/><span class="text-sm text-blue-600 font-bold">ประเภทรางวัล: ${editedAwardType}</span>`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: 'ยืนยันการส่งต่อ',
@@ -341,6 +347,13 @@ export default function SDDVerifyPage() {
     if (result.isConfirmed) {
       try {
         // อัปเดตสถานะเป็น 8 (อนุมัติโดยกองพัฒนานิสิต) ตาม DB ล่าสุด
+        const originalType = selectedItem.award_type_name || selectedItem.award_type;
+        if (editedAwardType !== originalType) {
+            await api.put(`/awards/award-type/change/${selectedItem.form_id}`, {
+                award_type: editedAwardType
+            });
+        }
+
         await api.put(`/awards/form-status/change/${selectedItem.form_id}`, { 
             form_status: 8, 
             reject_reason: "" 
@@ -460,7 +473,11 @@ export default function SDDVerifyPage() {
                             key={item.form_id} 
                             className="group hover:bg-blue-50/30 transition-all duration-300 animate-fade-in-up cursor-pointer"
                             style={{ opacity: 0, animationDelay: `${index * 50}ms`, animationFillMode: 'forwards' }}
-                            onClick={() => { setSelectedItem(item); setIsModalOpen(true); }}
+                            onClick={() => { 
+                              setSelectedItem(item); 
+                              setEditedAwardType(item.award_type_name || item.award_type); // + เพิ่มบรรทัดนี้
+                              setIsModalOpen(true); 
+                            }}
                         >
                         <td className="p-6 text-center text-slate-300 font-mono text-xs">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                         <td className="p-6 align-middle">
@@ -534,6 +551,9 @@ export default function SDDVerifyPage() {
                data={selectedItem} 
                faculties={faculties}
                departments={departments}
+               canEditAwardType={true}                     
+               editedAwardType={editedAwardType}                
+               onAwardTypeChange={(val) => setEditedAwardType(val)}
            />
         )}
       </AnimatePresence>

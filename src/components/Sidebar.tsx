@@ -168,7 +168,6 @@ const MENU_CONFIG: Record<string, MenuItemType[]> = {
     { href: "/student-development/hall-of-fame", label: "ทำเนียบนิสิตดีเด่น", icon: Icons.User },
     { href: "/student-development/verify-submit", label: "ตรวจสอบความถูกต้อง", icon: Icons.DocumentCheck },
     { href: "/student-development/history-verify-submit", label: "ประวัติการเเก้ไขประเภท", icon: Icons.History },
-    // { href: "/student-development/committee-setup", label: "จัดการคณะกรรมการ", icon: Icons.UsersGroup },
     { href: "/student-development/manage-account", label: "จัดการบัญชีผู้ใช้", icon: Icons.DocumentCheck },
     { href: "/student-development/setting", label: "ตั้งค่าช่วงเวลารับสมัคร", icon: Icons.History },
   ],

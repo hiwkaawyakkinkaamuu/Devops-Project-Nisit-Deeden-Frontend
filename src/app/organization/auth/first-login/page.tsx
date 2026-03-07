@@ -7,7 +7,7 @@ import { api } from "@/lib/axios";
 import { motion, Variants } from "framer-motion";
 import {
   Building2, Briefcase, Phone, MapPin, Mail, UploadCloud, 
-  ChevronRight, Trophy, CheckCircle2, Star
+  ChevronRight, Trophy, CheckCircle2, Star, X
 } from "lucide-react";
 
 // ==========================================
@@ -41,9 +41,17 @@ export default function OrganizationFirstLoginPage() {
     organization_name: "", organization_type: "", organization_location: "",
     organization_phone: "", campus_id: "", email: "", image_url: "", provider: ""
   });
+  
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // State สำหรับเก็บ Field ที่กรอกผิดพลาด เพื่อทำ Highlight
+  const [errorFieldId, setErrorFieldId] = useState<string | null>(null);
+
+  const clearErr = () => {
+    if (errorFieldId) setErrorFieldId(null);
+  };
 
   useEffect(() => {
     const initData = async () => {
@@ -77,15 +85,22 @@ export default function OrganizationFirstLoginPage() {
   }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    clearErr(); 
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    if (name === 'organization_phone') {
+        setFormData(prev => ({ ...prev, [name]: value.replace(/\D/g, "") }));
+    } else {
+        setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    clearErr();
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (!file.type.startsWith("image/")) return Swal.fire({ icon: 'warning', title: 'ไฟล์ไม่ถูกต้อง' });
-      if (file.size > 5 * 1024 * 1024) return Swal.fire({ icon: 'error', title: 'ขนาดใหญ่เกินไป' });
+      if (!file.type.startsWith("image/")) return Swal.fire({ icon: 'warning', title: 'ไฟล์ไม่ถูกต้อง', text: "กรุณาอัปโหลดเฉพาะไฟล์รูปภาพ (JPG, PNG, GIF)" });
+      if (file.size > 5 * 1024 * 1024) return Swal.fire({ icon: 'error', title: 'ขนาดใหญ่เกินไป', text: "ขนาดไฟล์รูปภาพต้องไม่เกิน 5MB" });
       setSelectedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => setImagePreview(reader.result as string);
@@ -93,13 +108,60 @@ export default function OrganizationFirstLoginPage() {
     }
   };
 
+  // ฟังก์ชัน Validate แบบละเอียด (เพิ่มบังคับรูป)
+  const validateForm = (): { msg: string, id: string } | null => {
+    const fd = formData;
+
+    // ตรวจสอบรูปภาพ
+    if (!selectedFile && !fd.image_url) return { msg: "กรุณาอัปโหลดตราสัญลักษณ์หน่วยงาน", id: "input-image" };
+
+    if (!fd.organization_name.trim()) return { msg: "กรุณากรอกชื่อหน่วยงาน/องค์กร/บริษัท", id: "input-organization_name" };
+    if (fd.organization_name.trim().length < 3) return { msg: "ชื่อหน่วยงานสั้นเกินไป (อย่างน้อย 3 ตัวอักษร)", id: "input-organization_name" };
+
+    if (!fd.organization_type.trim()) return { msg: "กรุณากรอกประเภทหน่วยงาน", id: "input-organization_type" };
+
+    if (!fd.organization_phone) return { msg: "กรุณากรอกเบอร์โทรศัพท์ติดต่อ", id: "input-organization_phone" };
+    const phoneRegex = /^0\d{8,9}$/; // รองรับเบอร์บ้าน 9 หลัก และมือถือ 10 หลัก
+    if (!phoneRegex.test(fd.organization_phone)) return { msg: "เบอร์โทรศัพท์ต้องขึ้นต้นด้วย 0 และมี 9-10 หลัก", id: "input-organization_phone" };
+
+    if (!fd.organization_location.trim()) return { msg: "กรุณากรอกที่ตั้งหน่วยงาน", id: "input-organization_location" };
+    if (fd.organization_location.trim().length < 10) return { msg: "กรุณากรอกที่ตั้งหน่วยงานให้ชัดเจนยิ่งขึ้น", id: "input-organization_location" };
+
+    if (!fd.campus_id) return { msg: "กรุณาเลือกวิทยาเขตที่ประสานงานหลัก", id: "input-campus_id" };
+
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem("token");
+    
+    const err = validateForm();
+    if (err) {
+      setErrorFieldId(err.id); // ตั้งค่า ID ให้ Highlight แดง
 
-    if (!formData.organization_name.trim() || !formData.organization_type.trim() || !formData.organization_location.trim() || !formData.organization_phone.trim() || !formData.campus_id) {
-      return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณากรอกข้อมูลหน่วยงานให้ครบถ้วน' });
+      Swal.fire({ 
+        icon: "warning", 
+        title: "ข้อมูลไม่ครบถ้วน", 
+        text: err.msg, 
+        confirmButtonColor: "#4f46e5", 
+        customClass: { popup: 'rounded-[24px]' },
+        returnFocus: false 
+      }).then(() => {
+        const el = document.getElementById(err.id);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          setTimeout(() => {
+            const inputEl = el.querySelector('input, select, textarea') as HTMLElement;
+            if (inputEl) inputEl.focus({ preventScroll: true });
+          }, 300);
+        }
+      });
+      return;
     }
+
+    setErrorFieldId(null);
+    const token = localStorage.getItem("token");
+    if (!token) return;
 
     setLoading(true);
     try {
@@ -130,7 +192,6 @@ export default function OrganizationFirstLoginPage() {
 
   return (
     <div className="min-h-screen bg-[#EEF2FF] flex items-center justify-center p-4 sm:p-8 font-sans relative overflow-hidden">
-      {/* Dynamic Animated Background */}
       <motion.div animate={{ x: [0, 50, 0], y: [0, -50, 0] }} transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }} className="absolute -top-32 -left-32 w-[600px] h-[600px] bg-indigo-400/20 rounded-full blur-[100px]" />
       <motion.div animate={{ x: [0, -50, 0], y: [0, 50, 0] }} transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }} className="absolute -bottom-32 -right-32 w-[600px] h-[600px] bg-blue-400/20 rounded-full blur-[100px]" />
 
@@ -167,7 +228,7 @@ export default function OrganizationFirstLoginPage() {
         </div>
 
         {/* Right Form Panel */}
-        <div className="lg:w-3/5 p-8 sm:p-14 overflow-y-auto max-h-[90vh] custom-scrollbar bg-white/60">
+        <div id="scroll-container" className="lg:w-3/5 p-8 sm:p-14 overflow-y-auto max-h-[90vh] custom-scrollbar bg-white/60 relative scroll-smooth">
           <div className="mb-10">
             <h3 className="text-3xl font-extrabold text-gray-800">ข้อมูลรายละเอียด</h3>
             <p className="text-gray-500 mt-2">โปรดกรอกข้อมูลของหน่วยงานหรือองค์กรที่ท่านเป็นตัวแทน</p>
@@ -175,28 +236,35 @@ export default function OrganizationFirstLoginPage() {
 
           <motion.form variants={containerVariants} initial="hidden" animate="show" onSubmit={handleSubmit} className="space-y-8">
             
-            {/* Logo Upload */}
-            <motion.div variants={itemVariants} className="flex flex-col items-start mb-8">
-              <label className="block text-sm font-semibold text-gray-700 mb-4">ตราสัญลักษณ์หน่วยงาน (ถ้ามี)</label>
+            {/* Logo Upload - เพิ่ม ID และการรับค่า Error */}
+            <motion.div variants={itemVariants} className="flex flex-col items-start mb-8 scroll-mt-10" id="input-image">
+              <label className={`block text-sm font-semibold mb-4 transition-colors ${errorFieldId === "input-image" ? "text-rose-600" : "text-gray-700"}`}>
+                ตราสัญลักษณ์หน่วยงาน <span className="text-red-500">*</span>
+              </label>
               <div className="flex items-center gap-6">
                 <div 
                   className="relative group cursor-pointer"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <motion.div whileHover={{ scale: 1.05 }} className="w-28 h-28 rounded-2xl overflow-hidden border-2 border-dashed border-indigo-300 bg-indigo-50/50 flex items-center justify-center relative transition-colors group-hover:bg-indigo-100/50">
+                  <motion.div whileHover={{ scale: 1.05 }} 
+                    className={`w-28 h-28 rounded-2xl overflow-hidden border-2 border-dashed flex items-center justify-center relative transition-all
+                      ${errorFieldId === "input-image" 
+                          ? "border-rose-500 bg-rose-50 ring-4 ring-rose-500/20" 
+                          : "border-indigo-300 bg-indigo-50/50 group-hover:bg-indigo-100/50"}`}
+                  >
                     {imagePreview || formData.image_url ? (
                       <img src={imagePreview || formData.image_url} alt="Logo" className="w-full h-full object-contain p-2" referrerPolicy="no-referrer" />
                     ) : (
-                      <Building2 className="w-10 h-10 text-indigo-300" />
+                      <Building2 className={`w-10 h-10 ${errorFieldId === "input-image" ? "text-rose-400" : "text-indigo-300"}`} />
                     )}
-                    <div className="absolute inset-0 bg-indigo-900/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center text-white backdrop-blur-sm">
+                    <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center text-white backdrop-blur-sm ${errorFieldId === "input-image" ? "bg-rose-900/60" : "bg-indigo-900/60"}`}>
                       <UploadCloud className="w-6 h-6 mb-1" />
-                      <span className="text-xs font-medium">อัปโหลดโลโก้</span>
+                      <span className="text-xs font-medium">อัปโหลดรูปใหม่</span>
                     </div>
                   </motion.div>
                 </div>
-                <div className="text-sm text-gray-500 leading-relaxed">
-                  <p className="font-medium text-gray-700">อัปโหลดรูปภาพ</p>
+                <div className={`text-sm leading-relaxed ${errorFieldId === "input-image" ? "text-rose-500" : "text-gray-500"}`}>
+                  <p className={`font-bold ${errorFieldId === "input-image" ? "text-rose-600" : "text-gray-700"}`}>อัปโหลดรูปภาพหน่วยงาน</p>
                   <p>รองรับไฟล์ JPG, PNG หรือ GIF</p>
                   <p>ขนาดไฟล์ไม่เกิน 5MB</p>
                 </div>
@@ -205,6 +273,7 @@ export default function OrganizationFirstLoginPage() {
             </motion.div>
 
             <div className="space-y-6">
+              
               <motion.div variants={itemVariants}>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">อีเมลผู้ติดต่อ (Readonly)</label>
                 <div className="relative">
@@ -213,45 +282,84 @@ export default function OrganizationFirstLoginPage() {
                 </div>
               </motion.div>
 
-              <motion.div variants={itemVariants}>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">ชื่อหน่วยงาน/องค์กร/บริษัท <span className="text-red-500">*</span></label>
+              <motion.div variants={itemVariants} id="input-organization_name" className="scroll-mt-10">
+                <label className={`block text-sm font-semibold mb-2 transition-colors ${errorFieldId === "input-organization_name" ? "text-rose-600" : "text-gray-700"}`}>
+                  ชื่อหน่วยงาน/องค์กร/บริษัท <span className="text-red-500">*</span>
+                </label>
                 <div className="relative">
-                  <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input type="text" name="organization_name" value={formData.organization_name} onChange={handleChange} className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-4 text-gray-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none shadow-sm transition-shadow hover:shadow-md" placeholder="เช่น บริษัท เอบีซี จำกัด" />
+                  <Building2 className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors ${errorFieldId === "input-organization_name" ? "text-rose-500" : "text-gray-400"}`} />
+                  <input type="text" name="organization_name" value={formData.organization_name} onChange={handleChange} 
+                    className={`w-full rounded-2xl pl-12 pr-4 py-4 outline-none shadow-sm transition-shadow font-medium
+                      ${errorFieldId === "input-organization_name" 
+                          ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder-rose-300" 
+                          : "bg-white border border-gray-200 text-gray-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:shadow-md"}`} 
+                    placeholder="เช่น บริษัท เอบีซี จำกัด" 
+                  />
                 </div>
               </motion.div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <motion.div variants={itemVariants}>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">ประเภทหน่วยงาน <span className="text-red-500">*</span></label>
+                <motion.div variants={itemVariants} id="input-organization_type" className="scroll-mt-10">
+                  <label className={`block text-sm font-semibold mb-2 transition-colors ${errorFieldId === "input-organization_type" ? "text-rose-600" : "text-gray-700"}`}>
+                    ประเภทหน่วยงาน <span className="text-red-500">*</span>
+                  </label>
                   <div className="relative">
-                    <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input type="text" name="organization_type" value={formData.organization_type} onChange={handleChange} className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-4 text-gray-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none shadow-sm transition-shadow hover:shadow-md" placeholder="เช่น เอกชน, รัฐวิสาหกิจ" />
+                    <Briefcase className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors ${errorFieldId === "input-organization_type" ? "text-rose-500" : "text-gray-400"}`} />
+                    <input type="text" name="organization_type" value={formData.organization_type} onChange={handleChange} 
+                      className={`w-full rounded-2xl pl-12 pr-4 py-4 outline-none shadow-sm transition-shadow font-medium
+                        ${errorFieldId === "input-organization_type" 
+                            ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder-rose-300" 
+                            : "bg-white border border-gray-200 text-gray-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:shadow-md"}`} 
+                      placeholder="เช่น เอกชน, รัฐวิสาหกิจ" 
+                    />
                   </div>
                 </motion.div>
                 
-                <motion.div variants={itemVariants}>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">เบอร์โทรศัพท์ <span className="text-red-500">*</span></label>
+                <motion.div variants={itemVariants} id="input-organization_phone" className="scroll-mt-10">
+                  <label className={`block text-sm font-semibold mb-2 transition-colors ${errorFieldId === "input-organization_phone" ? "text-rose-600" : "text-gray-700"}`}>
+                    เบอร์โทรศัพท์ <span className="text-red-500">*</span>
+                  </label>
                   <div className="relative">
-                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input type="text" name="organization_phone" value={formData.organization_phone} onChange={handleChange} className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-4 text-gray-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none shadow-sm transition-shadow hover:shadow-md" placeholder="เบอร์ติดต่อหน่วยงาน" />
+                    <Phone className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors ${errorFieldId === "input-organization_phone" ? "text-rose-500" : "text-gray-400"}`} />
+                    <input type="text" name="organization_phone" value={formData.organization_phone} onChange={handleChange} maxLength={10}
+                      className={`w-full rounded-2xl pl-12 pr-4 py-4 outline-none shadow-sm transition-shadow font-medium
+                        ${errorFieldId === "input-organization_phone" 
+                            ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder-rose-300" 
+                            : "bg-white border border-gray-200 text-gray-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:shadow-md"}`} 
+                      placeholder="เบอร์ติดต่อหน่วยงาน" 
+                    />
                   </div>
                 </motion.div>
               </div>
 
-              <motion.div variants={itemVariants}>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">ที่ตั้งหน่วยงาน <span className="text-red-500">*</span></label>
+              <motion.div variants={itemVariants} id="input-organization_location" className="scroll-mt-10">
+                <label className={`block text-sm font-semibold mb-2 transition-colors ${errorFieldId === "input-organization_location" ? "text-rose-600" : "text-gray-700"}`}>
+                  ที่ตั้งหน่วยงาน <span className="text-red-500">*</span>
+                </label>
                 <div className="relative">
-                  <MapPin className="absolute left-4 top-5 w-5 h-5 text-gray-400" />
-                  <textarea name="organization_location" rows={3} value={formData.organization_location} onChange={handleChange} className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-4 text-gray-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none shadow-sm transition-shadow hover:shadow-md resize-none" placeholder="รายละเอียดที่อยู่แบบเต็ม..." />
+                  <MapPin className={`absolute left-4 top-5 w-5 h-5 transition-colors ${errorFieldId === "input-organization_location" ? "text-rose-500" : "text-gray-400"}`} />
+                  <textarea name="organization_location" rows={3} value={formData.organization_location} onChange={handleChange} 
+                    className={`w-full rounded-2xl pl-12 pr-4 py-4 outline-none shadow-sm transition-shadow resize-none font-medium
+                      ${errorFieldId === "input-organization_location" 
+                          ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder-rose-300" 
+                          : "bg-white border border-gray-200 text-gray-800 focus:ring-2 focus:ring-indigo-500 focus:border-transparent hover:shadow-md"}`} 
+                    placeholder="รายละเอียดที่อยู่แบบเต็ม..." 
+                  />
                 </div>
               </motion.div>
 
-              <motion.div variants={itemVariants}>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">วิทยาเขตที่ประสานงานหลัก <span className="text-red-500">*</span></label>
+              <motion.div variants={itemVariants} id="input-campus_id" className="scroll-mt-10 relative z-50">
+                <label className={`block text-sm font-semibold mb-2 transition-colors ${errorFieldId === "input-campus_id" ? "text-rose-600" : "text-gray-700"}`}>
+                  วิทยาเขตที่ประสานงานหลัก <span className="text-red-500">*</span>
+                </label>
                 <div className="relative">
-                  <Trophy className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 z-10" />
-                  <select name="campus_id" value={formData.campus_id} onChange={handleChange} className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-4 text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm appearance-none hover:shadow-md transition-shadow relative">
+                  <Trophy className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 z-10 transition-colors ${errorFieldId === "input-campus_id" ? "text-rose-500" : "text-gray-400"}`} />
+                  <select name="campus_id" value={formData.campus_id} onChange={handleChange} 
+                    className={`w-full rounded-2xl pl-12 pr-4 py-4 outline-none shadow-sm appearance-none transition-shadow relative font-medium cursor-pointer
+                      ${errorFieldId === "input-campus_id" 
+                          ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900" 
+                          : "bg-white border border-gray-200 text-gray-800 focus:ring-2 focus:ring-indigo-500 hover:shadow-md"}`}
+                  >
                     <option value="">-- เลือกวิทยาเขต --</option>
                     {campuses.map(c => <option key={c.campus_id} value={c.campus_id}>{c.campus_name} {c.campus_code && `(${c.campus_code})`}</option>)}
                   </select>

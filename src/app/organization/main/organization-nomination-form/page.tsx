@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, ChangeEvent } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import Swal from "sweetalert2";
 import { useRouter } from "next/navigation";
@@ -92,12 +93,11 @@ const nominationService = {
 const MONTH_NAMES = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 const DAY_NAMES = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 
-function PremiumBirthDatePicker({ value, onChange, label, theme, req, disabled }: any) {
+function PremiumBirthDatePicker({ id, value, onChange, label, theme, req, disabled, hasError, clearError }: any) {
   const [isOpen, setIsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'date' | 'month' | 'year'>('date');
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Default ให้เป็น 20 ปีที่แล้ว ถ้านิสิตยังไม่เคยเลือกวันเกิด
   const defaultDate = new Date();
   defaultDate.setFullYear(defaultDate.getFullYear() - 20);
   
@@ -123,16 +123,15 @@ function PremiumBirthDatePicker({ value, onChange, label, theme, req, disabled }
 
   const handleSelectDate = (day: number, month: number, year: number) => {
     const selected = new Date(year, month, day);
-    // Format C.E. (ค.ศ.) YYYY-MM-DD สำหรับส่งไปหลังบ้าน
     const y = selected.getFullYear();
     const m = String(selected.getMonth() + 1).padStart(2, '0');
     const d = String(selected.getDate()).padStart(2, '0');
     onChange(`${y}-${m}-${d}`);
+    if (clearError) clearError();
     setIsOpen(false);
     setViewMode('date');
   };
 
-  // 42-grid system for days
   const getCalendarDays = () => {
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
@@ -165,32 +164,35 @@ function PremiumBirthDatePicker({ value, onChange, label, theme, req, disabled }
   const yearsArray = Array.from({length: 20}, (_, i) => startYear + i);
 
   return (
-    <div className={disabled ? "opacity-50 pointer-events-none" : ""} ref={containerRef}>
-      <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
+    <div id={id} className={`scroll-mt-32 ${disabled ? "opacity-50 pointer-events-none" : ""}`} ref={containerRef}>
+      <label className={`block text-sm font-bold mb-2 ml-1 transition-colors ${hasError ? 'text-rose-600' : 'text-slate-700'}`}>
         {label} {req && <span className="text-rose-500">*</span>}
       </label>
       
       <div className={`relative group ${isOpen ? 'z-[100]' : 'z-10'}`}>
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
-          <Calendar className={`w-5 h-5 transition-colors ${isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500'}`} />
+          <Calendar className={`w-5 h-5 transition-colors ${hasError ? 'text-rose-500' : (isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500')}`} />
         </div>
         
         <div 
-          onClick={() => setIsOpen(!isOpen)}
-          className={`w-full cursor-pointer bg-white/50 backdrop-blur-sm border rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all duration-300 flex items-center justify-between
-            ${isOpen ? `border-slate-300 shadow-md ${theme.ring} bg-white` : 'border-slate-200 hover:border-slate-300'}
+          onClick={() => !disabled && setIsOpen(!isOpen)}
+          className={`w-full cursor-pointer rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all duration-300 flex items-center justify-between
+            ${hasError 
+                ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900' 
+                : (isOpen ? `bg-white border-slate-300 shadow-md ${theme.ring}` : 'bg-white/50 backdrop-blur-sm border border-slate-200 hover:border-slate-300')
+            }
           `}
         >
-          <span className={`font-medium truncate pr-4 transition-colors ${value ? 'text-slate-800' : 'text-slate-400'}`}>
+          <span className={`font-medium truncate pr-4 transition-colors ${value ? (hasError ? 'text-rose-900' : 'text-slate-800') : (hasError ? 'text-rose-400' : 'text-slate-400')}`}>
             {value ? formatDisplayDate(value) : "วัน/เดือน/ปีเกิด (คลิกเพื่อเลือก)"}
           </span>
           
           {value ? (
-            <div onClick={(e) => { e.stopPropagation(); onChange(""); }} className="p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors z-20 shrink-0">
+            <div onClick={(e) => { e.stopPropagation(); onChange(""); if(clearError) clearError(); }} className={`p-1 rounded-md transition-colors z-20 shrink-0 ${hasError ? 'text-rose-400 hover:text-rose-700' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}>
               <X size={18} />
             </div>
           ) : (
-            <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 flex-shrink-0 ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
+            <ChevronDown className={`w-5 h-5 transition-transform duration-300 flex-shrink-0 ${hasError ? 'text-rose-400' : 'text-slate-400'} ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
           )}
         </div>
 
@@ -349,6 +351,9 @@ export default function OrganizationNominationForm() {
   const [isOutOfPeriod, setIsOutOfPeriod] = useState(false); 
   const [currentTermInfo, setCurrentTermInfo] = useState<{ year: number, semester: number } | null>(null);
 
+  // 🌟 เพิ่ม State สำหรับเก็บ ID ช่องที่มีปัญหา (เพื่อนำไปทำ Highlight)
+  const [errorFieldId, setErrorFieldId] = useState<string | null>(null);
+
   const [faculties, setFaculties] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [filteredDepartments, setFilteredDepartments] = useState<any[]>([]);
@@ -371,6 +376,11 @@ export default function OrganizationNominationForm() {
   const totalFileSize = useMemo(() => selectedFiles.reduce((acc, file) => acc + file.size, 0), [selectedFiles]);
   const fileSizePercentage = (totalFileSize / MAX_TOTAL_FILE_SIZE_BYTES) * 100;
   const theme = useMemo(() => THEME_STYLES[awardType] || THEME_STYLES.default, [awardType]);
+
+  // ฟังก์ชันช่วยเคลียร์การแสดงผล Error
+  const clearErr = () => {
+    if (errorFieldId) setErrorFieldId(null);
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -404,6 +414,7 @@ export default function OrganizationNominationForm() {
   }, [manualProfile.faculty, faculties, departments]);
 
   const handleProfileChange = (key: keyof ManualProfile, value: string) => {
+    clearErr(); // ลบไฮไลท์แดงออกเมื่อเริ่มพิมพ์แก้
     if (key === 'date_of_birth') {
       const age = new Date().getFullYear() - new Date(value).getFullYear();
       setManualProfile(p => ({ ...p, date_of_birth: value, age: age.toString() }));
@@ -415,6 +426,7 @@ export default function OrganizationNominationForm() {
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    clearErr(); // ลบไฮไลท์แดงออกเมื่ออัปโหลดไฟล์
     if (e.target.files) {
       const files = Array.from(e.target.files);
       if (files.some(f => f.type !== "application/pdf")) return Swal.fire({ icon: "warning", title: "เฉพาะไฟล์ PDF", text: "กรุณาอัปโหลดเฉพาะไฟล์นามสกุล .pdf" });
@@ -423,27 +435,82 @@ export default function OrganizationNominationForm() {
     }
   };
 
-  const validateForm = () => {
-    if (!awardType) return "กรุณาเลือกประเภทรางวัล";
-    if (awardType === "other" && !otherTitle.trim()) return "กรุณาระบุชื่อรางวัล";
+  const validateForm = (): { msg: string, id: string } | null => {
+    if (!awardType) return { msg: "กรุณาเลือกประเภทรางวัล", id: "section-award-type" };
+    if (awardType === "other" && !otherTitle.trim()) return { msg: "กรุณาระบุชื่อรางวัลที่ต้องการเสนอ (ห้ามเว้นว่าง)", id: "input-otherTitle" };
+
     const mp = manualProfile;
-    if (!mp.prefix) return "กรุณาเลือกคำนำหน้าชื่อ";
-    if (!mp.firstname || !mp.lastname) return "กรุณากรอกชื่อ-นามสกุล นิสิต";
-    if (mp.student_number.length !== 10) return "รหัสนิสิตต้องมี 10 หลัก";
-    if (!mp.email.includes("@")) return "รูปแบบอีเมลไม่ถูกต้อง";
-    if (mp.phone_number.length !== 10) return "เบอร์โทรศัพท์ต้องมี 10 หลัก";
-    if (!mp.faculty || !mp.major) return "กรุณาเลือกข้อมูลการศึกษาให้ครบถ้วน";
-    if (parseFloat(mp.gpa) < 0 || parseFloat(mp.gpa) > 4.00 || !mp.gpa) return "เกรดเฉลี่ยต้องอยู่ระหว่าง 0.00 - 4.00";
-    if (!otherDetails.trim()) return "กรุณากรอกเหตุผลในการเสนอชื่อและความโดดเด่นของผลงาน";
-    if (!selectedFiles.length) return "กรุณาแนบไฟล์เอกสารอย่างน้อย 1 ไฟล์";
+    if (!mp.prefix) return { msg: "กรุณาเลือกคำนำหน้าชื่อ", id: "input-prefix" };
+    if (!mp.firstname.trim()) return { msg: "กรุณากรอกชื่อจริง", id: "input-firstname" };
+    if (!mp.lastname.trim()) return { msg: "กรุณากรอกนามสกุล", id: "input-lastname" };
+    if (mp.firstname.trim().length < 2 || mp.lastname.trim().length < 2) return { msg: "ชื่อและนามสกุลต้องมีความยาวอย่างน้อย 2 ตัวอักษร", id: "input-firstname" };
+
+    const studentNumRegex = /^\d{10}$/;
+    if (!studentNumRegex.test(mp.student_number)) return { msg: "รหัสนิสิตต้องเป็นตัวเลข 10 หลักเท่านั้น", id: "input-student_number" };
+
+    if (!mp.student_year) return { msg: "กรุณาเลือกชั้นปีของนิสิต", id: "input-student_year" };
+    if (!mp.faculty) return { msg: "กรุณาเลือกคณะ", id: "input-faculty" };
+    if (!mp.major) return { msg: "กรุณาเลือกสาขา/ภาควิชา", id: "input-major" };
+
+    if (!mp.gpa || mp.gpa.trim() === "") return { msg: "กรุณากรอกเกรดเฉลี่ยสะสม (GPA)", id: "input-gpa" };
+    const gpaNum = parseFloat(mp.gpa);
+    if (isNaN(gpaNum) || gpaNum < 0.00 || gpaNum > 4.00) return { msg: "เกรดเฉลี่ย (GPA) ต้องเป็นตัวเลขและอยู่ระหว่าง 0.00 - 4.00 เท่านั้น", id: "input-gpa" };
+
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@ku\.th$/i;
+    if (!mp.email.trim()) return { msg: "กรุณากรอกอีเมลติดต่อนิสิต", id: "input-email" };
+    if (!emailRegex.test(mp.email.trim())) return { msg: "อีเมลต้องเป็นโดเมน @ku.th เท่านั้น (เช่น name.s@ku.th)", id: "input-email" };
+
+    const phoneRegex = /^0\d{9}$/;
+    if (!mp.phone_number) return { msg: "กรุณากรอกเบอร์โทรศัพท์นิสิต", id: "input-phone_number" };
+    if (!phoneRegex.test(mp.phone_number)) return { msg: "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลักและขึ้นต้นด้วย 0 เท่านั้น", id: "input-phone_number" };
+
+    if (!mp.date_of_birth) return { msg: "กรุณาระบุวันเกิดของนิสิต", id: "input-date_of_birth" };
+    const currentAge = parseInt(mp.age);
+    if (isNaN(currentAge) || currentAge < 15 || currentAge > 100) return { msg: "อายุนิสิตไม่ถูกต้อง (ระบบรองรับอายุ 15 - 100 ปี)", id: "input-date_of_birth" };
+
+    if (!mp.advisor_name.trim()) return { msg: "กรุณากรอกชื่ออาจารย์ที่ปรึกษา", id: "input-advisor_name" };
+    if (mp.advisor_name.trim().length < 5) return { msg: "กรุณากรอกชื่อ-นามสกุลอาจารย์ที่ปรึกษาให้ครบถ้วน", id: "input-advisor_name" };
+
+    if (!mp.address.trim()) return { msg: "กรุณากรอกที่อยู่ปัจจุบันของนิสิต", id: "input-address" };
+    if (mp.address.trim().length < 10) return { msg: "กรุณากรอกที่อยู่ให้ชัดเจนและครบถ้วนยิ่งขึ้น (อย่างน้อย 10 ตัวอักษร)", id: "input-address" };
+
+    if (!otherDetails.trim()) return { msg: "กรุณากรอกเหตุผลในการเสนอชื่อและความโดดเด่นของผลงาน", id: "input-otherDetails" };
+    if (otherDetails.trim().length < 20) return { msg: "กรุณาอธิบายรายละเอียดผลงานให้ชัดเจนยิ่งขึ้น (พิมพ์อย่างน้อย 20 ตัวอักษร)", id: "input-otherDetails" };
+
+    if (!selectedFiles || selectedFiles.length === 0) return { msg: "กรุณาแนบไฟล์เอกสารประกอบ (PDF) อย่างน้อย 1 ไฟล์", id: "input-fileUpload" };
+
     return null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const err = validateForm();
-    if (err) return Swal.fire({ icon: "warning", title: "ข้อมูลไม่ครบถ้วน", text: err, confirmButtonColor: "#3b82f6", customClass: { popup: 'rounded-[24px]' } });
+    if (err) {
+      setErrorFieldId(err.id);
+
+      Swal.fire({ 
+        icon: "warning", 
+        title: "ข้อมูลไม่ครบถ้วน", 
+        text: err.msg, 
+        confirmButtonColor: "#3b82f6", 
+        customClass: { popup: 'rounded-[24px]' },
+        returnFocus: false
+      }).then(() => {
+        const el = document.getElementById(err.id);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          
+          setTimeout(() => {
+            const inputEl = el.querySelector('input, select, textarea') as HTMLElement;
+            if (inputEl) inputEl.focus({ preventScroll: true });
+          }, 300);
+        }
+      });
+      
+      return;
+    }
     
+    setErrorFieldId(null);
     const token = localStorage.getItem("token");
     if (!token) return;
 
@@ -469,9 +536,7 @@ export default function OrganizationNominationForm() {
     setLoading(true);
     try {
       const fd = new FormData();
-      
       fd.append("award_type", awardName);
-      
       fd.append("student_prefix", manualProfile.prefix);
       fd.append("student_firstname", manualProfile.firstname);
       fd.append("student_lastname", manualProfile.lastname);
@@ -482,9 +547,7 @@ export default function OrganizationNominationForm() {
       const selectedDept = departments.find(d => d.department_name === manualProfile.major);
       
       if (selectedFac) fd.append("faculty_id", String(selectedFac.faculty_id || selectedFac.id || selectedFac.facultyID));
-      console.log("Selected Department:", selectedDept);
       if (selectedDept) fd.append("department_id", String(selectedDept.department_id || selectedDept.id || selectedDept.departmentID));
-      console.log("FormData after appending faculty and department:", Array.from(fd.entries()));
       
       fd.append("student_year", manualProfile.student_year);
       fd.append("advisor_name", manualProfile.advisor_name);
@@ -499,7 +562,6 @@ export default function OrganizationNominationForm() {
       fd.append("org_phone_number", orgInfo.phone);
 
       fd.append("form_detail", otherDetails);
-      
       selectedFiles.forEach(f => fd.append("files", f));
 
       await nominationService.submitNomination(token, fd);
@@ -540,16 +602,19 @@ export default function OrganizationNominationForm() {
           <form onSubmit={handleSubmit} className="space-y-16">
             
             <Section num={1} zIndex={40} title="ประเภทรางวัลที่เสนอชื่อ" theme={theme}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <TypeCard type="activity" active={awardType} set={setAwardType} title="กิจกรรมนอกหลักสูตร" sub="ผู้นำ/แข่งขัน" icon={Trophy} />
-                <TypeCard type="innovation" active={awardType} set={setAwardType} title="ความคิดสร้างสรรค์เเละนวัตกรรม" sub="สิ่งประดิษฐ์/วิจัย" icon={Lightbulb} />
-                <TypeCard type="behavior" active={awardType} set={setAwardType} title="ความประพฤติดี" sub="จิตอาสา/คุณธรรม" icon={Heart} />
-                <TypeCard type="other" active={awardType} set={setAwardType} title="อื่นๆ" sub="ระบุชื่อรางวัลเอง" icon={Star} />
+              {/* ไฮไลท์แดงครอบทั้งกล่องรางวัลถ้าไม่เลือก */}
+              <div id="section-award-type" className={`scroll-mt-32 rounded-3xl p-1 transition-all duration-300 ${errorFieldId === "section-award-type" ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20" : ""}`}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <TypeCard type="activity" active={awardType} set={(v:any) => { setAwardType(v); clearErr(); }} title="กิจกรรมนอกหลักสูตร" sub="ผู้นำ/แข่งขัน" icon={Trophy} />
+                  <TypeCard type="innovation" active={awardType} set={(v:any) => { setAwardType(v); clearErr(); }} title="ความคิดสร้างสรรค์เเละนวัตกรรม" sub="สิ่งประดิษฐ์/วิจัย" icon={Lightbulb} />
+                  <TypeCard type="behavior" active={awardType} set={(v:any) => { setAwardType(v); clearErr(); }} title="ความประพฤติดี" sub="จิตอาสา/คุณธรรม" icon={Heart} />
+                  <TypeCard type="other" active={awardType} set={(v:any) => { setAwardType(v); clearErr(); }} title="อื่นๆ" sub="ระบุชื่อรางวัลเอง" icon={Star} />
+                </div>
               </div>
               <AnimatePresence>
                 {awardType === "other" && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden mt-4">
-                    <Input label="ชื่อรางวัลที่ต้องการเสนอ" val={otherTitle} set={setOtherTitle} icon={Star} theme={theme} placeholder="เช่น รางวัลเยาวชนต้นแบบ..." req />
+                    <Input id="input-otherTitle" label="ชื่อรางวัลที่ต้องการเสนอ" val={otherTitle} set={setOtherTitle} icon={Star} theme={theme} placeholder="เช่น รางวัลเยาวชนต้นแบบ..." req hasError={errorFieldId === "input-otherTitle"} clearError={clearErr} />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -561,28 +626,30 @@ export default function OrganizationNominationForm() {
                   
                   <Section num={2} zIndex={30} title="ข้อมูลส่วนตัวนิสิต" theme={theme}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <Select label="คำนำหน้า" val={manualProfile.prefix} set={(v: string) => handleProfileChange("prefix", v)} options={[{v:"นาย", l:"นาย"}, {v:"นางสาว", l:"นางสาว"}, {v:"ไม่ระบุ", l:"ไม่ระบุ"}]} icon={User} theme={theme} req />
+                      <Select id="input-prefix" label="คำนำหน้า" val={manualProfile.prefix} set={(v: string) => handleProfileChange("prefix", v)} options={[{v:"นาย", l:"นาย"}, {v:"นางสาว", l:"นางสาว"}, {v:"ไม่ระบุ", l:"ไม่ระบุ"}]} icon={User} theme={theme} req hasError={errorFieldId === "input-prefix"} clearError={clearErr} />
                       
-                      <Input label="ชื่อจริง" val={manualProfile.firstname} set={(v: string) => handleProfileChange("firstname", v)} icon={User} theme={theme} req />
-                      <Input label="นามสกุล" val={manualProfile.lastname} set={(v: string) => handleProfileChange("lastname", v)} icon={User} theme={theme} req />
+                      <Input id="input-firstname" label="ชื่อจริง" val={manualProfile.firstname} set={(v: string) => handleProfileChange("firstname", v)} icon={User} theme={theme} req hasError={errorFieldId === "input-firstname"} clearError={clearErr} />
+                      <Input id="input-lastname" label="นามสกุล" val={manualProfile.lastname} set={(v: string) => handleProfileChange("lastname", v)} icon={User} theme={theme} req hasError={errorFieldId === "input-lastname"} clearError={clearErr} />
                       
-                      <Input label="รหัสนิสิต" val={manualProfile.student_number} set={(v: string) => handleProfileChange("student_number", v)} icon={Hash} theme={theme} req max={10} />
-                      <Select label="ชั้นปี" val={manualProfile.student_year} set={(v: string) => handleProfileChange("student_year", v)} options={[1,2,3,4,5,6].map(y => ({v:y, l:`ปี ${y}`}))} icon={GraduationCap} theme={theme} req />
-                      <Select label="คณะ" val={manualProfile.faculty} set={(v: string) => handleProfileChange("faculty", v)} options={faculties.map(f => ({v:f.faculty_name, l:f.faculty_name}))} icon={Building2} theme={theme} req />
-                      <Select label="สาขา/ภาควิชา" val={manualProfile.major} set={(v: string) => handleProfileChange("major", v)} options={filteredDepartments.map(d => ({v:d.department_name, l:d.department_name}))} icon={BookOpen} theme={theme} disabled={!manualProfile.faculty} req />
-                      <Input label="เกรดเฉลี่ยสะสม (GPA)" val={manualProfile.gpa} set={(v: string) => handleProfileChange("gpa", v)} icon={Percent} theme={theme} req />
-                      <Input label="อีเมลติดต่อนิสิต" val={manualProfile.email} set={(v: string) => handleProfileChange("email", v)} icon={Mail} theme={theme} type="email" req />
-                      <Input label="เบอร์โทรศัพท์นิสิต" val={manualProfile.phone_number} set={(v: string) => handleProfileChange("phone_number", v)} icon={Phone} theme={theme} req max={10} />
+                      <Input id="input-student_number" label="รหัสนิสิต" val={manualProfile.student_number} set={(v: string) => handleProfileChange("student_number", v)} icon={Hash} theme={theme} req max={10} hasError={errorFieldId === "input-student_number"} clearError={clearErr} />
+                      <Select id="input-student_year" label="ชั้นปี" val={manualProfile.student_year} set={(v: string) => handleProfileChange("student_year", v)} options={[1,2,3,4,5,6].map(y => ({v:y, l:`ปี ${y}`}))} icon={GraduationCap} theme={theme} req hasError={errorFieldId === "input-student_year"} clearError={clearErr} />
+                      <Select id="input-faculty" label="คณะ" val={manualProfile.faculty} set={(v: string) => handleProfileChange("faculty", v)} options={faculties.map(f => ({v:f.faculty_name, l:f.faculty_name}))} icon={Building2} theme={theme} req hasError={errorFieldId === "input-faculty"} clearError={clearErr} />
+                      <Select id="input-major" label="สาขา/ภาควิชา" val={manualProfile.major} set={(v: string) => handleProfileChange("major", v)} options={filteredDepartments.map(d => ({v:d.department_name, l:d.department_name}))} icon={BookOpen} theme={theme} disabled={!manualProfile.faculty} req hasError={errorFieldId === "input-major"} clearError={clearErr} />
+                      <Input id="input-gpa" label="เกรดเฉลี่ยสะสม (GPA)" val={manualProfile.gpa} set={(v: string) => handleProfileChange("gpa", v)} icon={Percent} theme={theme} req hasError={errorFieldId === "input-gpa"} clearError={clearErr} />
+                      <Input id="input-email" label="อีเมลติดต่อนิสิต (@ku.th เท่านั้น)" val={manualProfile.email} set={(v: string) => handleProfileChange("email", v)} icon={Mail} theme={theme} type="email" req hasError={errorFieldId === "input-email"} clearError={clearErr} />
+                      <Input id="input-phone_number" label="เบอร์โทรศัพท์นิสิต" val={manualProfile.phone_number} set={(v: string) => handleProfileChange("phone_number", v)} icon={Phone} theme={theme} req max={10} hasError={errorFieldId === "input-phone_number"} clearError={clearErr} />
                       
                       <PremiumBirthDatePicker 
+                          id="input-date_of_birth"
                           label="วันเกิด" 
                           value={manualProfile.date_of_birth} 
                           onChange={(v: string) => handleProfileChange("date_of_birth", v)} 
                           theme={theme} 
                           req 
+                          hasError={errorFieldId === "input-date_of_birth"} clearError={clearErr}
                       />
                       
-                      <Input label="ชื่ออาจารย์ที่ปรึกษา" val={manualProfile.advisor_name} set={(v: string) => handleProfileChange("advisor_name", v)} icon={GraduationCap} theme={theme} req />
+                      <Input id="input-advisor_name" label="ชื่ออาจารย์ที่ปรึกษา" val={manualProfile.advisor_name} set={(v: string) => handleProfileChange("advisor_name", v)} icon={GraduationCap} theme={theme} req hasError={errorFieldId === "input-advisor_name"} clearError={clearErr} />
                       
                       <div>
                         <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">อายุ (ปี)</label>
@@ -592,9 +659,15 @@ export default function OrganizationNominationForm() {
                         </div>
                       </div>
 
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">ที่อยู่ปัจจุบัน <span className="text-rose-500">*</span></label>
-                        <textarea value={manualProfile.address} onChange={(e) => handleProfileChange("address", e.target.value)} rows={3} className={`w-full bg-white/50 backdrop-blur-sm border border-slate-200 rounded-2xl px-5 py-4 outline-none transition-all ${theme.ring} hover:border-slate-300 resize-none`} placeholder="ระบุรายละเอียดที่อยู่ปัจจุบันที่สามารถติดต่อได้..." />
+                      <div id="input-address" className="md:col-span-2 scroll-mt-32">
+                        <label className={`block text-sm font-bold mb-2 ml-1 transition-colors ${errorFieldId === "input-address" ? 'text-rose-600' : 'text-slate-700'}`}>ที่อยู่ปัจจุบัน <span className="text-rose-500">*</span></label>
+                        <textarea value={manualProfile.address} onChange={(e) => handleProfileChange("address", e.target.value)} rows={3} 
+                          className={`w-full rounded-2xl px-5 py-4 outline-none transition-all resize-none font-medium
+                            ${errorFieldId === "input-address" 
+                               ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder:text-rose-300' 
+                               : `bg-white/50 backdrop-blur-sm border border-slate-200 ${theme.ring} hover:border-slate-300`}`} 
+                          placeholder="ระบุรายละเอียดที่อยู่ปัจจุบันที่สามารถติดต่อได้..." 
+                        />
                       </div>
                     </div>
                   </Section>
@@ -609,31 +682,43 @@ export default function OrganizationNominationForm() {
                   </Section>
 
                   <Section num={4} zIndex={15} title="รายละเอียดผลงานและเหตุผลประกอบ" theme={theme}>
-                    <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">เหตุผลในการเสนอชื่อและความโดดเด่นของผลงาน <span className="text-rose-500">*</span></label>
-                        <textarea value={otherDetails} onChange={(e) => setOtherDetails(e.target.value)} rows={5} className={`w-full bg-white/50 backdrop-blur-sm border border-slate-200 rounded-2xl px-5 py-4 outline-none transition-all ${theme.ring} hover:border-slate-300 resize-none`} placeholder="บรรยายเหตุผล ผลงาน กิจกรรม บทบาทหน้าที่ หรือคุณงามความดีของนิสิต..." />
+                    <div id="input-otherDetails" className="scroll-mt-32">
+                        <label className={`block text-sm font-bold mb-2 ml-1 transition-colors ${errorFieldId === "input-otherDetails" ? 'text-rose-600' : 'text-slate-700'}`}>เหตุผลในการเสนอชื่อและความโดดเด่นของผลงาน <span className="text-rose-500">*</span></label>
+                        <textarea value={otherDetails} onChange={(e) => { setOtherDetails(e.target.value); clearErr(); }} rows={5} 
+                          className={`w-full rounded-2xl px-5 py-4 outline-none transition-all resize-none font-medium
+                            ${errorFieldId === "input-otherDetails" 
+                               ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder:text-rose-300' 
+                               : `bg-white/50 backdrop-blur-sm border border-slate-200 ${theme.ring} hover:border-slate-300`}`}  
+                          placeholder="บรรยายเหตุผล ผลงาน กิจกรรม บทบาทหน้าที่ หรือคุณงามความดีของนิสิต..." 
+                        />
                     </div>
                   </Section>
 
                   <Section num={5} zIndex={10} title="แนบเอกสารหลักฐาน" theme={theme}>
-                    <div onClick={() => fileInputRef.current?.click()} className={`group relative overflow-hidden border-2 border-dashed border-slate-300 hover:border-${theme.accent}-400 rounded-[2rem] p-12 text-center cursor-pointer transition-all duration-300 bg-slate-50 hover:bg-white`}>
-                      <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
-                      <motion.div whileHover={{ scale: 1.05 }} className={`w-20 h-20 mx-auto bg-${theme.accent}-100 rounded-full flex items-center justify-center mb-6 shadow-sm`}>
-                        <UploadCloud className={`w-10 h-10 text-${theme.accent}-600`} />
-                      </motion.div>
-                      <h4 className="text-xl font-bold text-slate-800 mb-2">ลากไฟล์มาวาง หรือ คลิกเพื่อเลือกไฟล์</h4>
-                      <p className="text-slate-500 text-sm">รองรับเฉพาะไฟล์ .PDF (ขนาดรวมไม่เกิน 10MB)</p>
-                      
-                      <div className="max-w-xs mx-auto mt-6" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between text-xs font-medium text-slate-400 mb-2">
-                          <span>พื้นที่ที่ใช้ไป</span>
-                          <span className={fileSizePercentage > 100 ? "text-rose-500" : ""}>{formatBytes(totalFileSize)} / 10MB</span>
+                    <div id="input-fileUpload" className="scroll-mt-32">
+                      <div onClick={() => { fileInputRef.current?.click(); clearErr(); }} 
+                          className={`group relative overflow-hidden border-2 border-dashed rounded-[2rem] p-12 text-center cursor-pointer transition-all duration-300 
+                            ${errorFieldId === "input-fileUpload" 
+                                ? 'bg-rose-50 border-rose-500 ring-4 ring-rose-500/20' 
+                                : `border-slate-300 hover:border-${theme.accent}-400 bg-slate-50 hover:bg-white`}`}>
+                        <div className={`absolute inset-0 bg-gradient-to-br ${theme.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
+                        <motion.div whileHover={{ scale: 1.05 }} className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-6 shadow-sm ${errorFieldId === "input-fileUpload" ? 'bg-rose-100 text-rose-500' : `bg-${theme.accent}-100 text-${theme.accent}-600`}`}>
+                          <UploadCloud className="w-10 h-10" />
+                        </motion.div>
+                        <h4 className={`text-xl font-bold mb-2 ${errorFieldId === "input-fileUpload" ? 'text-rose-700' : 'text-slate-800'}`}>ลากไฟล์มาวาง หรือ คลิกเพื่อเลือกไฟล์</h4>
+                        <p className={`${errorFieldId === "input-fileUpload" ? 'text-rose-500' : 'text-slate-500'} text-sm`}>รองรับเฉพาะไฟล์ .PDF (ขนาดรวมไม่เกิน 10MB)</p>
+                        
+                        <div className="max-w-xs mx-auto mt-6" onClick={e => e.stopPropagation()}>
+                          <div className="flex justify-between text-xs font-medium text-slate-400 mb-2">
+                            <span>พื้นที่ที่ใช้ไป</span>
+                            <span className={fileSizePercentage > 100 ? "text-rose-500" : ""}>{formatBytes(totalFileSize)} / 10MB</span>
+                          </div>
+                          <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                            <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(fileSizePercentage, 100)}%` }} className={`h-full ${fileSizePercentage > 100 ? 'bg-rose-500' : `bg-${theme.accent}-500`}`} />
+                          </div>
                         </div>
-                        <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
-                          <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(fileSizePercentage, 100)}%` }} className={`h-full ${fileSizePercentage > 100 ? 'bg-rose-500' : `bg-${theme.accent}-500`}`} />
-                        </div>
+                        <input type="file" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf" />
                       </div>
-                      <input type="file" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".pdf" />
                     </div>
 
                     <AnimatePresence>
@@ -709,91 +794,135 @@ const TypeCard = ({ type, active, set, title, sub, icon: Icon }: any) => {
   );
 };
 
-const Input = ({ label, val, set, icon: Icon, theme, type = "text", req, max, placeholder }: any) => (
-  <div>
-    <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">{label} {req && <span className="text-rose-500">*</span>}</label>
+const Input = ({ id, label, val, set, icon: Icon, theme, type = "text", req, max, placeholder, hasError, clearError }: any) => (
+  <div id={id} className="scroll-mt-32">
+    <label className={`block text-sm font-bold mb-2 ml-1 transition-colors ${hasError ? 'text-rose-600' : 'text-slate-700'}`}>
+      {label} {req && <span className="text-rose-500">*</span>}
+    </label>
     <div className="relative group">
       <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-        <Icon className={`w-5 h-5 text-slate-400 group-focus-within:${theme.text} transition-colors`} />
+        <Icon className={`w-5 h-5 transition-colors ${hasError ? 'text-rose-500' : `text-slate-400 group-focus-within:${theme.text}`}`} />
       </div>
-      <input type={type} value={val} onChange={e => set(e.target.value)} maxLength={max} placeholder={placeholder} className={`w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all ${theme.ring} hover:border-slate-300 focus:bg-white text-slate-800 font-medium`} />
+      <input 
+        type={type} value={val} 
+        onChange={e => { set(e.target.value); if(clearError) clearError(); }} 
+        maxLength={max} placeholder={placeholder} 
+        className={`w-full rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all font-medium
+          ${hasError 
+             ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder:text-rose-300' 
+             : `bg-white border border-slate-200 hover:border-slate-300 focus:bg-white text-slate-800 ${theme.ring}`}`} 
+      />
     </div>
   </div>
 );
 
-const Select = ({ label, val, set, options, icon: Icon, theme, req, disabled }: any) => {
+const Select = ({ id, label, val, set, options, icon: Icon, theme, req, disabled, hasError, clearError }: any) => {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        position: "fixed",
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+        zIndex: 99999,
+      });
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setIsOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setIsOpen(false);
+    };
+    window.addEventListener("scroll", handleScroll, true);
+    return () => window.removeEventListener("scroll", handleScroll, true);
+  }, [isOpen]);
 
   const selectedLabel = options.find((o: any) => o.v === val)?.l || "-- เลือก --";
 
+  const dropdownMenu = (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          ref={menuRef}
+          initial={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+          transition={{ duration: 0.18 }}
+          style={dropdownStyle}
+          className="bg-white/95 backdrop-blur-xl border border-slate-100 rounded-[20px] shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 hover:[&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full"
+        >
+          <div
+            onClick={() => { set(""); setIsOpen(false); if(clearError) clearError(); }}
+            className={`px-5 py-3.5 cursor-pointer transition-all duration-200 hover:bg-slate-50 text-slate-500 text-sm font-medium ${val === "" ? "bg-slate-50 text-slate-800" : ""}`}
+          >
+            -- เลือก --
+          </div>
+          {options.map((o: any, i: number) => (
+            <div
+              key={i}
+              onClick={() => { set(o.v); setIsOpen(false); if(clearError) clearError(); }}
+              className={`px-5 py-3.5 cursor-pointer transition-all duration-200 text-sm font-medium truncate flex items-center justify-between
+                ${val === o.v ? `bg-${theme.accent}-50 ${theme.text}` : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'}
+              `}
+            >
+              {o.l}
+              {val === o.v && (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                  <CheckCircle2 className={`w-4 h-4 ${theme.text}`} />
+                </motion.div>
+              )}
+            </div>
+          ))}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   return (
-    <div className={disabled ? "opacity-50 pointer-events-none" : ""} ref={dropdownRef}>
-      <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
+    <div id={id} className={`scroll-mt-32 ${disabled ? "opacity-50 pointer-events-none" : ""}`}>
+      <label className={`block text-sm font-bold mb-2 ml-1 transition-colors ${hasError ? 'text-rose-600' : 'text-slate-700'}`}>
         {label} {req && <span className="text-rose-500">*</span>}
       </label>
-      {/* แก้ไขปัญหาไอคอนเยื้องขึ้นด้านบน: ครอบกล่อง relative ใหม่ และแก้ z-index เมื่อเปิด */}
-      <div className={`relative group ${isOpen ? 'z-[100]' : 'z-10'}`}>
+      <div className="relative group" ref={triggerRef}>
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
-          <Icon className={`w-5 h-5 transition-colors duration-300 ${isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500'}`} />
+          <Icon className={`w-5 h-5 transition-colors duration-300 ${hasError ? 'text-rose-500' : (isOpen ? theme.text : 'text-slate-400 group-hover:text-slate-500')}`} />
         </div>
         <div 
           onClick={() => !disabled && setIsOpen(!isOpen)}
-          className={`w-full cursor-pointer bg-white border rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all duration-300 flex items-center justify-between
-            ${isOpen ? `border-slate-300 shadow-md ${theme.ring} bg-slate-50/50` : 'border-slate-200 hover:border-slate-300'}
+          className={`w-full cursor-pointer rounded-2xl pl-12 pr-4 py-[14px] outline-none transition-all duration-300 flex items-center justify-between
+            ${hasError 
+                ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900' 
+                : (isOpen ? `bg-slate-50/50 border border-slate-300 shadow-md ${theme.ring}` : 'bg-white border border-slate-200 hover:border-slate-300')
+            }
           `}
         >
-          <span className={`font-medium truncate pr-4 transition-colors ${val ? 'text-slate-800' : 'text-slate-400'}`}>
+          <span className={`font-medium truncate pr-4 transition-colors ${val ? (hasError ? 'text-rose-900' : 'text-slate-800') : (hasError ? 'text-rose-400' : 'text-slate-400')}`}>
             {selectedLabel}
           </span>
-          <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 flex-shrink-0 ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
+          <ChevronDown className={`w-5 h-5 transition-transform duration-300 flex-shrink-0 ${hasError ? 'text-rose-400' : 'text-slate-400'} ${isOpen ? `rotate-180 ${theme.text}` : ''}`} />
         </div>
-
-        <AnimatePresence>
-          {isOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -10, filter: 'blur(5px)' }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="absolute z-[9999] w-full mt-2 bg-white/95 backdrop-blur-xl border border-slate-100 rounded-2xl shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full"
-            >
-              <div
-                onClick={() => { set(""); setIsOpen(false); }}
-                className={`px-5 py-3 cursor-pointer transition-all duration-200 hover:bg-slate-50 text-slate-500 font-medium ${val === "" ? "bg-slate-50 text-slate-800" : ""}`}
-              >
-                -- เลือก --
-              </div>
-              {options.map((o: any, i: number) => (
-                <div
-                  key={i}
-                  onClick={() => { set(o.v); setIsOpen(false); }}
-                  className={`px-5 py-3 cursor-pointer transition-all duration-200 font-medium truncate flex items-center justify-between
-                    ${val === o.v ? `bg-slate-50 ${theme.text}` : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'}
-                  `}
-                >
-                  {o.l}
-                  {val === o.v && (
-                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-                      <CheckCircle2 className={`w-4 h-4 ${theme.text}`} />
-                    </motion.div>
-                  )}
-                </div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
+      {typeof document !== "undefined" && createPortal(dropdownMenu, document.body)}
     </div>
   );
 };

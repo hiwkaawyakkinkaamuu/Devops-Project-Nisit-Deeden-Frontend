@@ -48,19 +48,20 @@ function GoogleCallbackHandler() {
       // Redirect ไปให้ถูกหน้า
       setTimeout(() => {
         if (isFirstLogin) {
-            // กรณียังไม่เคยกรอกข้อมูล (First Login)
-            if (role === "organization") {
-                window.location.replace("/organization/auth/first-login"); 
-            } else {
-                window.location.replace("/student/auth/first-login");
-            }
+            if (role === "organization") return window.location.replace("/organization/auth/first-login");
+            return window.location.replace("/student/auth/first-login");
         } else {
-            // กรณีเคยกรอกข้อมูลแล้ว (ไม่ใช่ First Login)
-            if (role === "organization") {
-                // สมมติว่าหน้าหลักองค์กรคือหน้านี้ (แก้ path ได้ตามโครงสร้างโปรเจกต์คุณ)
-                window.location.replace("/organization/main/organization-nomination-form"); 
-            } else {
-                window.location.replace("/student/main/student-nomination-form");
+            switch (role) {
+                case "student": return window.location.replace("/student/main/student-nomination-form");
+                case "organization": return window.location.replace("/organization/main/organization-nomination-form");
+                case "head_of_department": return window.location.replace("/head-of-department/hall-of-fame");
+                case "associate_dean": return window.location.replace("/associate-dean/hall-of-fame");
+                case "dean": return window.location.replace("/dean/hall-of-fame");
+                case "student_development": return window.location.replace("/student-development/hall-of-fame");
+                case "student_development_committee": return window.location.replace("/student-development-committee/hall-of-fame");
+                case "chairman_of_student_development_committee": return window.location.replace("/chairman-of-student-development-committee/hall-of-fame");
+                case "chancellor": return window.location.replace("/chancellor/hall-of-fame");
+                default: return window.location.replace("/");
             }
         }
       }, 500);

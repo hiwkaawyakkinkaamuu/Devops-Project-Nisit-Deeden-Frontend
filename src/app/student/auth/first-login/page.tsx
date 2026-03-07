@@ -7,7 +7,7 @@ import { api } from "@/lib/axios";
 import { motion, Variants } from "framer-motion";
 import {
   UploadCloud, User, Mail, Hash, MapPin, BookOpen, GraduationCap,
-  ChevronRight, CheckCircle2
+  ChevronRight, CheckCircle2, X
 } from "lucide-react";
 
 // ==========================================
@@ -53,6 +53,13 @@ export default function FirstLoginPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // State สำหรับเก็บ ID ช่องที่ Error (นำไปทำ Highlight)
+  const [errorFieldId, setErrorFieldId] = useState<string | null>(null);
+
+  const clearErr = () => {
+    if (errorFieldId) setErrorFieldId(null);
+  };
 
   useEffect(() => {
     const initData = async () => {
@@ -114,15 +121,24 @@ export default function FirstLoginPage() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    clearErr(); // ลบ Error เมื่อเริ่มพิมพ์หรือแก้ข้อมูล
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // ดักเฉพาะตัวเลขสำหรับรหัสนิสิต
+    if (name === "student_number") {
+      setFormData(prev => ({ ...prev, [name]: value.replace(/\D/g, "") }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+
     if (name === "faculty_id") setFormData(prev => ({ ...prev, faculty_id: value, department_id: "" }));
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    clearErr(); // ลบ Error เมื่ออัปโหลดรูปใหม่
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (!file.type.startsWith("image/")) return Swal.fire({ icon: 'warning', title: 'ไฟล์ไม่ถูกต้อง' });
+      if (!file.type.startsWith("image/")) return Swal.fire({ icon: 'warning', title: 'ไฟล์ไม่ถูกต้อง', text: 'กรุณาอัปโหลดเฉพาะไฟล์รูปภาพ' });
       if (file.size > 5 * 1024 * 1024) return Swal.fire({ icon: 'error', title: 'ขนาดใหญ่เกินไป', text: 'รูปภาพต้องไม่เกิน 5MB' });
       setSelectedFile(file);
       const reader = new FileReader();
@@ -131,25 +147,71 @@ export default function FirstLoginPage() {
     }
   };
 
+  // ฟังก์ชัน Validate แบบละเอียด
+  const validateForm = (): { msg: string, id: string } | null => {
+    const fd = formData;
+    const isGoogleLogin = fd.provider === "google";
+    const hasImage = !!selectedFile || (!!fd.image_url && fd.image_url !== "");
+
+    if (!isGoogleLogin && !hasImage) return { msg: "กรุณาอัปโหลดรูปภาพโปรไฟล์", id: "input-image" };
+    
+    if (!fd.title) return { msg: "กรุณาเลือกคำนำหน้าชื่อ", id: "input-title" };
+    
+    if (!fd.firstname.trim()) return { msg: "กรุณากรอกชื่อจริง", id: "input-firstname" };
+    if (fd.firstname.trim().length < 2) return { msg: "ชื่อต้องมีความยาวอย่างน้อย 2 ตัวอักษร", id: "input-firstname" };
+    
+    if (!fd.lastname.trim()) return { msg: "กรุณากรอกนามสกุล", id: "input-lastname" };
+    if (fd.lastname.trim().length < 2) return { msg: "นามสกุลต้องมีความยาวอย่างน้อย 2 ตัวอักษร", id: "input-lastname" };
+    
+    const studentNumRegex = /^\d{10}$/;
+    if (!fd.student_number) return { msg: "กรุณากรอกรหัสนิสิต", id: "input-student_number" };
+    if (!studentNumRegex.test(fd.student_number)) return { msg: "รหัสนิสิตต้องเป็นตัวเลข 10 หลักเท่านั้น", id: "input-student_number" };
+    
+    if (!fd.campus_id) return { msg: "กรุณาเลือกวิทยาเขต", id: "input-campus_id" };
+    if (!fd.faculty_id) return { msg: "กรุณาเลือกคณะ", id: "input-faculty_id" };
+    if (!fd.department_id) return { msg: "กรุณาเลือกสาขาวิชา", id: "input-department_id" };
+
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem("token");
+    
+    const err = validateForm();
+    if (err) {
+      setErrorFieldId(err.id); // ตั้งค่า ID ให้ Highlight แดง
 
-    // Validation
-    if (!formData.title || !formData.firstname.trim() || !formData.lastname.trim() || !/^\d{10}$/.test(formData.student_number) || !formData.campus_id || !formData.faculty_id || !formData.department_id) {
-      return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วนและถูกต้อง' });
+      Swal.fire({ 
+        icon: "warning", 
+        title: "ข้อมูลไม่ครบถ้วน", 
+        text: err.msg, 
+        confirmButtonColor: "#10b981", 
+        customClass: { popup: 'rounded-[24px]' },
+        returnFocus: false // ป้องกันไม่ให้กลับไปโฟกัสปุ่ม Submit ด้านล่าง
+      }).then(() => {
+        // เลื่อนจอหลังจากกดปิด Popup
+        const el = document.getElementById(err.id);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          setTimeout(() => {
+            const inputEl = el.querySelector('input, select') as HTMLElement;
+            if (inputEl) inputEl.focus({ preventScroll: true });
+          }, 300);
+        }
+      });
+      return;
     }
 
-    const isGoogleLogin = formData.provider === "google";
-    const hasImage = !!selectedFile || (!!formData.image_url && formData.image_url !== "");
-    if (!isGoogleLogin && !hasImage) return Swal.fire({ icon: 'warning', title: 'รูปภาพจำเป็น', text: 'กรุณาอัปโหลดรูปภาพโปรไฟล์' });
+    setErrorFieldId(null);
+    const token = localStorage.getItem("token");
+    if (!token) return;
 
     setLoading(true);
     try {
       const payload = new FormData();
       
-      // แก้ไขตรงนี้: แมปค่าให้ตรงกับ Schema ที่ Backend ต้องการ
-      payload.append("prefix", formData.title); // Backend ใช้คำว่า prefix แต่ frontend ใช้ title
+      const isGoogleLogin = formData.provider === "google";
+      payload.append("prefix", formData.title); 
       payload.append("firstname", formData.firstname);
       payload.append("lastname", formData.lastname);
       payload.append("student_number", formData.student_number);
@@ -157,7 +219,6 @@ export default function FirstLoginPage() {
       payload.append("faculty_id", formData.faculty_id);
       payload.append("department_id", formData.department_id);
 
-      // จัดการรูปภาพ
       if (selectedFile) {
           payload.append("profile_image", selectedFile);
       } else if (isGoogleLogin && formData.image_url) {
@@ -168,20 +229,67 @@ export default function FirstLoginPage() {
         }
       }
 
-      // ยิง API
-      await api.put(`/auth/first-login`, payload, { headers: {
-        Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } 
+      await api.put(`/auth/first-login`, payload, { 
+          headers: { Authorization: `Bearer ${token}` } 
       });
       
       await Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'บันทึกข้อมูลเรียบร้อย', timer: 1500, showConfirmButton: false });
-      window.location.href = "/student/main/student-nomination-form";
+      
+      window.location.href = "/student/main/hall-of-fame"; 
       
     } catch (error: any) {
-      Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: error.response?.data?.message || "เกิดข้อผิดพลาด" });
+      console.error("Submit Error:", error);
+      
+      const responseData = error.response?.data || {};
+      const errorStr = String(responseData.error || responseData.message || error.message || "").toLowerCase();
+      
+      if (
+        errorStr.includes("duplicate") || 
+        errorStr.includes("exists") || 
+        errorStr.includes("already") || 
+        errorStr.includes("student_number") || 
+        errorStr.includes("ซ้ำ")
+      ) {
+        const targetErrorId = formData.student_number !== undefined ? "input-student_number" : "input-organization_name";
+        setErrorFieldId(targetErrorId); 
+
+        Swal.fire({ 
+          icon: 'error', 
+          title: 'ข้อมูลซ้ำในระบบ', 
+          text: 'รหัสนิสิตนี้ถูกลงทะเบียนไว้แล้ว กรุณาตรวจสอบอีกครั้ง',
+          confirmButtonColor: "#ef4444", // สีแดงให้ดูน่ากลัวขึ้น
+          customClass: { popup: 'rounded-[24px]' },
+          returnFocus: false 
+        }).then(() => {
+          const el = document.getElementById(targetErrorId);
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            setTimeout(() => {
+              const inputEl = el.querySelector('input') as HTMLElement;
+              if (inputEl) inputEl.focus({ preventScroll: true });
+            }, 300);
+          }
+        });
+
+      } else {
+        Swal.fire({ 
+            icon: 'error', 
+            title: 'เกิดข้อผิดพลาด', 
+            text: responseData.error || responseData.message || "ไม่สามารถบันทึกข้อมูลได้",
+            confirmButtonColor: "#ef4444",
+            customClass: { popup: 'rounded-[24px]' }
+        });
+      }
     } finally { 
       setLoading(false); 
     }
   };
+
+  if (!isPageLoaded) return (
+    <div className="min-h-screen bg-emerald-50 flex justify-center items-center">
+      <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }} className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full" />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#F0FDF4] flex items-center justify-center p-4 sm:p-8 font-sans relative overflow-hidden">
@@ -217,7 +325,7 @@ export default function FirstLoginPage() {
         </div>
 
         {/* Right Form Panel */}
-        <div className="lg:w-3/5 p-8 sm:p-12 overflow-y-auto max-h-[90vh] custom-scrollbar bg-white/50">
+        <div className="lg:w-3/5 p-8 sm:p-12 overflow-y-auto max-h-[90vh] custom-scrollbar bg-white/50 scroll-smooth">
           <div className="mb-8">
             <h3 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-teal-600">ข้อมูลส่วนตัว</h3>
             <p className="text-gray-500 mt-2">อัปเดตข้อมูลของคุณให้เป็นปัจจุบันเสมอ</p>
@@ -225,30 +333,32 @@ export default function FirstLoginPage() {
 
           <motion.form variants={containerVariants} initial="hidden" animate="show" onSubmit={handleSubmit} className="space-y-8">
             
-            {/* Image Upload Area */}
-            <motion.div variants={itemVariants} className="flex flex-col items-center">
+            {/* Image Upload Area รองรับ Error Highlight */}
+            <motion.div variants={itemVariants} className="flex flex-col items-center scroll-mt-10" id="input-image">
               <div 
                 className="relative group cursor-pointer"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <motion.div whileHover={{ scale: 1.05 }} className="w-36 h-36 rounded-full overflow-hidden border-4 border-emerald-100 shadow-xl bg-gray-50 flex items-center justify-center relative">
+                <motion.div whileHover={{ scale: 1.05 }} 
+                  className={`w-36 h-36 rounded-full overflow-hidden border-4 shadow-xl flex items-center justify-center relative transition-all
+                    ${errorFieldId === "input-image" ? "border-rose-500 bg-rose-50 ring-4 ring-rose-500/20" : "border-emerald-100 bg-gray-50"}`}
+                >
                   {imagePreview || formData.image_url ? (
                     <img src={imagePreview || formData.image_url} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   ) : (
-                    <User className="w-16 h-16 text-gray-300" />
+                    <User className={`w-16 h-16 ${errorFieldId === "input-image" ? "text-rose-300" : "text-gray-300"}`} />
                   )}
-                  {/* Hover Overlay */}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center text-white">
+                  <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center text-white ${errorFieldId === "input-image" ? "bg-rose-900/70" : "bg-black/50"}`}>
                     <UploadCloud className="w-8 h-8 mb-1" />
                     <span className="text-xs font-medium">เปลี่ยนรูป</span>
                   </div>
                 </motion.div>
-                <div className="absolute bottom-1 right-1 bg-emerald-500 p-2.5 rounded-full text-white shadow-lg border-2 border-white">
+                <div className={`absolute bottom-1 right-1 p-2.5 rounded-full text-white shadow-lg border-2 border-white transition-colors ${errorFieldId === "input-image" ? "bg-rose-500" : "bg-emerald-500"}`}>
                   <UploadCloud className="w-4 h-4" />
                 </div>
               </div>
               <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageChange} />
-              <p className="text-sm text-gray-400 mt-4">ไฟล์ภาพขนาดไม่เกิน 5MB</p>
+              <p className={`text-sm mt-4 font-medium ${errorFieldId === "input-image" ? "text-rose-500" : "text-gray-400"}`}>ไฟล์ภาพขนาดไม่เกิน 5MB</p>
             </motion.div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -262,64 +372,109 @@ export default function FirstLoginPage() {
               </motion.div>
 
               <motion.div variants={itemVariants} className="md:col-span-2 grid grid-cols-1 md:grid-cols-4 gap-6">
-                <div className="md:col-span-1">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">คำนำหน้า <span className="text-red-500">*</span></label>
-                  <select name="title" value={formData.title} onChange={handleChange} className="w-full bg-white border border-gray-200 rounded-2xl px-4 py-3.5 text-gray-700 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none shadow-sm transition-shadow hover:shadow-md appearance-none">
+                
+                {/* Title (Prefix) */}
+                <div className="md:col-span-1 scroll-mt-10" id="input-title">
+                  <label className={`block text-sm font-semibold mb-2 transition-colors ${errorFieldId === "input-title" ? "text-rose-600" : "text-gray-700"}`}>คำนำหน้า <span className="text-red-500">*</span></label>
+                  <select name="title" value={formData.title} onChange={handleChange} 
+                    className={`w-full rounded-2xl px-4 py-3.5 outline-none shadow-sm transition-shadow appearance-none cursor-pointer font-medium
+                      ${errorFieldId === "input-title" 
+                          ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900" 
+                          : "bg-white border border-gray-200 text-gray-700 focus:ring-2 focus:ring-emerald-500 hover:shadow-md"}`}>
                     <option value="">เลือก</option>
                     {PREFIXES.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
-                <div className="md:col-span-3 lg:col-span-1">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">ชื่อจริง <span className="text-red-500">*</span></label>
+                
+                {/* Firstname */}
+                <div className="md:col-span-3 lg:col-span-1 scroll-mt-10" id="input-firstname">
+                  <label className={`block text-sm font-semibold mb-2 transition-colors ${errorFieldId === "input-firstname" ? "text-rose-600" : "text-gray-700"}`}>ชื่อจริง <span className="text-red-500">*</span></label>
                   <div className="relative">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input type="text" name="firstname" value={formData.firstname} onChange={handleChange} className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-3.5 text-gray-700 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none shadow-sm transition-shadow hover:shadow-md" placeholder="ชื่อ (ภาษาไทย)" />
+                    <User className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors ${errorFieldId === "input-firstname" ? "text-rose-500" : "text-gray-400"}`} />
+                    <input type="text" name="firstname" value={formData.firstname} onChange={handleChange} 
+                      className={`w-full rounded-2xl pl-12 pr-4 py-3.5 outline-none shadow-sm transition-shadow font-medium
+                        ${errorFieldId === "input-firstname" 
+                            ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder-rose-300" 
+                            : "bg-white border border-gray-200 text-gray-700 focus:ring-2 focus:ring-emerald-500 hover:shadow-md"}`} 
+                      placeholder="ชื่อ (ภาษาไทย)" 
+                    />
                   </div>
                 </div>
-                <div className="md:col-span-4 lg:col-span-2">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">นามสกุล <span className="text-red-500">*</span></label>
+
+                {/* Lastname */}
+                <div className="md:col-span-4 lg:col-span-2 scroll-mt-10" id="input-lastname">
+                  <label className={`block text-sm font-semibold mb-2 transition-colors ${errorFieldId === "input-lastname" ? "text-rose-600" : "text-gray-700"}`}>นามสกุล <span className="text-red-500">*</span></label>
                   <div className="relative">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input type="text" name="lastname" value={formData.lastname} onChange={handleChange} className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-3.5 text-gray-700 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none shadow-sm transition-shadow hover:shadow-md" placeholder="นามสกุล (ภาษาไทย)" />
+                    <User className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors ${errorFieldId === "input-lastname" ? "text-rose-500" : "text-gray-400"}`} />
+                    <input type="text" name="lastname" value={formData.lastname} onChange={handleChange} 
+                      className={`w-full rounded-2xl pl-12 pr-4 py-3.5 outline-none shadow-sm transition-shadow font-medium
+                        ${errorFieldId === "input-lastname" 
+                            ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder-rose-300" 
+                            : "bg-white border border-gray-200 text-gray-700 focus:ring-2 focus:ring-emerald-500 hover:shadow-md"}`} 
+                      placeholder="นามสกุล (ภาษาไทย)" 
+                    />
                   </div>
                 </div>
               </motion.div>
 
-              <motion.div variants={itemVariants} className="md:col-span-2">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">รหัสนิสิต (10 หลัก) <span className="text-red-500">*</span></label>
+              {/* Student Number */}
+              <motion.div variants={itemVariants} className="md:col-span-2 scroll-mt-10" id="input-student_number">
+                <label className={`block text-sm font-semibold mb-2 transition-colors ${errorFieldId === "input-student_number" ? "text-rose-600" : "text-gray-700"}`}>รหัสนิสิต<span className="text-red-500">*</span></label>
                 <div className="relative">
-                  <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input type="text" name="student_number" maxLength={10} value={formData.student_number} onChange={handleChange} className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-3.5 text-gray-700 font-mono tracking-wider focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none shadow-sm transition-shadow hover:shadow-md" placeholder="xxxxxxxxxx" />
+                  <Hash className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors ${errorFieldId === "input-student_number" ? "text-rose-500" : "text-gray-400"}`} />
+                  <input type="text" name="student_number" maxLength={10} value={formData.student_number} onChange={handleChange} 
+                    className={`w-full rounded-2xl pl-12 pr-4 py-3.5 font-mono tracking-wider outline-none shadow-sm transition-shadow font-medium
+                      ${errorFieldId === "input-student_number" 
+                          ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900 placeholder-rose-300" 
+                          : "bg-white border border-gray-200 text-gray-700 focus:ring-2 focus:ring-emerald-500 hover:shadow-md"}`} 
+                    placeholder="xxxxxxxxxx" 
+                  />
                 </div>
               </motion.div>
 
-              <motion.div variants={itemVariants} className="md:col-span-2">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">วิทยาเขต <span className="text-red-500">*</span></label>
+              {/* Campus */}
+              <motion.div variants={itemVariants} className="md:col-span-2 scroll-mt-10" id="input-campus_id">
+                <label className={`block text-sm font-semibold mb-2 transition-colors ${errorFieldId === "input-campus_id" ? "text-rose-600" : "text-gray-700"}`}>วิทยาเขต <span className="text-red-500">*</span></label>
                 <div className="relative">
-                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 z-10" />
-                  <select name="campus_id" value={formData.campus_id} onChange={handleChange} className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-3.5 text-gray-700 focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm appearance-none hover:shadow-md transition-shadow relative">
+                  <MapPin className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 z-10 transition-colors ${errorFieldId === "input-campus_id" ? "text-rose-500" : "text-gray-400"}`} />
+                  <select name="campus_id" value={formData.campus_id} onChange={handleChange} 
+                    className={`w-full rounded-2xl pl-12 pr-4 py-3.5 outline-none shadow-sm appearance-none transition-shadow relative font-medium cursor-pointer
+                      ${errorFieldId === "input-campus_id" 
+                          ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900" 
+                          : "bg-white border border-gray-200 text-gray-700 focus:ring-2 focus:ring-emerald-500 hover:shadow-md"}`}>
                     <option value="">-- เลือกวิทยาเขต --</option>
                     {campuses.map(c => <option key={c.campus_id} value={c.campus_id}>{c.campus_name} {c.campus_code && `(${c.campus_code})`}</option>)}
                   </select>
                 </div>
               </motion.div>
 
-              <motion.div variants={itemVariants}>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">คณะ <span className="text-red-500">*</span></label>
+              {/* Faculty */}
+              <motion.div variants={itemVariants} className="scroll-mt-10" id="input-faculty_id">
+                <label className={`block text-sm font-semibold mb-2 transition-colors ${errorFieldId === "input-faculty_id" ? "text-rose-600" : "text-gray-700"}`}>คณะ <span className="text-red-500">*</span></label>
                 <div className="relative">
-                  <BookOpen className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 z-10" />
-                  <select name="faculty_id" value={formData.faculty_id} onChange={handleChange} className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-3.5 text-gray-700 focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm appearance-none hover:shadow-md transition-shadow relative">
+                  <BookOpen className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 z-10 transition-colors ${errorFieldId === "input-faculty_id" ? "text-rose-500" : "text-gray-400"}`} />
+                  <select name="faculty_id" value={formData.faculty_id} onChange={handleChange} 
+                    className={`w-full rounded-2xl pl-12 pr-4 py-3.5 outline-none shadow-sm appearance-none transition-shadow relative font-medium cursor-pointer
+                      ${errorFieldId === "input-faculty_id" 
+                          ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900" 
+                          : "bg-white border border-gray-200 text-gray-700 focus:ring-2 focus:ring-emerald-500 hover:shadow-md"}`}>
                     <option value="">-- เลือกคณะ --</option>
                     {faculties.map(f => <option key={f.faculty_id} value={f.faculty_id}>{f.faculty_name}</option>)}
                   </select>
                 </div>
               </motion.div>
 
-              <motion.div variants={itemVariants}>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">สาขาวิชา <span className="text-red-500">*</span></label>
+              {/* Department */}
+              <motion.div variants={itemVariants} className="scroll-mt-10" id="input-department_id">
+                <label className={`block text-sm font-semibold mb-2 transition-colors ${errorFieldId === "input-department_id" ? "text-rose-600" : "text-gray-700"}`}>สาขาวิชา <span className="text-red-500">*</span></label>
                 <div className="relative">
-                  <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 z-10" />
-                  <select name="department_id" value={formData.department_id} onChange={handleChange} disabled={!formData.faculty_id} className="w-full bg-white border border-gray-200 rounded-2xl pl-12 pr-4 py-3.5 text-gray-700 focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm appearance-none disabled:bg-gray-100 hover:shadow-md transition-shadow relative">
+                  <GraduationCap className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 z-10 transition-colors ${errorFieldId === "input-department_id" ? "text-rose-500" : "text-gray-400"}`} />
+                  <select name="department_id" value={formData.department_id} onChange={handleChange} disabled={!formData.faculty_id} 
+                    className={`w-full rounded-2xl pl-12 pr-4 py-3.5 outline-none shadow-sm appearance-none disabled:bg-gray-100 transition-shadow relative font-medium
+                      ${!formData.faculty_id ? "cursor-not-allowed text-gray-400 border-gray-200" : "cursor-pointer"}
+                      ${errorFieldId === "input-department_id" 
+                          ? "bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-500/20 text-rose-900" 
+                          : "bg-white border border-gray-200 text-gray-700 focus:ring-2 focus:ring-emerald-500 hover:shadow-md"}`}>
                     <option value="">-- เลือกสาขา --</option>
                     {departments.map(d => <option key={d.department_id} value={d.department_id}>{d.department_name}</option>)}
                   </select>

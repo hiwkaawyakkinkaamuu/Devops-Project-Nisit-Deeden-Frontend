@@ -116,7 +116,7 @@ export default function LoginPage() {
         showConfirmButton: false
     });
 
-      handleRedirect(backendData.user);
+      handleRedirect(fullUser);
     } catch (error: any) {
       console.error("Login Error:", error);
       let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";

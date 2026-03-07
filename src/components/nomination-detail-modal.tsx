@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { AlertCircle, Clock, XCircle } from "lucide-react";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
+import { AlertCircle, Clock, XCircle, ChevronDown, Award, Edit3, CheckCircle2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/axios";
 
 // ==========================================
@@ -70,6 +72,9 @@ interface ModalProps {
   data: Nomination | null;
   faculties?: any[]; 
   departments?: any[];
+  canEditAwardType?: boolean;
+  editedAwardType?: string;
+  onAwardTypeChange?: (val: string) => void;
 }
 
 // ==========================================
@@ -158,17 +163,123 @@ const InputReadOnly = ({ label, value, font, isTextarea = false }: any) => (
     </div>
 );
 
+const CustomSelect = ({ value, onChange, options, disabled }: any) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+  useEffect(() => {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        position: "fixed",
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+        zIndex: 999999, // ให้แสดงชั้นบนสุด
+      });
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setIsOpen(false); // ปิดทันทีเมื่อมีการไถเมาส์ เพื่อไม่ให้มันลอยหลุดตำแหน่ง
+    };
+    window.addEventListener("scroll", handleScroll, true);
+    return () => window.removeEventListener("scroll", handleScroll, true);
+  }, [isOpen]);
+
+  const selectedOption = options.find((o: any) => o.v === value);
+  const selectedLabel = selectedOption ? selectedOption.l : "-- โปรดเลือกประเภทรางวัล --";
+
+  const dropdownMenu = (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          ref={menuRef}
+          initial={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+          transition={{ duration: 0.18 }}
+          style={dropdownStyle}
+          className="bg-white/95 backdrop-blur-xl border border-slate-100 rounded-[20px] shadow-2xl overflow-hidden py-2 max-h-60 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 hover:[&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full"
+        >
+          {options.map((o: any, i: number) => (
+            <div
+              key={i}
+              onClick={() => { onChange(o.v); setIsOpen(false); }}
+              className={`px-5 py-3.5 cursor-pointer transition-all duration-200 text-sm font-medium truncate flex items-center justify-between
+                ${value === o.v ? `bg-blue-50 text-blue-600` : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'}
+              `}
+            >
+              {o.l}
+              {value === o.v && (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                  <CheckCircle2 className={`w-4 h-4 text-blue-600`} />
+                </motion.div>
+              )}
+            </div>
+          ))}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  return (
+    <div className={`relative group ${disabled ? "opacity-50 pointer-events-none" : ""}`} ref={triggerRef}>
+      <div 
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full cursor-pointer bg-white border rounded-xl pl-4 pr-12 py-3.5 outline-none transition-all duration-300 flex items-center justify-between
+          ${isOpen ? `border-blue-400 ring-4 ring-blue-500/10 shadow-md` : 'border-gray-200 hover:border-blue-400 shadow-sm'}
+        `}
+      >
+        <span className={`text-sm font-medium truncate pr-4 transition-colors ${value ? 'text-gray-800' : 'text-gray-400'}`}>
+          {selectedLabel}
+        </span>
+        <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-gray-400 group-hover:text-blue-500 transition-colors">
+          <ChevronDown size={18} className={`transition-transform duration-300 ${isOpen ? 'rotate-180 text-blue-500' : ''}`} />
+        </div>
+      </div>
+      {typeof document !== "undefined" && createPortal(dropdownMenu, document.body)}
+    </div>
+  );
+};
+
 // ==========================================
 // 4. Main Component
 // ==========================================
 
-export default function NominationDetailModal({ isOpen, onClose, data }: ModalProps) {
+export default function NominationDetailModal({ 
+    isOpen, 
+    onClose, 
+    data, 
+    editedAwardType, 
+    canEditAwardType,
+    onAwardTypeChange 
+}: ModalProps) {
   
   const [facultyName, setFacultyName] = useState("-");
   const [deptName, setDepartmentName] = useState("-");
   const [campusName, setCampusName] = useState("-");
   const [isVisible, setIsVisible] = useState(false);
   const [approvalLogs, setApprovalLogs] = useState<ApprovalLog[]>([]);
+  const [selectedMainType, setSelectedMainType] = useState<string>("");
+  const [otherType, setOtherType] = useState<string>("");
 
   const parsedDetail = useMemo(() => {
       if (!data) return {};
@@ -184,6 +295,17 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
   useEffect(() => {
     if (isOpen && data) {
         setIsVisible(true);
+
+        const rawInitialType = editedAwardType || data.award_type || data.award_type_name || "";
+        const initialType = rawInitialType === "ประพฤติดี" ? "ความประพฤติดี" : rawInitialType;
+        
+        if (["กิจกรรมนอกหลักสูตร", "ความคิดสร้างสรรค์และนวัตกรรม", "ความประพฤติดี"].includes(initialType)) {
+            setSelectedMainType(initialType);
+            setOtherType("");
+        } else {
+            setSelectedMainType("ประเภทอื่นๆ");
+            setOtherType(initialType); 
+        }
 
         // Fetch Faculty
         if (data.faculty_id) {
@@ -224,7 +346,6 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
         api.get(`/awards/approval-logs/${data.form_id}`)
             .then(res => {
                 const logs = res.data?.data || res.data;
-                // เช็คให้ชัวร์ว่าเป็น Array เท่านั้น ถ้าเป็น Object (เช่น 404 response) ให้เป็น []
                 setApprovalLogs(Array.isArray(logs) ? logs : []);
             }).catch(err => {
                 console.error("Failed to fetch approval logs:", err);
@@ -238,7 +359,7 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
         setCampusName("-");
         setApprovalLogs([]);
     }
-  }, [isOpen, data, parsedDetail]);
+  }, [isOpen, data, parsedDetail, editedAwardType]);
 
   if (!isOpen || !data) return null;
 
@@ -289,7 +410,7 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
 
   return (
     <div className="absolute inset-0 z-[50] flex items-center justify-center p-4 md:p-8 overflow-hidden">
-      <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`} onClick={onClose}></div>
+      <div className={`fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`} onClick={onClose}></div>
 
       <div className={`relative bg-[#F8F9FA] rounded-[24px] shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col transition-all duration-300 transform ${isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'}`}>
         
@@ -345,7 +466,59 @@ export default function NominationDetailModal({ isOpen, onClose, data }: ModalPr
                     <span className={`w-8 h-8 rounded-full ${theme.numberBg} text-white flex items-center justify-center text-sm`}>{stepCounter++}</span>
                     ประเภทรางวัลที่เสนอชื่อ
                 </h3>
-                <InputReadOnly label="ชื่อรางวัล" value={parsedDetail?.award_title || awardStr} />
+                
+                {canEditAwardType ? (
+                    <div className="space-y-5 bg-blue-50/40 p-5 rounded-[20px] border border-blue-100">
+                        <div>
+                            <label className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                                <Award size={16} className="text-blue-500" />
+                                ประเภทรางวัล (กองพัฒนานิสิตสามารถแก้ไขได้)
+                            </label>
+                            
+                            {/* เรียกใช้งาน CustomSelect ที่เพิ่งสร้างใหม่ */}
+                            <CustomSelect 
+                                value={selectedMainType} 
+                                onChange={(val: string) => {
+                                    setSelectedMainType(val);
+                                    if (val !== "ประเภทอื่นๆ") {
+                                        onAwardTypeChange?.(val);
+                                    } else {
+                                        onAwardTypeChange?.(otherType);
+                                    }
+                                }}
+                                options={[
+                                    { v: "กิจกรรมนอกหลักสูตร", l: "กิจกรรมนอกหลักสูตร" },
+                                    { v: "ความคิดสร้างสรรค์และนวัตกรรม", l: "ความคิดสร้างสรรค์และนวัตกรรม" },
+                                    { v: "ความประพฤติดี", l: "ความประพฤติดี" },
+                                    { v: "ประเภทอื่นๆ", l: "ประเภทอื่นๆ" }
+                                ]}
+                            />
+                        </div>
+                        
+                        {/* ถ้าเลือกประเภทอื่นๆ ให้แสดงช่องกรอกข้อความที่สวยขึ้น */}
+                        {selectedMainType === "ประเภทอื่นๆ" && (
+                            <div className="animate-fade-in-up">
+                                <label className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                                    <Edit3 size={16} className="text-blue-500" />
+                                    โปรดระบุชื่อประเภทรางวัล
+                                </label>
+                                <input 
+                                    type="text" 
+                                    value={otherType} 
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        setOtherType(val);
+                                        onAwardTypeChange?.(val);
+                                    }}
+                                    placeholder="พิมพ์ชื่อประเภทรางวัลที่นี่..."
+                                    className="w-full bg-white border border-gray-200 hover:border-blue-400 rounded-xl px-4 py-3.5 text-sm text-gray-800 font-medium outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm"
+                                />
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <InputReadOnly label="ชื่อรางวัล" value={parsedDetail?.award_title || awardStr} />
+                )}
             </div>
 
             {/* === Section ข้อมูลองค์กร (ถ้ามี) === */}
