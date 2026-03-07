@@ -27,7 +27,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const requestUrl = error.config?.url || "";
 
-      if (requestUrl.includes("/users") || requestUrl.includes("/logs")) {
+      if (requestUrl.includes("/users") || requestUrl.includes("/logs") || requestUrl.includes("/auth/login")) {
          console.warn(`[Axios] Ignored 401 for ${requestUrl}`);
          return Promise.reject(error); 
       }
